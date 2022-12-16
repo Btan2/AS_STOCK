@@ -1,8 +1,3 @@
-/*
-==============
-  StockJob
-==============
-*/
 import 'dart:convert';
 
 /*
@@ -11,12 +6,12 @@ import 'dart:convert';
 =================
 */
 class StockJob {
-  final String date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+  String date = '';
   String id;
   String name;
   List<StockItem> stock = [];
   List<StockLiteral> literal = [];
-  List<StockItem> nof = [];
+  List<StockItem> nof = []; // contains stock items that are NOF
   List<String> allLocations = [];
   String location = "";
   String dbPath = ""; // file location of the xlsx or csv file
@@ -27,9 +22,37 @@ class StockJob {
   });
 
   addStock(StockItem item, int count) {
-    literal.add(StockLiteral(item.index, item.barcode, item.description, item.nof, count, location));
+    if (count <= 0){
+      return;
+    }
+
+    literal.add(StockLiteral(item.index, item.barcode, item.description, item.uom, item.nof, count, location));
     for(int i = 0; i < count; i++){
         stock.add(item);
+    }
+  }
+
+  removeStock(int literalIndex, StockItem stockItem, int count ) {
+    if (count <= 0){
+      return;
+    }
+
+    // Remove literal item(s)
+    if(literal[literalIndex].count - count <= 0) {
+      literal.removeAt(literalIndex);
+    }
+    else{
+      literal[literalIndex].count -= count;
+    }
+
+    // Remove stock item(s)
+    int del = 0;
+    while(stock.contains(stockItem)){
+      if(del >= count){
+        break;
+      }
+      stock.remove(stockItem);
+      del++;
     }
   }
 
@@ -41,15 +64,40 @@ class StockJob {
     allLocations.add(s);
   }
 
-  StockJob.fromJson(Map<String, dynamic> json) :
-        id = json['id'],
-        name = json['name'],
-        stock = json['stock'],
-        literal = json['literal'],
-        nof = json['nof'],
-        allLocations = json['allLocations'],
-        dbPath = json['dbPath'],
-        location = json['stock'];
+  // Convert from JSON to StockJob object
+  factory StockJob.fromJson(dynamic json) {
+    StockJob j = StockJob(
+        id: json['id'] as String,
+        name: json['name'] as String
+    );
+
+    j.date = json.containsKey("date") ? json['date'] as String : "";
+
+    j.stock = [
+      for (final map in jsonDecode(json['stock']))
+        StockItem.fromJson(map),
+    ];
+
+    j.literal = [
+      for (final map in jsonDecode(json['literal']))
+        StockLiteral.fromJson(map),
+    ];
+
+    // FIX THIS
+    // j.nof = [
+    //   for (final map in jsonDecode(json['nof']))
+    //     StockItem.fromJson(map),
+    // ];
+
+    j.allLocations.clear();
+    for(final entry in jsonDecode(json['allLocations'])) {
+      j.allLocations.add(entry as String);
+    }
+
+    j.location = ''; // reset job location //json['location'] as String;
+    j.dbPath = json['dbPath'] as String; // file location of the xlsx or csv file
+    return j;
+  }
 
   itemToJson(List l) {
     var map = l.map((e){
@@ -73,6 +121,7 @@ class StockJob {
         "index": e.index,
         "barcode": e.barcode,
         "description": e.description,
+        "uom": e.uom,
         "nof": e.nof,
         "count": e.count,
         "location": e.location,
@@ -84,20 +133,17 @@ class StockJob {
 
   Map<String, dynamic> toJson() {
     return {
+      'date': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
       'id': id,
       'name': name,
       'stock': jsonEncode(itemToJson(stock)),
       'literal': jsonEncode(literalToJson(literal)),
-      'nof': nof,
+      'nof': jsonEncode(itemToJson(nof)),
       'allLocations': jsonEncode(allLocations),
       'dbPath': dbPath,
       'location': '',
     };
   }
-
-  //
-  // Avoid pointer aliasing? Deep copy?
-  //
 
   StockJob copy({
     String? id,
@@ -117,12 +163,13 @@ class StockJob {
               name == other.name &&
               date == other.date &&
               stock == other.stock &&
+              literal == other.literal &&
               nof == other.nof &&
               location == other.location &&
               dbPath == other.dbPath;
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stock.hashCode ^ nof.hashCode ^ location.hashCode ^ dbPath.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stock.hashCode ^ literal.hashCode ^ nof.hashCode ^ location.hashCode ^ dbPath.hashCode;
 }
 
 /*
@@ -136,6 +183,7 @@ class StockItem {
   final String category;
   final String description;
   final String uom;
+  //final double unit; // value from 0.0 to 1.0 indicating unit amount; for stock that uses volume as  e.g alchol.
   final dynamic price;
   final bool nof;
 
@@ -145,16 +193,25 @@ class StockItem {
     required this.category,
     required this.description,
     required this.uom,
+    //required this.unit,
     required this.price,
     required this.nof
   });
+
+  StockItem.fromJson(Map<String, dynamic> json)
+      : index = json['index'] as int,
+        barcode = json['barcode'] ?? '',
+        category = json['category'] ?? '',
+        description = json['description'] ?? '',
+        uom = json['uom'] ?? '',
+        price = json['price'] as dynamic ?? '',
+        nof = json['nof'] as bool;
 
   StockItem copy({
     int? index,
     String? barcode,
     String? category,
     String? description,
-    int? count,
     String? uom,
     dynamic price,
     bool? nof,
@@ -168,11 +225,6 @@ class StockItem {
         price : price ?? this.price,
         nof : nof ?? this.nof,
       );
-
-  isNOF()
-  {
-    return nof == true;
-  }
 
   @override
   bool operator ==(Object other) =>
@@ -200,6 +252,7 @@ class StockLiteral {
   final int index;
   final String barcode;
   final String description;
+  final String uom;
   final bool nof;
 
   int count = 0;
@@ -209,15 +262,26 @@ class StockLiteral {
       this.index,
       this.barcode,
       this.description,
+      this.uom,
       this.nof,
       this.count,
       this.location,
       );
 
+  StockLiteral.fromJson(Map<String, dynamic> json)
+      : index = json['index'] as int,
+        barcode = json['barcode'] ?? '',
+        description = json['description'] ?? '',
+        uom = json['uom'] ?? '',
+        nof = json['nof'] as bool,
+        count = json['count'] as int,
+        location = json['location'] ?? '';
+
   StockLiteral copy({
     int? index,
     String? barcode,
     String? description,
+    String? uom,
     bool? nof,
     int? count,
     String? location,
@@ -226,14 +290,11 @@ class StockLiteral {
           index ?? this.index,
           barcode ?? this.barcode,
           description ?? this.description,
+          uom ?? this.uom,
           nof ?? this.nof,
           count ?? this.count,
           location ?? this.location
       );
-
-  isNOF() {
-    return nof == true;
-  }
 
   @override
   bool operator ==(Object other) =>
@@ -243,10 +304,11 @@ class StockLiteral {
               index == other.index &&
               barcode == other.barcode &&
               description == other.description &&
+              uom == other.uom &&
               nof == other.nof &&
               count == other.count &&
               location == other.location;
 
   @override
-  int get hashCode => index.hashCode ^ barcode.hashCode ^ description.hashCode ^ nof.hashCode ^ count.hashCode ^ location.hashCode;
+  int get hashCode => index.hashCode ^ barcode.hashCode ^ description.hashCode ^ uom.hashCode ^ nof.hashCode ^ count.hashCode ^ location.hashCode;
 }
