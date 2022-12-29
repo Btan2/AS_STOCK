@@ -1,5 +1,41 @@
 import 'dart:convert';
 
+class SessionFile {
+  List<String> dirs = [];
+  String uid;
+  int pageCount;
+  double fontScale;
+
+  SessionFile({
+    this.uid = "",
+    this.pageCount = 7,
+    this.fontScale = 12.0
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dirs': jsonEncode(dirs),
+      'uid': uid,
+      'pageCount': pageCount,
+      'fontScale' : fontScale,
+    };
+  }
+
+  factory SessionFile.fromJson(dynamic json) {
+    SessionFile sf = SessionFile();
+
+    sf.uid = json['uid'] as String;
+    sf.pageCount = json['pageCount'] as int;
+    sf.fontScale = json['fontScale'] as double;
+
+    for(final entry in jsonDecode(json['dirs'])) {
+      sf.dirs.add(entry as String);
+    }
+
+    return sf;
+  }
+}
+
 /*
 =================
   StockJob
@@ -9,7 +45,8 @@ class StockJob {
   String date = '';
   String id;
   String name;
-  List<StockItem> stock = [];
+  // List<StockItem> stock = [];
+  double total = 0;
   List<StockLiteral> literal = [];
   List<StockItem> nof = []; // contains stock items that are NOF
   List<String> allLocations = [];
@@ -21,23 +58,124 @@ class StockJob {
     required this.name,
   });
 
-  addStock(StockItem item, int count) {
-    if (count <= 0){
-      return;
+  // Get List
+  getList(){
+    List<StockItem> stk = [];
+    for(int i = 0; i < literal.length; i++){
+
+      // Add whole count
+      int count = literal[i].count.floor();
+      while(count > 0){
+        stk.add(
+            StockItem(
+              index: literal[i].index,
+              barcode: literal[i].barcode,
+              category: literal[i].category,
+              description: literal[i].description,
+              nof: literal[i].nof,
+              uom: literal[i].uom,
+              price: literal[i].price,
+            )
+        );
+
+        count--;
+      }
+
+      // Add decimal count
+      double d = ((literal[i].count * 10000).toInt() % 10000)/10000;
+      if (d != 0) {
+        StockItem stockD = StockItem(
+          index: literal[i].index,
+          barcode: literal[i].barcode,
+          category: literal[i].category,
+          description: literal[i].description,
+          nof: literal[i].nof,
+          uom: literal[i].uom,
+          price: literal[i].price,
+        );
+
+        // Last item will have decimal
+        stockD.unit = d;
+        stk.add(stockD);
+      }
     }
 
-    literal.add(StockLiteral(item.index, item.barcode, item.description, item.uom, item.nof, count, location));
-    for(int i = 0; i < count; i++){
-        stock.add(item);
+    // Sort stock list by db index?
+    stk = stk
+      ..sort((x, y) => (x.index as dynamic)
+          .compareTo((y.index as dynamic)));
+    return stk;
+  }
+
+  // Calc Total
+  calcTotal() {
+    total = 0.0;
+    for(int i = 0; i < literal.length; i++) {
+      total += literal[i].count;
     }
   }
 
-  removeStock(int literalIndex, StockItem stockItem, int count ) {
-    if (count <= 0){
+  // Total
+  getTotal(){
+    return total;
+  }
+
+  // Add Stock
+  addStock(StockItem item, double count) {
+    // Don't add negatives
+    if (count.sign == -1){
       return;
     }
 
-    // Remove literal item(s)
+    literal.add(StockLiteral(item.index, item.barcode, item.category, item.description, item.uom, item.nof, item.price, count, location));
+    calcTotal();
+  }
+
+  // Get Final Sheet
+  getFinalSheet(){
+    var fSheet = [];
+
+    // Screw it, do two loops
+    for(int i =0; i < literal.length; i++){
+      int c = 0;
+
+      for(int j = 0; j < fSheet.length; j++) {
+        if(literal[i].category == fSheet[j][2]){
+          fSheet[j][4] += literal[i].count;
+          fSheet[j][5] += (literal[i].price * literal[i].count);
+          break;
+        }
+        c++;
+      }
+
+      if (c >= fSheet.length){
+        fSheet.add(
+            [
+              fSheet.length,
+              "MISC",
+              literal[i].category,
+              literal[i].uom,
+              literal[i].count,
+              literal[i].price * literal[i].count
+            ]
+        );
+      }
+    }
+
+    return fSheet;
+  }
+
+  // Removed Stock
+  removeStock(int literalIndex, StockItem stockItem, double count ) {
+    // Don't remove negatives
+    if (count.sign == -1) {
+      return;
+    }
+
+    // Only counting to 4 decimal places
+    //double d = ((count * 10000).toInt() % 10000)/10000;
+    //int whole = count.floor();
+
     if(literal[literalIndex].count - count <= 0) {
       literal.removeAt(literalIndex);
     }
@@ -45,21 +183,32 @@ class StockJob {
       literal[literalIndex].count -= count;
     }
 
-    // Remove stock item(s)
-    int del = 0;
-    while(stock.contains(stockItem)){
-      if(del >= count){
-        break;
-      }
-      stock.remove(stockItem);
-      del++;
+    total -= count;
+    if(total < 0) {
+      total = 0;
     }
+
+    calcTotal();
   }
 
-  setLocation(int index) {
+  // Add NOF
+  addNOF(StockItem st){
+    for(int n = 0; n < nof.length; n++) {
+      if(nof[n].barcode == st.barcode){
+        return false;
+      }
+    }
+
+    nof.add(st);
+    return true;
+  }
+
+  // Set Location
+  setLocation(int index){
     location = allLocations[index];
   }
 
+  // Add Location
   addLocation(String s){
     allLocations.add(s);
   }
@@ -73,21 +222,20 @@ class StockJob {
 
     j.date = json.containsKey("date") ? json['date'] as String : "";
 
-    j.stock = [
-      for (final map in jsonDecode(json['stock']))
-        StockItem.fromJson(map),
-    ];
+    // j.stock = [
+    //   for (final map in jsonDecode(json['stock']))
+    //     StockItem.fromJson(map),
+    // ];
 
     j.literal = [
       for (final map in jsonDecode(json['literal']))
         StockLiteral.fromJson(map),
     ];
 
-    // FIX THIS
-    // j.nof = [
-    //   for (final map in jsonDecode(json['nof']))
-    //     StockItem.fromJson(map),
-    // ];
+    j.nof = [
+      for (final map in jsonDecode(json['nof']))
+        StockItem.fromJson(map),
+    ];
 
     j.allLocations.clear();
     for(final entry in jsonDecode(json['allLocations'])) {
@@ -99,6 +247,7 @@ class StockJob {
     return j;
   }
 
+  // Item to JSON
   itemToJson(List l) {
     var map = l.map((e){
       return {
@@ -107,6 +256,7 @@ class StockJob {
         "category": e.category,
         "description": e.description,
         "uom": e.uom,
+        "unit": e.unit,
         "price": e.price,
         "nof": e.nof,
       };
@@ -115,14 +265,17 @@ class StockJob {
     return map.toList();
   }
 
+  // Literal to JSON
   literalToJson(List l) {
     var map = l.map((e){
       return {
         "index": e.index,
         "barcode": e.barcode,
+        "category": e.category,
         "description": e.description,
         "uom": e.uom,
-        "nof": e.nof,
+        "price": e.price,
+        "nof": e.nof.toString(),
         "count": e.count,
         "location": e.location,
       };
@@ -136,7 +289,7 @@ class StockJob {
       'date': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
       'id': id,
       'name': name,
-      'stock': jsonEncode(itemToJson(stock)),
+      // 'stock': jsonEncode(itemToJson(stock)),
       'literal': jsonEncode(literalToJson(literal)),
       'nof': jsonEncode(itemToJson(nof)),
       'allLocations': jsonEncode(allLocations),
@@ -162,14 +315,14 @@ class StockJob {
               id == other.id &&
               name == other.name &&
               date == other.date &&
-              stock == other.stock &&
+              // stock == other.stock &&
               literal == other.literal &&
               nof == other.nof &&
               location == other.location &&
               dbPath == other.dbPath;
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stock.hashCode ^ literal.hashCode ^ nof.hashCode ^ location.hashCode ^ dbPath.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literal.hashCode ^ nof.hashCode ^ location.hashCode ^ dbPath.hashCode;
 }
 
 /*
@@ -183,29 +336,35 @@ class StockItem {
   final String category;
   final String description;
   final String uom;
-  //final double unit; // value from 0.0 to 1.0 indicating unit amount; for stock that uses volume as  e.g alchol.
-  final dynamic price;
+  double unit = 1;
+  final double price;
   final bool nof;
 
-  const StockItem({
+  // Set Unit
+  setUnit(double unit){
+    this.unit = unit;
+  }
+
+  StockItem({
     required this.index,
     required this.barcode,
     required this.category,
     required this.description,
     required this.uom,
-    //required this.unit,
     required this.price,
-    required this.nof
+    required this.nof,
   });
 
+  // From JSON
   StockItem.fromJson(Map<String, dynamic> json)
       : index = json['index'] as int,
         barcode = json['barcode'] ?? '',
         category = json['category'] ?? '',
         description = json['description'] ?? '',
         uom = json['uom'] ?? '',
-        price = json['price'] as dynamic ?? '',
-        nof = json['nof'] as bool;
+        unit = json['unit'] as double,
+        price = json['price'] as double,
+        nof = json['nof'] == 'true' ? true : false;
 
   StockItem copy({
     int? index,
@@ -213,7 +372,7 @@ class StockItem {
     String? category,
     String? description,
     String? uom,
-    dynamic price,
+    double? price,
     bool? nof,
   }) =>
       StockItem(
@@ -236,34 +395,43 @@ class StockItem {
               category == other.category &&
               description == other.description &&
               uom == other.uom &&
+              unit == other.unit &&
               price == other.price &&
               nof == other.nof;
 
   @override
-  int get hashCode => index.hashCode ^ barcode.hashCode ^ category.hashCode ^ description.hashCode ^ uom.hashCode ^ price.hashCode ^ nof.hashCode;
+  int get hashCode => index.hashCode ^ barcode.hashCode ^ category.hashCode ^ description.hashCode ^ uom.hashCode ^ unit.hashCode ^ price.hashCode ^ nof.hashCode;
 }
 
 /*
 =======================
   StockLiteral
+
+  This contains 'groups' of stock items.
+  So if we add 5 ice cream in one scan, the stock literal "item" will be 1 item with a count of 5.
+  This is so stock-takers to keep track of where they are.
 =======================
 */
 class StockLiteral {
   final int index;
   final String barcode;
+  final String category;
   final String description;
   final String uom;
   final bool nof;
+  final double price;
 
-  int count = 0;
+  double count = 0;
   String location = "";
 
   StockLiteral(
       this.index,
       this.barcode,
+      this.category,
       this.description,
       this.uom,
       this.nof,
+      this.price,
       this.count,
       this.location,
       );
@@ -271,27 +439,33 @@ class StockLiteral {
   StockLiteral.fromJson(Map<String, dynamic> json)
       : index = json['index'] as int,
         barcode = json['barcode'] ?? '',
+        category = json['category'] ?? '',
         description = json['description'] ?? '',
         uom = json['uom'] ?? '',
-        nof = json['nof'] as bool,
-        count = json['count'] as int,
+        nof = json['nof'] == 'true' ? true : false,
+        price = json['price'] ?? '',
+        count = json['count'] as double,
         location = json['location'] ?? '';
 
   StockLiteral copy({
     int? index,
     String? barcode,
+    String? category,
     String? description,
     String? uom,
     bool? nof,
-    int? count,
+    double? price,
+    double? count,
     String? location,
   }) =>
       StockLiteral(
           index ?? this.index,
           barcode ?? this.barcode,
+          category ?? this.category,
           description ?? this.description,
           uom ?? this.uom,
           nof ?? this.nof,
+          price ?? this.price,
           count ?? this.count,
           location ?? this.location
       );
@@ -306,9 +480,10 @@ class StockLiteral {
               description == other.description &&
               uom == other.uom &&
               nof == other.nof &&
+              price == other.price &&
               count == other.count &&
               location == other.location;
 
   @override
-  int get hashCode => index.hashCode ^ barcode.hashCode ^ description.hashCode ^ uom.hashCode ^ nof.hashCode ^ count.hashCode ^ location.hashCode;
+  int get hashCode => index.hashCode ^ barcode.hashCode ^ description.hashCode ^ uom.hashCode ^ nof.hashCode ^ price.hashCode ^ count.hashCode ^ location.hashCode;
 }
