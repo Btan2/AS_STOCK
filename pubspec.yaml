@@ -29,14 +29,11 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  permission_handler: ^9.2.0 # 10.2.0 requires Android SDK 33 which doesn't work with everything yet
-
-  shared_preferences: any
+  permission_handler: ^9.2.0 #requires Android SDK 33 which doesn't work with everything yet
+  filesystem_picker: ^3.1.0
   path_provider: any
-  file_picker: ^5.2.2
   linked_scroll_controller: any
   excel: any
-#  essential_xlsx: any
   spreadsheet_decoder: any
   archive: ^3.3.4
   flutter:
