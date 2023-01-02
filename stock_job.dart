@@ -1,14 +1,20 @@
 import 'dart:convert';
 
+/*
+=================
+  Session File
+=================
+*/
 class SessionFile {
   List<String> dirs = [];
   String uid;
   int pageCount;
   double fontScale;
+  // storageType?
 
   SessionFile({
     this.uid = "",
-    this.pageCount = 7,
+    this.pageCount = 15,
     this.fontScale = 12.0
   });
 
@@ -23,15 +29,12 @@ class SessionFile {
 
   factory SessionFile.fromJson(dynamic json) {
     SessionFile sf = SessionFile();
-
     sf.uid = json['uid'] as String;
     sf.pageCount = json['pageCount'] as int;
     sf.fontScale = json['fontScale'] as double;
-
     for(final entry in jsonDecode(json['dirs'])) {
       sf.dirs.add(entry as String);
     }
-
     return sf;
   }
 }
@@ -45,20 +48,18 @@ class StockJob {
   String date = '';
   String id;
   String name;
-  // List<StockItem> stock = [];
   double total = 0;
   List<StockLiteral> literal = [];
-  List<StockItem> nof = []; // contains stock items that are NOF
+  List<StockItem> nof = [];
   List<String> allLocations = [];
   String location = "";
-  String dbPath = ""; // file location of the xlsx or csv file
+  String dbPath = ""; // location of the xlsx or csv spreadsheet file (absolute path or won't work)
 
   StockJob({
     required this.id,
     required this.name,
   });
 
-  // Get List
   getList(){
     List<StockItem> stk = [];
     for(int i = 0; i < literal.length; i++){
@@ -94,13 +95,12 @@ class StockJob {
           price: literal[i].price,
         );
 
-        // Last item will have decimal
         stockD.unit = d;
         stk.add(stockD);
       }
     }
 
-    // Sort stock list by db index?
+    // Sort stock list by table index?
     stk = stk
       ..sort((x, y) => (x.index as dynamic)
           .compareTo((y.index as dynamic)));
@@ -122,7 +122,7 @@ class StockJob {
 
   // Add Stock
   addStock(StockItem item, double count) {
-    // Don't add negatives
+    // .. but don't add negatives
     if (count.sign == -1){
       return;
     }
@@ -135,7 +135,7 @@ class StockJob {
   getFinalSheet(){
     var fSheet = [];
 
-    // Screw it, do two loops
+    // fuck it, do two loops
     for(int i =0; i < literal.length; i++){
       int c = 0;
 
@@ -242,12 +242,11 @@ class StockJob {
       j.allLocations.add(entry as String);
     }
 
-    j.location = ''; // reset job location //json['location'] as String;
-    j.dbPath = json['dbPath'] as String; // file location of the xlsx or csv file
+    j.location = ''; // reset job location
+    j.dbPath = json['dbPath'] as String;
     return j;
   }
 
-  // Item to JSON
   itemToJson(List l) {
     var map = l.map((e){
       return {
@@ -265,7 +264,6 @@ class StockJob {
     return map.toList();
   }
 
-  // Literal to JSON
   literalToJson(List l) {
     var map = l.map((e){
       return {
@@ -406,10 +404,6 @@ class StockItem {
 /*
 =======================
   StockLiteral
-
-  This contains 'groups' of stock items.
-  So if we add 5 ice cream in one scan, the stock literal "item" will be 1 item with a count of 5.
-  This is so stock-takers to keep track of where they are.
 =======================
 */
 class StockLiteral {
