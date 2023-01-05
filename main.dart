@@ -53,11 +53,6 @@ class HomePage extends StatelessWidget {
         onWillPop: () async => false,
         child: Scaffold(
           resizeToAvoidBottomInset: false,
-          // appBar: AppBar(
-          //   centerTitle: true,
-          //   title: const Text('Home'),
-          //   automaticallyImplyLeading: false,
-          // ),
           body: SingleChildScrollView(
             child: Center(
               child: Column(
@@ -89,14 +84,12 @@ class HomePage extends StatelessWidget {
                           onPressed: () async {
                             await getSession().then((value)
                             {
+                              if(value == true){
+                              showNotification(context, Colors.orange, const TextStyle(color: Colors.black, fontSize: 18.0), "NEW SESSION FILE CREATED AND SAVED TO LOCAL APP DIR", "");
+                              }
+                              // use animation for login -> home
                               Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                             });
-                              // use animation for login -> home
-
-                              //if(value == true){
-                                //showNotification(context, Colors.orange, const TextStyle(color: Colors.black, fontSize: 18.0), "NEW SESSION FILE CREATED AND SAVED TO LOCAL APP DIR", "");
-                              //}
-                            //});
                             },
                         )
                     ),
@@ -359,7 +352,6 @@ class _JobsPage extends State<JobsPage> {
     // if(sFile["dirs"] is String){
     //   return;
     // }
-
     jobList.clear();
     var fileSplit = [];
     String fileString = "";
@@ -372,7 +364,6 @@ class _JobsPage extends State<JobsPage> {
       if (fileString.startsWith("job_")) {
         if(await File(s).exists()){
           if(!_duplicateFile(fileString)){
-            //var jobFile = File(s);
             jobList.add(s);
           }
         }
@@ -414,7 +405,7 @@ class _JobsPage extends State<JobsPage> {
   String _shorten(String s) {
     var sp = s.split("/");
     String str = sp[sp.length - 1];
-    return str.substring(0, str.length - 1);
+    return str.substring(0, str.length);
   }
 
   _readJob(String path) async {
@@ -444,7 +435,7 @@ class _JobsPage extends State<JobsPage> {
                       Column(
                           children: List.generate(jobList.length, (index) => Card(
                             child: ListTile(
-                              title: Text(_shorten(jobList[index].toString())),
+                              title: Text(_shorten(jobList[index])),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_forever_sharp), // doesn't delete forever
                                 color: Colors.redAccent,
@@ -596,6 +587,8 @@ class NewJob extends StatefulWidget {
 }
 class _NewJob extends State<NewJob> {
   StockJob newJob = StockJob(id: "NULL", name: "EMPTY");
+  TextEditingController idCtrl = TextEditingController();
+  TextEditingController nameCtrl = TextEditingController();
   String savePath = "";
   bool overwriteJob = false;
 
@@ -603,56 +596,6 @@ class _NewJob extends State<NewJob> {
   void initState() {
     super.initState();
     _prepareStorage();
-  }
-
-  Future<bool> _checkFile(File checkFile) async {
-    bool confirmWrite = false;
-    await checkFile.exists().then((value) {
-      showDialog(
-          context: context,
-          barrierDismissible: false,
-          barrierColor: Colors.blue.withOpacity(0.8),
-          builder: (context) => AlertDialog(
-              title: const Text("Warning!"),
-              content: SingleChildScrollView(
-                  child: Column(
-                      children: [
-                        headerPadding('* Job file [${newJob.id}] already exists!\n\n* Confirm overwrite?', TextAlign.left),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 5, bottom: 5),
-                          child: Text('** WARNING: DETECTED JOB FILE WILL BE DELETED IF "YES" **', textAlign: TextAlign.left, style: TextStyle(color: colorWarning, fontSize: 20)),
-                        ),
-                        mBox(
-                            context,
-                            colorOk,
-                            TextButton(
-                              child: Text('Yes', style: whiteText),
-                              onPressed: () {
-                                confirmWrite = true;
-                                Navigator.pop(context);
-                                refresh(this);
-                              },
-                            )
-                        ),
-                        mBox(
-                            context,
-                            colorBack,
-                            TextButton(
-                              child: Text('No', style: whiteText),
-                              onPressed: () {
-                                confirmWrite = false;
-                                Navigator.pop(context);
-                                refresh(this);
-                              },
-                            )
-                        ),
-                      ]
-                  )
-              )
-          )
-      );
-    });
-    return confirmWrite;
   }
 
   @override
@@ -665,12 +608,6 @@ class _NewJob extends State<NewJob> {
             centerTitle: true,
             title: const Text("New Job"),
             automaticallyImplyLeading: false,
-            // leading: IconButton(
-            //   icon: const Icon(Icons.arrow_back),
-            //   onPressed: () {
-            //     goToPage(context, const JobsPage());
-            //   },
-            // ),
           ),
           body: SingleChildScrollView(
               child: Column(
@@ -682,11 +619,18 @@ class _NewJob extends State<NewJob> {
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
                             child: TextFormField(
+                              controller: idCtrl,
                               textAlign: TextAlign.left,
-                              onChanged: (value) {
-                                newJob.id = value;
-                                refresh(this);
-                              },
+                              onFieldSubmitted: (value) async {
+                                if(savePath.isNotEmpty){
+                                  overwriteJob = await File('$savePath/job_${idCtrl.text}').exists();
+                                }
+                                },
+                              onTapOutside: (value) async {
+                                if(savePath.isNotEmpty){
+                                  overwriteJob = await File('$savePath/job_${idCtrl.text}').exists();
+                                }
+                                },
                             )
                         )
                     ),
@@ -695,11 +639,8 @@ class _NewJob extends State<NewJob> {
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
                             child: TextFormField(
+                              controller: nameCtrl,
                               textAlign: TextAlign.left,
-                              onChanged: (value) {
-                                newJob.name = value;
-                                refresh(this);
-                              },
                             )
                         )
                     ),
@@ -708,15 +649,35 @@ class _NewJob extends State<NewJob> {
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
                             child: ListTile(
-                                leading: newJob.dbPath == "" ? const Icon(Icons.question_mark) : null,
+                                leading: savePath == "" ? const Icon(Icons.question_mark) : null,
                                 title: Text(savePath, textAlign: TextAlign.left),
                                 onTap: () async {
-                                  savePath = await pickDir(context);
+                                  await pickDir(context).then((value){
+                                    savePath = value;
+                                  });
+
+                                  if(idCtrl.text.isNotEmpty && savePath.isNotEmpty){
+                                    overwriteJob = await File('$savePath/job_${idCtrl.text}').exists();
+                                  }
+
                                   refresh(this);
                                 },
                             )
                         )
                     ),
+                    SizedBox(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: 10.0
+                    ),
+
+                    overwriteJob ? Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: Text(
+                          "* Job file exists!\n* New job will replace detected file!",
+                          textAlign: TextAlign.left,
+                          style: warningText,
+                      ),
+                    ) : Container(),
                   ]
               )
           ),
@@ -729,23 +690,24 @@ class _NewJob extends State<NewJob> {
                         TextButton(
                           child: Text('Create Job', style: whiteText),
                           onPressed: () async {
-                            if(savePath.isEmpty){
-                              showNotification(context, Colors.orange, whiteText, "!! ALERT", "* Job was not created \n* Save path is empty");
+                            if(savePath.isEmpty || idCtrl.text.isEmpty){
+                              showNotification(context, Colors.orange, whiteText, "!! ALERT", "\n* Save path is empty: ${savePath.isEmpty}\n# Job ID is empty: ${idCtrl.text.isEmpty}");
                               return;
                             }
-                            // Check if job already exists
-                            var f = File('$savePath/job_${newJob.id}');
-                            await _checkFile(f).then((value){
-                              if(value == true){
-                                writeJob(newJob, '$savePath/job_${newJob.id}');
-                                // Add new job to session file
-                                if(!sFile["dirs"].contains(savePath)){
-                                  sFile["dirs"].add(savePath);
-                                }
-                                showNotification(context, colorOk, whiteText, "Job Create", "* File name: job_${newJob.id} \n* Save path: $savePath/job_${newJob.id}");
-                                goToPage(context, const JobsPage());
-                              }
-                            });
+
+                            newJob.id = idCtrl.text;
+                            newJob.name = nameCtrl.text;
+
+                            String fullPath ='$savePath/job_${newJob.id}';
+                            writeJob(newJob, fullPath);
+
+                            // Add new job to session file
+                            if(!sFile["dirs"].contains(fullPath)){
+                              sFile["dirs"].add(fullPath);
+                            }
+
+                            showNotification(context, colorOk, whiteText, "Job Created", "* File name: job_${newJob.id} \n* Save path: $fullPath");
+                            goToPage(context, const JobsPage());
                           },
                         )
                     ),
@@ -1047,6 +1009,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
                     Column(
                         children: List.generate(sheets.length, (index) => Card(
                               child: ListTile(
+                                selectedColor: Colors.greenAccent,
                                 title: Text(sheets.elementAt(index).toString()),
                                 trailing: loadSheet == sheets.elementAt(index).toString() ? const Icon(Icons.arrow_back, color: Colors.green) : null,
                                 onTap: () async {
@@ -2322,6 +2285,7 @@ goToPage(BuildContext context, Widget page) {
   Navigator.pushReplacement(
     context,
     PageRouteBuilder(
+      fullscreenDialog: true,
       pageBuilder: (context, animation1, animation2) => page,
       transitionDuration: Duration.zero,
       reverseTransitionDuration: Duration.zero,
@@ -2359,11 +2323,11 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
       content: Text('$title\n$message', style: textStyle),
       backgroundColor: bkgColor,
       duration: const Duration(milliseconds: 2500),
-      //width: MediaQuery.sizeOf(context).width, // Width of the SnackBar.
+      width: MediaQuery.sizeOf(context).width * 0.9, // Width of the SnackBar.
       padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
       behavior: SnackBarBehavior.floating,
       dismissDirection: DismissDirection.horizontal,
-      margin: const EdgeInsets.all(15.0),
+      //margin: const EdgeInsets.all(15.0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10.0),
       ),
@@ -2373,7 +2337,7 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
 
 showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   return showDialog(
-    //barrierDismissible: false,
+    barrierDismissible: false,
     context: context,
     barrierColor: c,
     builder: (context) => AlertDialog(
