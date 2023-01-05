@@ -9,7 +9,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,220 +21,175 @@ import 'package:excel/excel.dart';
 
 import 'stock_job.dart';
 
-List<StockItem> spreadsheet = [];
+Permission storageType = Permission.manageExternalStorage;
 StockJob currentJob = StockJob(id: "EMPTY", name: "EMPTY");
-SessionFile sFile = SessionFile();
-
-Permission storageType = Permission.storage;
 Directory? rootDir;
+Map<String, dynamic> sFile = {};
+List<StockItem> spreadsheet = [];
 String jobDir = '';
 bool isEmulating = true;
+enum TableType { literal, linear, export, full, addItem, editItem}
 
-
-/*
-===================
+/*========
   main
-===================
-*/
+========*/
 void main() {
   runApp(
-    const MaterialApp(debugShowCheckedModeBanner: false, home: LoginPage()),
+    const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: HomePage()
+    ),
   );
 }
 
-/*
-===================
-  Login Page
-===================
-*/
-class LoginPage extends StatelessWidget {
-  const LoginPage({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title: const Text('Login', textAlign: TextAlign.center),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.only(top: 60.0),
-              child: Center(
-                child: SizedBox(
-                  width: 470,
-                  height: 200,
-                  child: Image(image: AssetImage('assets/AS_Logo2.png')),
-                ),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15),
-              child: TextField(
-                decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Email',
-                    hintText:
-                    'Enter valid email id as user_name@email_client.com'),
-              ),
-            ),
-            const Padding(
-              padding:
-              EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 0),
-              child: TextField(
-                obscureText: true,
-                decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Password',
-                    hintText: 'Enter secure password'),
-              ),
-            ),
-            TextButton(
-              child: const Text('Forgot Password',
-                  style: TextStyle(color: Colors.blue, fontSize: 15)),
-              onPressed: () {
-                mPrint('FORGOT PASSWORD LINK');
-              },
-            ),
-            Container(
-              height: 50,
-              width: 250,
-              decoration: BoxDecoration(
-                  color: Colors.blue, borderRadius: BorderRadius.circular(20)),
-              child: TextButton(
-                child: const Text('Login',
-                    style: TextStyle(color: Colors.white, fontSize: 25)),
-                onPressed: () async {
-                  await readSession().then((value){
-                    // use animation for login -> home
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
-
-                    if(value == true){
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          showNotification(Text('NEW SESSION FILE WRITTEN TO APP DIR', style: textStyle(Colors.black, fontTitle), textAlign: TextAlign.center), Colors.orange)
-                      );
-                    }
-                  });
-                },
-              ),
-            ),
-            const SizedBox(height: 130),
-            const Text('Serving Australian businesses for over 30 years!',
-                style: TextStyle(color: Colors.blueGrey))
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/*
-==================
+/*=============
   Home Page
-==================
-*/
+=============*/
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
           resizeToAvoidBottomInset: false,
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text('Home'),
-            automaticallyImplyLeading: false,
-          ),
+          // appBar: AppBar(
+          //   centerTitle: true,
+          //   title: const Text('Home'),
+          //   automaticallyImplyLeading: false,
+          // ),
           body: SingleChildScrollView(
             child: Center(
-              child: Column(children: <Widget>[
-                mButton(
-                    context,
-                    Colors.blue,
-                    TextButton(
-                      child: Text('Jobs', style: textStyle(Colors.white, fontButton)),
-                      onPressed: () {
-                        goToPage(context, const JobsPage());
-                      },
-                    )),
-                mButton(
+              child: Column(
+                  children: <Widget>[
+                    const Padding(
+                      padding: EdgeInsets.only(top: 30.0),
+                      child: Center(
+                        child: SizedBox(
+                          width: 470,
+                          height: 200,
+                          child: Image(image: AssetImage('assets/AS_Logo2.png')),
+                        ),
+                      ),
+                    ),
+                   SizedBox(
+                     height: 50,
+                     width: MediaQuery.of(context).size.width,
+                     child: const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
+                   ),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height / 10.0,
+                      width: MediaQuery.of(context).size.width,
+                    ),
+                    rBox(
+                        context,
+                        Colors.blue,
+                        TextButton(
+                          child: const Text('Jobs', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                          onPressed: () async {
+                            await getSession().then((value)
+                            {
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
+                            });
+                              // use animation for login -> home
+
+                              //if(value == true){
+                                //showNotification(context, Colors.orange, const TextStyle(color: Colors.black, fontSize: 18.0), "NEW SESSION FILE CREATED AND SAVED TO LOCAL APP DIR", "");
+                              //}
+                            //});
+                            },
+                        )
+                    ),
+                    rBox(
+                        context,
+                        colorEdit,
+                        TextButton(
+                          child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                          onPressed: ()  {
+                            getSession();
+                            goToPage(context, const AppSettings());
+                            //showNotification(context, Colors.orange, const TextStyle(color: Colors.black, fontSize: 18.0), "NEW SESSION FILE CREATED AND SAVED TO LOCAL APP DIR", "");
+                            },
+                        ),
+                    ),
+                  ]
+              )
+            )
+          ),
+            bottomSheet: SingleChildScrollView(
+              child: Center(
+                child: Platform.isIOS ? SizedBox(width: MediaQuery.sizeOf(context).width, height: 5.0) :
+                rBox(
                     context,
                     colorBack,
                     TextButton(
-                      child: Text('App Settings', style: textStyle(Colors.white, fontButton)),
+                      child: const Text("Close App", style: TextStyle(color: Colors.white, fontSize: 20.0)),
                       onPressed: () async {
-                        goToPage(context, const AppSettings());
-                      },
-                    )),
-              ]),
-            ),
-          ),
-          bottomSheet: SingleChildScrollView(
-              child: Center(
-                  child: Column(children: [
-                    mButton(context,
-                        colorWarning,
-                        TextButton(
-                          child: Text('Logout', style: textStyle(Colors.white, fontButton)),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginPage()));
-                          },
-                        )
-                    )
-                  ]
-                  )
-              )
-          ),
+                        await writeSession().then((value){SystemNavigator.pop();});
+                        },
+                    ),
+                ),
+              ),
+            )
+          // bottomNavigationBar: BottomNavigationBarItem(
+          //   color: Colors.transparent,
+          //   elevation: 0,
+          //   child: Platform.isIOS ? SizedBox(width: MediaQuery.sizeOf(context).width, height: 5.0) :
+          //       Padding(
+          //         padding: const EdgeInsets.all(10.0),
+          //         child: Container(
+          //           height: 50,
+          //           width: MediaQuery.sizeOf(context).width * 0.4,
+          //           decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
+          //           child: TextButton(
+          //             child: const Text('Close App', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+          //             onPressed: () async {
+          //               await writeSession().then((value){SystemNavigator.pop();});
+          //               },
+          //           ),
+          //         ),
+          //       )
+          // ),
         )
     );
   }
 }
 
-/*
-==================
-  Settings Page
-==================
-*/
+/*=================
+  App Settings
+=================*/
 class AppSettings extends StatefulWidget{
   const AppSettings({ super.key, });
   @override
-  State<AppSettings> createState() => _AppSettingsState();
+  State<AppSettings> createState() => _AppSettings();
 }
-class _AppSettingsState extends State<AppSettings> {
+class _AppSettings extends State<AppSettings> {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          resizeToAvoidBottomInset: false, // Don't resize bottom elements if screen changes
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text('App Settings'),
-            automaticallyImplyLeading: false,
-          ),
+            resizeToAvoidBottomInset: false, // Don't resize bottom elements if screen changes
 
-          body: SingleChildScrollView(
-              child: Center(
+            appBar: AppBar(
+              centerTitle: true,
+              title: const Text('App Settings'),
+              automaticallyImplyLeading: false,
+            ),
+
+            body: SingleChildScrollView(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
-                      const Padding(
-                        padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                        child: Text(
-                            "Storage Permission Type",
-                            textAlign: TextAlign.left,
-                            style: TextStyle(color: Colors.blue, fontSize: 16)),
-                      ),
+                      headerPadding('Storage Permission Type', TextAlign.left),
                       Padding(
                           padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                           child: Card(
                             child: ListTile(
                               title: DropdownButton(
+                                menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
                                 value: storageType,
                                 icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
                                 items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
@@ -243,7 +198,6 @@ class _AppSettingsState extends State<AppSettings> {
                                     child: Text(index.toString()),
                                   );
                                 }).toList(),
-
                                 onChanged: ((value) {
                                   storageType = value as Permission;
                                   refresh(this);
@@ -252,44 +206,53 @@ class _AppSettingsState extends State<AppSettings> {
                             ),
                           )
                       ),
-
-                      const Padding(
-                        padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                        child: Text(
-                            'Rows per Page',
-                            textAlign: TextAlign.left,
-                            style: TextStyle(color: Colors.blue, fontSize: 16)),
-                      ),
+                      headerPadding('Rows per Page', TextAlign.left),
                       Padding(
-                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
                           child: Card(
                               child: ListTile(
-                                title: Text(sFile.pageCount.toString(), textAlign: TextAlign.center,),
+                                title: Text(sFile["pageCount"].toString(), textAlign: TextAlign.center,),
                                 leading: IconButton(
                                   icon: const Icon(Icons.remove_circle_outline),
                                   onPressed: () {
-                                    sFile.pageCount = (sFile.pageCount - 1) % 30;
+                                    sFile["pageCount"] -= sFile["pageCount"] - 1 > 0 ? 1 : 0;
                                     refresh(this);
                                   },
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.add_circle_outline),
                                   onPressed: () {
-                                    sFile.pageCount = (sFile.pageCount + 1) % 30;
+                                    sFile["pageCount"] += sFile["pageCount"] + 1 < 31 ? 1 : 0;
                                     refresh(this);
                                   },
                                 ),
                               )
                           )
                       ),
-
-                      const Padding(
-                        padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                        child: Text(
-                            'Emulator Mode',
-                            textAlign: TextAlign.left,
-                            style: TextStyle(color: Colors.blue, fontSize: 16)),
+                      headerPadding('Font Size', TextAlign.left),
+                      Padding(
+                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                          child: Card(
+                              child: ListTile(
+                                title: Text(sFile["fontScale"].toString(), textAlign: TextAlign.center),
+                                leading: IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                  onPressed: () {
+                                    sFile["fontScale"] -= sFile["fontScale"] - 1 > 8 ? 1 : 0;
+                                    refresh(this);
+                                  },
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  onPressed: () {
+                                    sFile["fontScale"] += sFile["fontScale"] + 1 < 30 ? 1 : 0;
+                                    refresh(this);
+                                  },
+                                ),
+                              )
+                          )
                       ),
+                      headerPadding("Device is Emulator", TextAlign.left),
                       Padding(
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
@@ -309,13 +272,14 @@ class _AppSettingsState extends State<AppSettings> {
                   )
               )
           ),
+
           bottomSheet: SingleChildScrollView(
             child: Center(
-              child: mButton(
+              child: mBox(
                   context,
-                  colorWarning,
+                  colorBack,
                   TextButton(
-                    child: Text('Back', style: textStyle(Colors.white, fontBody)),
+                    child: Text('Back', style: whiteText),
                     onPressed: () {
                       writeSession();
                       goToPage(context, const HomePage());
@@ -329,62 +293,60 @@ class _AppSettingsState extends State<AppSettings> {
   }
 }
 
-/*
-==================
+/*=============
   Jobs Page
-==================
-*/
+=============*/
 class JobsPage extends StatefulWidget {
   const JobsPage({
     super.key,
   });
-
   @override
-  State<JobsPage> createState() => _JobsState();
+  State<JobsPage> createState() => _JobsPage();
 }
-class _JobsState extends State<JobsPage> {
-  List jobList = [];
+class _JobsPage extends State<JobsPage> {
+  List<String> jobList = [];
+  bool access = false;
 
   @override
   void initState() {
     super.initState();
     _prepareStorage();
+    _access();
     _listFiles();
     jobDir = '';
   }
 
-  // Add single job file to session dirs
-  _singleAdd(String dir) {
+  _access() async{
+   access = await storageType.isGranted;
+  }
+
+  _fileAdd(String dir) {
     var spt = dir.split("/");
     String str = spt[spt.length - 1];
-
     if (str.startsWith("job_")) {
-      if(!sFile.dirs.contains(dir)){
-        sFile.dirs.add(dir);
+      if(!sFile["dirs"].contains(dir)){
+        sFile["dirs"].add(dir);
       }
     }
-
     refresh(this);
   }
 
-  // Add job file directory to session dirs
-  _dirAdd(String dir) {
-    var list = Directory(dir).listSync();
-    for (int i = 0; i < list.length; i++) {
-
-      // get filename at the end
-      var spt = list[i].toString().split("/");
-      String str = spt[spt.length - 1];
-
-      // check if directory contains job files
-      if (str.startsWith("job_")) {
-        if(!sFile.dirs.contains(dir)){
-          sFile.dirs.add(dir);
-          break;
+  _dirAdd(String dir) async{
+    if(await Directory(dir).exists()){
+      var list = Directory(dir).listSync();
+      for (int i = 0; i < list.length; i++) {
+        // get filename at the end
+        var spt = list[i].toString().split("/");
+        String str = spt[spt.length - 1];
+        // check if directory contains job files
+        if (str.startsWith("job_")) {
+          if(!sFile["dirs"].contains(dir)){
+            sFile["dirs"].add(dir);
+            break;
+          }
         }
       }
     }
-
     refresh(this);
   }
 
@@ -393,40 +355,39 @@ class _JobsState extends State<JobsPage> {
     jobList.removeAt(i);
   }
 
-  // Get list of job files
   _listFiles() async {
-    jobList.clear();
+    // if(sFile["dirs"] is String){
+    //   return;
+    // }
 
+    jobList.clear();
     var fileSplit = [];
     String fileString = "";
 
     // Go through job file directory(s) stored in session_file
-    for(String s in sFile.dirs){
+    for(String s in sFile["dirs"]){
       // get string at the end of path
       fileSplit = s.split("/");
       fileString = fileSplit[fileSplit.length - 1];
-
-      // get name at the end of the file path
       if (fileString.startsWith("job_")) {
         if(await File(s).exists()){
           if(!_duplicateFile(fileString)){
-            var jobFile = File(s);
-            jobList.add(jobFile);
+            //var jobFile = File(s);
+            jobList.add(s);
           }
         }
       }
       else{
         // string points to a directory containing job files, so scan for job files
-        var list = Directory(s).listSync();
-        for (int i = 0; i < list.length; i++) {
-
-          // get name at the end of the file path
-          fileSplit = list[i].toString().split("/");
-          fileString = fileSplit[fileSplit.length - 1];
-
-          if (fileString.startsWith("job_")) {
-            if(!_duplicateFile(fileString)){
-              jobList.add(list[i]);
+        if(await Directory(s).exists()){
+          var list = Directory(s).listSync();
+          for (int i = 0; i < list.length; i++) {
+            fileSplit = list[i].toString().split("/");
+            fileString = fileSplit[fileSplit.length - 1];
+            if (fileString.startsWith("job_")) {
+              if(!_duplicateFile(fileString)){
+                jobList.add(list[i].toString());
+              }
             }
           }
         }
@@ -456,7 +417,8 @@ class _JobsState extends State<JobsPage> {
     return str.substring(0, str.length - 1);
   }
 
-  _readJob(dynamic jsn) async {
+  _readJob(String path) async {
+    var jsn = File(path);
     String fileContent = await jsn.readAsString(); //await
     var dynamic = json.decode(fileContent);
     currentJob = StockJob.fromJson(dynamic);
@@ -468,113 +430,151 @@ class _JobsState extends State<JobsPage> {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          resizeToAvoidBottomInset: false, // Don't resize bottom elements if screen changes
-
+          resizeToAvoidBottomInset: false,
           appBar: AppBar(
             centerTitle: true,
             title: const Text('Jobs'),
             automaticallyImplyLeading: false,
           ),
-
           body: SingleChildScrollView(
               child: Center(
                   child: Column(
                     children: [
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width,
-                        height: 10.0,
-                      ),
+                      headerPadding("Available Jobs:", TextAlign.left),
                       Column(
                           children: List.generate(jobList.length, (index) => Card(
                             child: ListTile(
                               title: Text(_shorten(jobList[index].toString())),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_forever_sharp), // doesn't delete forever
-                                color: Colors.red[300],
+                                color: Colors.redAccent,
                                 onPressed: () {
                                   _removeJob(index);
                                   refresh(this);
                                 },
                               ),
                               onTap: () async {
-
-                                writeSession();
-                                String n = _shorten(jobList[index].toString());
-
-                                if("job_${currentJob.id}" == n){
-                                  goToPage(context, const OpenJob());
+                                if(access) {
+                                  writeSession();
+                                  String n = _shorten(jobList[index]);
+                                  if("job_${currentJob.id}" == n){
+                                    goToPage(context, const OpenJob());
+                                  }
+                                  else{
+                                    await _readJob(jobList[index]).then((value) {
+                                      jobDir = jobList[index];
+                                      goToPage(context, const OpenJob());
+                                    });
+                                  }
+                                  return;
                                 }
-                                else{ // Prepare job files for Job Page
-                                  await _readJob(jobList[index]).then((value) {
-                                    jobDir = jobList.elementAt(index).path;
-                                    loadingDialog(context);
-                                    goToPage(context, const LoadJobPage());
-                                  });
+                                else{
+                                  showNotification(
+                                    context,
+                                    Colors.redAccent,
+                                    whiteText,
+                                    "!! ALERT !!",
+                                    "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'",
+                                  );
                                 }
-                              },
+                              }
                             ),
                           ),
                           )
+                      ),
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height/10.0,
+                      ),
+                      Center(
+                          child: Column(
+                              children: [
+                                mBox(
+                                    context,
+                                    Colors.lightBlue,
+                                    TextButton(
+                                      child: Text('New Job', style: whiteText),
+                                      onPressed: () {
+                                        writeSession();
+                                        goToPage(context, const NewJob());
+                                      },
+                                    )
+                                ),
+                                mBox(
+                                    context,
+                                    Colors.blue[800]!,
+                                    TextButton(
+                                      child: Text('Scan Directory', style: whiteText),
+                                      onPressed: () async{
+                                        if(access) {
+                                          String path = await pickDir(context);
+                                          _dirAdd(path);
+                                          _listFiles();
+                                        }
+                                        else{
+                                          showNotification(
+                                              context,
+                                              Colors.red[900]!,
+                                              whiteText,
+                                              "!! ALERT !!",
+                                              "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'"
+                                          );
+                                        }
+                                      },
+                                    )
+                                ),
+                                mBox(
+                                    context,
+                                    Colors.blue[800]!,
+                                    TextButton(
+                                      child: Text('Load from Storage', style: whiteText),
+                                      onPressed: () async{
+                                        if(access){
+                                          String path = await pickFile(context);
+                                          _fileAdd(path);
+                                          _listFiles();
+                                        }
+                                        else {
+                                          showNotification(
+                                              context,
+                                              Colors.red[900]!,
+                                              whiteText,
+                                              "!! ALERT !!",
+                                              "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'"
+                                          );
+                                        }
+                                      },
+                                    )
+                                )
+                              ]
+                          ),
+                      ),
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height/10.0,
                       ),
                     ],
                   )
               )
           ),
-
           bottomSheet: SingleChildScrollView(
               child: Center(
-                  child: Column(children: [
-                    mButton(
-                        context,
-                        Colors.lightBlue,
-                        TextButton(
-                          child: Text('New Job', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () {
-                            writeSession();
-                            goToPage(context, const NewJob());
-                          },
-                        )
-                    ),
-                    mButton(
-                        context,
-                        Colors.blue[800]!,
-                        TextButton(
-                          child: Text('Scan Directory', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () async{
-                            String path = await pickDir(context);
-                            _dirAdd(path);
-                            _listFiles();
-                          },
-                        )
-                    ),
-                    mButton(
-                        context,
-                        Colors.blue[800]!,
-                        TextButton(
-                          child: Text('Load from Storage', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () async{
-                            String path = await pickFile(context);
-                            _singleAdd(path);
-                            _listFiles();
-                          },
-                        )
-                    ),
-                    mButton(
-                        context,
-                        colorWarning,
-                        TextButton(
-                          child: Text('Back', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () {
-                            // save session and clear vars
-                            writeSession();
-                            spreadsheet.clear();
-                            currentJob = StockJob(id: "EMPTY", name: "EMPTY");
-
-                            goToPage(context, const HomePage());
-                          },
-                        )
-                    ),
-                  ]
+                  child: Column(
+                      children: [
+                        mBox(
+                            context,
+                            colorBack,
+                            TextButton(
+                              child: Text('Back', style: whiteText),
+                              onPressed: () {
+                                writeSession();
+                                spreadsheet.clear();
+                                currentJob = StockJob(id: "EMPTY", name: "EMPTY");
+                                goToPage(context, const HomePage());
+                              },
+                            )
+                        ),
+                      ]
                   )
               )
           ),
@@ -583,20 +583,18 @@ class _JobsState extends State<JobsPage> {
   }
 }
 
-/*
-==================
-  New Job Page
-==================
-*/
+/*================
+  New Job
+================*/
 class NewJob extends StatefulWidget {
   const NewJob({
     super.key,
   });
 
   @override
-  State<NewJob> createState() => _NewJobState();
+  State<NewJob> createState() => _NewJob();
 }
-class _NewJobState extends State<NewJob> {
+class _NewJob extends State<NewJob> {
   StockJob newJob = StockJob(id: "NULL", name: "EMPTY");
   String savePath = "";
   bool overwriteJob = false;
@@ -605,6 +603,56 @@ class _NewJobState extends State<NewJob> {
   void initState() {
     super.initState();
     _prepareStorage();
+  }
+
+  Future<bool> _checkFile(File checkFile) async {
+    bool confirmWrite = false;
+    await checkFile.exists().then((value) {
+      showDialog(
+          context: context,
+          barrierDismissible: false,
+          barrierColor: Colors.blue.withOpacity(0.8),
+          builder: (context) => AlertDialog(
+              title: const Text("Warning!"),
+              content: SingleChildScrollView(
+                  child: Column(
+                      children: [
+                        headerPadding('* Job file [${newJob.id}] already exists!\n\n* Confirm overwrite?', TextAlign.left),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 5, bottom: 5),
+                          child: Text('** WARNING: DETECTED JOB FILE WILL BE DELETED IF "YES" **', textAlign: TextAlign.left, style: TextStyle(color: colorWarning, fontSize: 20)),
+                        ),
+                        mBox(
+                            context,
+                            colorOk,
+                            TextButton(
+                              child: Text('Yes', style: whiteText),
+                              onPressed: () {
+                                confirmWrite = true;
+                                Navigator.pop(context);
+                                refresh(this);
+                              },
+                            )
+                        ),
+                        mBox(
+                            context,
+                            colorBack,
+                            TextButton(
+                              child: Text('No', style: whiteText),
+                              onPressed: () {
+                                confirmWrite = false;
+                                Navigator.pop(context);
+                                refresh(this);
+                              },
+                            )
+                        ),
+                      ]
+                  )
+              )
+          )
+      );
+    });
+    return confirmWrite;
   }
 
   @override
@@ -616,87 +664,46 @@ class _NewJobState extends State<NewJob> {
           appBar: AppBar(
             centerTitle: true,
             title: const Text("New Job"),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                goToPage(context, const JobsPage());
-              },
-            ),
+            automaticallyImplyLeading: false,
+            // leading: IconButton(
+            //   icon: const Icon(Icons.arrow_back),
+            //   onPressed: () {
+            //     goToPage(context, const JobsPage());
+            //   },
+            // ),
           ),
           body: SingleChildScrollView(
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.only(
-                          left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text('Job Id: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)),
-                    ),
+                    headerPadding("Job Id:", TextAlign.left),
                     Padding(
-                        padding: const EdgeInsets.only(
-                            left: 15.0, right: 15.0, top: 0, bottom: 5),
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
                             child: TextFormField(
                               textAlign: TextAlign.left,
                               onChanged: (value) {
                                 newJob.id = value;
+                                refresh(this);
                               },
                             )
                         )
                     ),
-                    const Padding(
-                      padding: EdgeInsets.only(
-                          left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text('Job Name: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)),
-                    ),
+                    headerPadding("Job Name:", TextAlign.left),
                     Padding(
-                        padding: const EdgeInsets.only(
-                            left: 15.0, right: 15.0, top: 0, bottom: 5),
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
                             child: TextFormField(
                               textAlign: TextAlign.left,
                               onChanged: (value) {
                                 newJob.name = value;
+                                refresh(this);
                               },
                             )
                         )
                     ),
-                    const Padding(
-                      padding: EdgeInsets.only(
-                          left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text('Database File Path: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 15.0, right: 15.0, top: 15.0, bottom: 5),
-                      child: Card(
-                        child: ListTile(
-                          leading: newJob.dbPath == "" ? const Icon(Icons.question_mark) : null,
-                          title: Text(
-                            shortFilePath(newJob.dbPath),
-                            textAlign: TextAlign.left,
-                          ),
-                          onTap: () async {
-                            newJob.dbPath = await pickSpredsheet(context);
-                            refresh(this);
-                          }
-                        ),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(
-                          left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text('Job File Save Location: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)),
-                    ),
+                    headerPadding("Save Location:", TextAlign.left),
                     Padding(
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                         child: Card(
@@ -706,8 +713,8 @@ class _NewJobState extends State<NewJob> {
                                 onTap: () async {
                                   savePath = await pickDir(context);
                                   refresh(this);
-                                }
-                                )
+                                },
+                            )
                         )
                     ),
                   ]
@@ -716,103 +723,39 @@ class _NewJobState extends State<NewJob> {
           bottomSheet: SingleChildScrollView(
               child: Center(
                   child: Column(children: [
-                    mButton(
+                    mBox(
                         context,
                         colorOk,
                         TextButton(
-                          child: Text('Create Job', style: textStyle(Colors.white, fontBody)),
+                          child: Text('Create Job', style: whiteText),
                           onPressed: () async {
                             if(savePath.isEmpty){
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  showNotification(const Text('!! JOB NOT CREATED -> SAVE PATH NULL !!'), Colors.orange)
-                              );
+                              showNotification(context, Colors.orange, whiteText, "!! ALERT", "* Job was not created \n* Save path is empty");
+                              return;
                             }
-                            else if(savePath.isNotEmpty) {
-                              bool confirmWrite = false;
-
-                              // Check if job already exists
-                              var checkFile = File('$savePath/job_${newJob.id}');
-                              await checkFile.exists().then((value){
-                                if(value == true){
-                                  showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      barrierColor: Colors.blue.withOpacity(0.8),
-                                      builder: (context) => AlertDialog(
-                                          title: const Text("Warning!"),
-                                          content: SingleChildScrollView(
-                                              child: Column(
-                                                  children: [
-                                                    Padding(
-                                                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                                                      child: Text('* Job file [${newJob.id}] already exists!\n\n* Confirm overwrite?', textAlign: TextAlign.left, style: TextStyle(color: colorWarning, fontSize: 20)),
-                                                    ),
-                                                    Padding(
-                                                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 5, bottom: 5),
-                                                      child: Text('** WARNING: DETECTED JOB FILE WILL BE DELETED IF "YES" **', textAlign: TextAlign.left, style: TextStyle(color: colorWarning, fontSize: 20)),
-                                                    ),
-                                                    mButton(
-                                                        context,
-                                                        colorOk,
-                                                        TextButton(
-                                                          child:
-                                                          Text('Yes', style: textStyle(Colors.white, fontBody)),
-                                                          onPressed: () {
-                                                            confirmWrite = true;
-                                                            Navigator.pop(context);
-                                                            refresh(this);
-                                                          },
-                                                        )
-                                                    ),
-                                                    mButton(
-                                                        context,
-                                                        colorBack,
-                                                        TextButton(
-                                                          child:
-                                                          Text('No', style: textStyle(Colors.white, fontBody)),
-                                                          onPressed: () {
-                                                            confirmWrite = false;
-                                                            Navigator.pop(context);
-                                                            refresh(this);
-                                                          },
-                                                        )
-                                                    ),
-                                                  ]
-                                              )
-                                          )
-                                      )
-                                  );
+                            // Check if job already exists
+                            var f = File('$savePath/job_${newJob.id}');
+                            await _checkFile(f).then((value){
+                              if(value == true){
+                                writeJob(newJob, '$savePath/job_${newJob.id}');
+                                // Add new job to session file
+                                if(!sFile["dirs"].contains(savePath)){
+                                  sFile["dirs"].add(savePath);
                                 }
-                                else {
-                                  confirmWrite = true;
-                                }
-
-                                if(confirmWrite) {
-                                  writeJob(newJob, '$savePath/job_${newJob.id}');
-                                  // if(!sFile.dirs.contains(savePath)){
-                                  //   sFile.dirs.add(savePath);
-                                  // }
-
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      showNotification(Text('!! JOB CREATED -> ${newJob.id}'), colorOk)
-                                  );
-                                  goToPage(context, const JobsPage());
-                                }
-                              });
-                            }
+                                showNotification(context, colorOk, whiteText, "Job Create", "* File name: job_${newJob.id} \n* Save path: $savePath/job_${newJob.id}");
+                                goToPage(context, const JobsPage());
+                              }
+                            });
                           },
                         )
                     ),
-                    mButton(
+                    mBox(
                         context,
                         colorBack,
                         TextButton(
                           child:
-                          Text('Cancel', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () async {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                showNotification(const Text('!! JOB NOT CREATED -> USER CANCEL'), Colors.orange)
-                            );
+                          Text('Cancel', style: whiteText),
+                          onPressed: () {
                             goToPage(context, const JobsPage());
                           },
                         )
@@ -826,55 +769,214 @@ class _NewJobState extends State<NewJob> {
   }
 }
 
-/*
-==================
-  Load Job Page
-==================
-*/
-class LoadJobPage extends StatefulWidget {
-  const LoadJobPage({super.key});
+/*===========
+  Open Job
+============*/
+class OpenJob extends StatelessWidget {
+  const OpenJob({
+    super.key,
+  });
 
   @override
-  State<LoadJobPage> createState() => _LoadJobState();
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          title: Text("Job -> ${currentJob.id.toString()}", textAlign: TextAlign.center),
+          automaticallyImplyLeading: false,
+          actions: [
+            PopupMenuButton(
+                itemBuilder: (context) {
+                  return [
+                    const PopupMenuItem<TableType>(
+                      value: TableType.literal,
+                      child: Text("Literal Spreadsheet"),
+                    ),
+                    const PopupMenuItem<TableType>(
+                      value: TableType.linear,
+                      child: Text("Linear Spreadsheet"),
+                    ),
+                    const PopupMenuItem<TableType>(
+                      value: TableType.export,
+                      child: Text("Export Spreadsheet"),
+                    ),
+                    const PopupMenuItem<TableType>(
+                      value: TableType.full,
+                      child: Text("Full Spreadsheet"),
+                    ),
+                  ];
+                },
+                onSelected: (value) async {
+                  goToPage(context, StaticTable(tableType: value));
+                }
+            ),
+          ],
+        ),
+
+        body: SingleChildScrollView(
+          child: Column(
+              children: [
+                Card(
+                  child: ListTile(
+                    title: Text(currentJob.date),
+                    leading: const Icon(Icons.date_range, color: Colors.blueGrey),
+                  ),
+                ),
+                SizedBox(
+                  width: MediaQuery.sizeOf(context).width,
+                  height: MediaQuery.of(context).size.height/40.0,
+                ),
+                Card(
+                  child: ListTile(
+                    title: currentJob.dbPath.isEmpty?
+                      Text( "NO SPREADSHEET DATA", style: warningText) : Text(shortFilePath(currentJob.dbPath)),
+                    subtitle: currentJob.dbPath.isEmpty || spreadsheet.isEmpty ?
+                      Text("Tap here to load a sheet...", style: warningText) : Text("Count: ${spreadsheet.length}"),
+                    leading: currentJob.dbPath.isEmpty || spreadsheet.isEmpty?
+                      const Icon(Icons.warning_amber, color: Colors.red) : const Icon(Icons.list_alt, color: Colors.green),
+                    onTap: (){
+                      goToPage(context, const LoadSpreadsheet());
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height/20.0,
+                ),
+                Center(
+                    child: Column(
+                        children: [
+                          mBox(
+                              context,
+                              Colors.blue,
+                              TextButton(
+                                child: Text('Stocktake', style: whiteText),
+                                onPressed: () {
+                                  if(currentJob.dbPath.isEmpty || spreadsheet.isEmpty){
+                                    showNotification(context, Colors.red, whiteText, "!! ALERT !!", "* No spreadsheet data! \n* Tap 'Spreadsheet:' to load file.");
+                                    return;
+                                  }
+                                  goToPage(context, const Stocktake());
+                                },
+                              )
+                          ),
+                          mBox(
+                              context,
+                              Colors.blue,
+                              TextButton(
+                                child: Text('Export Spreadsheet', style: whiteText),
+                                onPressed: () {
+                                  goToPage(context, const StaticTable(tableType: TableType.export));
+                                  },
+                              )
+                          ),
+                          mBox(
+                              context,
+                              Colors.green,
+                              TextButton(
+                                child: Text('Save Job', style: whiteText),
+                                onPressed: () {
+                                  writeJob(currentJob, jobDir);
+                                  showNotification(context, colorOk, whiteText, "Job Saved", "* File name: job_${currentJob.id} \n* Save path: $jobDir");
+                                },
+                              )
+                          ),
+                        ]
+                    )
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height/10.0,
+                )
+              ]
+          ),
+        ),
+        bottomSheet: SingleChildScrollView(
+          child: Center(
+            child: Column(
+              children: [
+                mBox(
+                    context,
+                    colorBack,
+                    TextButton(
+                      child: Text('Close Job', style: whiteText),
+                      onPressed: () {
+                        writeJob(currentJob, jobDir);
+                        goToPage(context, const JobsPage());
+                      },
+                    )
+                ),
+              ]
+            )
+          )
+        ),
+      ),
+    );
+  }
 }
-class _LoadJobState extends State<LoadJobPage> {
-  var sheets = [];
+
+/*============
+  Scan Item
+============*/
+class ScanItem extends StatefulWidget{
+  const ScanItem({super.key});
+
+  @override
+  State<ScanItem> createState() => _ScanItem();
+}
+class _ScanItem extends State<ScanItem>{
+  bool camera = false;
+  bool scanner = false;
 
   @override
   void initState() {
     super.initState();
-    getSheets();
   }
 
-  getSheets() async {
-    if (currentJob.dbPath.isEmpty) {
-      await showAlert(
-          context,
-          "Alert",
-          "Invalid File Path:"
-              "\n* The database for this job cannot be found.\n"
-              "\n* No Database can be loaded for the job.",
-          colorWarning.withOpacity(0.8));
-      return;
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+        onWillPop: () async => false,
+        child: Scaffold(
+          appBar: AppBar(
+              centerTitle: true,
+              automaticallyImplyLeading: false,
+              title: const Text("Barcode Scanning", textAlign: TextAlign.center)
+          ),
+        )
+    );
+  }
+}
+
+/*====================
+  Load Spreadsheet
+====================*/
+class LoadSpreadsheet extends StatefulWidget {
+  const LoadSpreadsheet({super.key});
+
+  @override
+  State<LoadSpreadsheet> createState() => _LoadSpreadsheet();
+}
+class _LoadSpreadsheet extends State<LoadSpreadsheet> {
+  var sheets = [];
+  String loadSheet = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _getSheets(currentJob.dbPath);
+  }
+
+  _getSheets(String path) {
+    if (path.isNotEmpty && File(path).existsSync()) {
+      File file = File(path);
+      var bytes = file.readAsBytesSync();
+      var decoder = SpreadsheetDecoder.decodeBytes(bytes);
+      sheets = decoder.tables.keys.toList();
+      refresh(this);
     }
-
-    File file = File(currentJob.dbPath);
-    var bytes = file.readAsBytesSync();
-    var decoder = SpreadsheetDecoder.decodeBytes(bytes);
-
-    sheets = decoder.tables.keys.toList();
-
-    // var status = await Permission.storage.status;
-    // if (!status.isGranted) {
-    //   await Permission.storage.request();
-    //   File file = File(currentJob.dbPath);
-    //   var bytes = file.readAsBytesSync();
-    //   var decoder = SpreadsheetDecoder.decodeBytes(bytes);
-    //
-    //   sheets = decoder.tables.keys.toList();
-    // }
-
-    refresh(this);
   }
 
   Future<void> loadDatabase(String sheetName) async {
@@ -895,19 +997,18 @@ class _LoadJobState extends State<LoadJobPage> {
 
       spreadsheet.add(StockItem(
         index: spreadsheet.length,
-        barcode: cell[1].toString(),
+        barcode: cell[1].toString().trim().toUpperCase(),
         category: cell[2].toString().trim().toUpperCase(),
-        description: trimDescripString(cell[3].toString().trim().toUpperCase()),
+        description: trimDescription(cell[3].toString().trim().toUpperCase()),
         uom: cell[4].toString().trim().toUpperCase(),
         price: double.parse(cell[5].toString()),
         nof: false,
       ));
     }
-
     //mPrint("MAIN BD: ${spreadsheet.length}");
   }
 
-  trimDescripString(String s){
+  trimDescription(String s){
     s = s.replaceAll("    ", " ");
     s = s.replaceAll("   ", " ");
     s = s.replaceAll("  ", " ");
@@ -920,65 +1021,76 @@ class _LoadJobState extends State<LoadJobPage> {
         onWillPop: () async => false,
         child: Scaffold(
 
-          appBar: AppBar(
-              centerTitle: true,
-              automaticallyImplyLeading: false,
-              title: const Text("Load Spreasheet Data for Job", textAlign: TextAlign.center)
-          ),
-
-          body: SingleChildScrollView(
-            child: Column(
-              children:[
-                const Center(
-                    child: ListTile(
-                      title: Text("Available Sheets:")
-                    )
-                  ),
-                Column(
-                    children: List.generate(sheets.length, (index) => Card(
-                      child: ListTile(
-                        title: Text(sheets.elementAt(index).toString()),
-                        onTap: () async {
-                          loadingDialog(context);
-                          await loadDatabase(sheets.elementAt(index).toString()).then((value){
-                            goToPage(context, const OpenJob());
-                          });
-                          },
-                      ),
-                    ),)
-                ),
-              ]
+            appBar: AppBar(
+                centerTitle: true,
+                automaticallyImplyLeading: false,
+                title: const Text("Load Spreadsheet Data for Job", textAlign: TextAlign.center)
             ),
-          ),
+
+            body: SingleChildScrollView(
+              child: Column(
+                  children:[
+                    headerPadding("Spreadsheet File:", TextAlign.left),
+                    Card(
+                      child: ListTile(
+                          leading: currentJob.dbPath == "" ? const Icon(Icons.question_mark) : null,
+                          title: Text(shortFilePath(currentJob.dbPath), textAlign: TextAlign.left),
+                          onTap: () async {
+                            await pickSpreadsheet(context).then((value){
+                              currentJob.dbPath = value;
+                              _getSheets(currentJob.dbPath);
+                            });
+                          }
+                          ),
+                    ),
+                    headerPadding("Available Sheets:", TextAlign.left),
+                    Column(
+                        children: List.generate(sheets.length, (index) => Card(
+                              child: ListTile(
+                                title: Text(sheets.elementAt(index).toString()),
+                                trailing: loadSheet == sheets.elementAt(index).toString() ? const Icon(Icons.arrow_back, color: Colors.green) : null,
+                                onTap: () async {
+                                  loadSheet = sheets.elementAt(index).toString();
+                                  refresh(this);
+                                },
+                              ),
+                            )
+                        )
+                    ),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width,
+                      height: MediaQuery.of(context).size.height/10.0,
+                    )
+                  ]
+              ),
+            ),
             bottomSheet: SingleChildScrollView(
                 child: Center(
                   child: Column(
                     children: [
-                      mButton(
-                        context,
-                        colorDisable,
-                        TextButton(
-                          child: Text('START WITH NO DATA', style: textStyle(Colors.white, fontBody)),
-                          onPressed: () async{
-                            await (showAlert(
-                                context,
-                                'Warning!',
-                                'No Spreasheet Data:'
-                                    '\n* The job will load without spreadsheet data.',
-                                colorWarning)).then((value){
-                              goToPage(context, const OpenJob());
-                            });
+                      mBox(
+                          context,
+                          loadSheet.isNotEmpty ? colorOk : colorDisable,
+                          TextButton(
+                            child: Text('LOAD SPREADSHEET', style: whiteText),
+                            onPressed: () async{
+                              if(loadSheet.isNotEmpty){
+                                loadingDialog(context);
+                                await loadDatabase(loadSheet).then((value){
+                                  goToPage(context, const OpenJob());
+                                });
+                              }
                             },
-                        )
-                    ),
-                      mButton(
+                          )
+                      ),
+                      mBox(
                           context,
                           colorBack,
                           TextButton(
-                            child: Text('Back', style: textStyle(Colors.white, fontBody)),
+                            child: Text('Back', style: whiteText),
                             onPressed: () {
-                              goToPage(context, const JobsPage());
-                              },
+                              goToPage(context, const OpenJob());
+                            },
                           )
                       ),
                     ],
@@ -990,254 +1102,11 @@ class _LoadJobState extends State<LoadJobPage> {
   }
 }
 
-/*
-==================
-  Open Job
-==================
-*/
-class OpenJob extends StatelessWidget {
-  const OpenJob({
-    super.key,
-  });
-
-  _exportJobToXLSX( List<dynamic> fSheet, String outDir) async{
-    var path = outDir;//.replaceAll('storage/emulated/0', 'sdcard');
-    if(path.isEmpty){
-      return false;
-    }
-
-    var excel = Excel.createExcel();
-    var sheetObject = excel['Sheet1'];
-    sheetObject.isRTL = false;
-
-    // Add header row
-    sheetObject.insertRowIterables(["Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "GST RATE"], 0);
-
-    for(int i = 0; i < fSheet.length; i++){
-      List<String> dataList = [];
-      for(int j = 0; j < fSheet[i].length; j++){
-        dataList.add(fSheet[i][j].toString());
-      }
-      dataList.add("10"); //GST is always 10
-      sheetObject.insertRowIterables(dataList, i+1);
-    }
-
-    var fileBytes = excel.save();
-    File("$path/stocktake_${currentJob.id}.xlsx")
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(fileBytes!);
-
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: Scaffold(
-        appBar: AppBar(
-          centerTitle: true,
-          title: Text("Job ID: ${currentJob.id.toString()}",
-              textAlign: TextAlign.center),
-          automaticallyImplyLeading: false,
-        ),
-        body: SingleChildScrollView(
-          child: Column(
-              children: [
-            Card(
-              child: ListTile(
-                title: Text("Date: ${currentJob.date}"),
-                trailing: const Icon(Icons.date_range, color: Colors.blueGrey),
-              ),
-            ),
-            Card(
-              child: ListTile(
-                title: Text("Name: ${currentJob.name}"),
-              ),
-            ),
-            Card(
-              child: ListTile(
-                title: Text("Total Stock Count: ${currentJob.getTotal()}"),
-              ),
-            ),
-            Card(
-              child: ListTile(
-                title: Text("Database: ${shortFilePath(currentJob.dbPath)}"),
-                trailing:
-                const Icon(Icons.edit_rounded, color: Colors.amberAccent),
-              ),
-            ),
-            Center(
-                child: Column(children: [
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child:
-                        Text('Stocktake', style: textStyle(Colors.white, fontBody)),
-                        onPressed: () {
-                          goToPage(context, const StocktakePage());
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('View Stocktake Spreadsheet',
-                            style: textStyle(Colors.white, fontBody)),
-                        onPressed: () {
-                          goToPage(context, ViewSpreadSheet(mainList: currentJob.getList()));
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('Export Spreadsheet',
-                            style: textStyle(Colors.white, fontBody)),
-                        onPressed: () async {
-                          String outDir = await pickDir(context);
-                          await _exportJobToXLSX(currentJob.getFinalSheet(), outDir).then((value) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                showNotification(Text(value ? 'STOCKTAKE EXPORT -> stocktake_${currentJob.id}' : 'STOCKTAKE EXPORT -> EXPORT CANCEL'), value ? colorOk : Colors.orange)
-                            );
-                          });
-                          },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.green,
-                      TextButton(
-                        child: Text('Save Job', style: textStyle(Colors.white, fontBody)),
-                        onPressed: () {
-                          writeJob(currentJob, jobDir);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              showNotification(Text('JOB SAVED -> job_${currentJob.id}'), colorOk)
-                          );
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.red,
-                      TextButton(
-                        child:
-                        Text('Close Job', style: textStyle(Colors.white, fontBody)),
-                        onPressed: () {
-                          // Save job on close?
-                          showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              barrierColor: Colors.blue.withOpacity(0.8),
-                              builder: (context) => AlertDialog(
-                                  title: const Text("Save Job?"),
-                                  content: SingleChildScrollView(
-                                      child: Column(
-                                          children: [
-                                            Padding(
-                                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                                              child: Text('Save changes to job file?', textAlign: TextAlign.left, style: TextStyle(color: colorWarning, fontSize: 20)),
-                                            ),
-                                            mButton(
-                                                context,
-                                                colorOk,
-                                                TextButton(
-                                                  child:
-                                                  Text('Save', style: textStyle(Colors.white, fontBody)),
-                                                  onPressed: () {
-                                                    writeJob(currentJob, jobDir);
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                        showNotification(Text('JOB SAVED -> job_${currentJob.id}'), colorOk)
-                                                    );
-                                                    Navigator.pop(context);
-                                                  },
-                                                )
-                                            ),
-                                            mButton(
-                                                context,
-                                                colorBack,
-                                                TextButton(
-                                                  child:
-                                                  Text('No', style: textStyle(Colors.white, fontBody)),
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                  },
-                                                )
-                                            ),
-                                          ]
-                                      )
-                                  )
-                              )
-                          );
-
-                          goToPage(context, const JobsPage());
-                        },
-                      )
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width,
-                    height: 30,
-                  )
-                ]
-                )
-            )]),
-        ),
-      ),
-    );
-  }
-}
-
-/*
-==================
-  Stocktake Page
-==================
-*/
-class StocktakePage extends StatefulWidget {
-  const StocktakePage({super.key});
-
-  @override
-  State<StocktakePage> createState() => _StocktakePageState();
-}
-class _StocktakePageState extends State<StocktakePage> {
-  int stockIndex = -1;
-  int selectIndex = -1;
-  TextEditingController removeCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  getIndex() {
-    return selectIndex;
-  }
-
-  setIndex(int stockIndex, int selectIndex) {
-    this.stockIndex = stockIndex;
-    this.selectIndex = selectIndex;
-
-    mPrint("SELECT INDEX: $selectIndex");
-    if (selectIndex != -1) {
-      mPrint("ITEM INDEX: $stockIndex");
-      mPrint(currentJob.literal[selectIndex].description);
-    }
-
-    refresh(this);
-  }
-
-  errorStart() {
-    return showAlert(
-        context,
-        "Alert",
-        'User Action Error:'
-            '${currentJob.location.isEmpty ? '\n* Create and set location before scanning.' : ''}'
-            '${currentJob.dbPath.isEmpty ? '\n* Database is empty; need spreadsheet for item lookup.' : ''}'
-            "\n* Possible other reaons.",
-        Colors.red.withOpacity(0.8));
-  }
+/*==================
+  Stocktake
+==================*/
+class Stocktake extends StatelessWidget{
+  const Stocktake({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1248,116 +1117,115 @@ class _StocktakePageState extends State<StocktakePage> {
               centerTitle: true,
               title: Text("Stocktake - Total: ${currentJob.getTotal()}", textAlign: TextAlign.center),
               automaticallyImplyLeading: false,
-              // leading: IconButton(
-              //   icon: const Icon(Icons.arrow_back),
-              //   onPressed: () {
-              //     goToPage(context, const OpenJob());
-              //     },
             ),
             body: Center(
-                child: Column(children: [
-                  const Padding(
-                    padding: EdgeInsets.only(
-                        left: 15.0, right: 15.0, top: 15, bottom: 5),
-                    child: Text('Current Location: ',
-                        textAlign: TextAlign.left,
-                        style: TextStyle(color: Colors.blue, fontSize: 20)),
-                  ),
-                  Card(
-                    child: ListTile(
-                      title:
-                      currentJob.location.isEmpty ?
-                      Text("Tap to select a location...", style: textStyle(Colors.grey, fontBody)) : Text(currentJob.location, textAlign: TextAlign.center),
-                      leading: currentJob.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
-                      onTap: () async {
-                        goToPage(context, const Location());
-                      },
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(
-                        left: 15.0, right: 15.0, top: 35, bottom: 5),
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('Scan Item',
-                            style: textStyle(Colors.white, fontBody)),
-                        onPressed: () async {
-                          if (currentJob.location.isNotEmpty &&
-                              currentJob.dbPath.isNotEmpty) {
-                            //selectIndex = -1;
-                            //goToPage(context, const ScanItem());
-                          } else {
-                            errorStart();
-                          }
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('Search Item',
-                            style: textStyle(Colors.white, fontBody)),
-                        onPressed: () async {
-                          if (currentJob.location.isNotEmpty &&
-                              currentJob.dbPath.isNotEmpty) {
-                            selectIndex = -1;
-                            goToPage(context, const SearchItem());
-                          } else {
-                            errorStart();
-                          }
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('Add NOF', style: textStyle(Colors.white, fontBody)),
-                        onPressed: () async {
-                          if (currentJob.location.isNotEmpty && currentJob.dbPath.isNotEmpty) {
-                            selectIndex = -1;
-                            goToPage(context, const AddNOF());
-                          }
-                        },
-                      )
-                  ),
-                  mButton(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('Edit Stocktake', style: textStyle(Colors.white, fontBody)),
-                        onPressed: () async {
-                          selectIndex = -1;
-                          goToPage(context, const EditStock());
-                        },
-                      )
-                  ),
-                ]
-                )
-            ),
-            bottomSheet: SingleChildScrollView(
-                child: Center(
-                    child: Column(children: [
-                      mButton(
-                          context,
-                          colorBack,
-                          TextButton(
-                            child:
-                            Text('Back', style: textStyle(Colors.white, fontBody)),
-                            onPressed: () {
-                              goToPage(context, const OpenJob());
+                child: Column(
+                    children: [
+                      headerPadding("Current Location:", TextAlign.left),
+                      Card(
+                        child: ListTile(
+                          title: currentJob.location.isEmpty ?
+                            Text("Tap to select a location...", style: greyText) :
+                            Text(currentJob.location, textAlign: TextAlign.center),
+                          leading: currentJob.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
+                          onTap: () {
+                            goToPage(context, const Location());
                             },
+                        ),
+                      ),
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height / 10.0,
+                      ),
+                      mBox(
+                          context,
+                          Colors.blue,
+                          TextButton(
+                            child: Text('Scan Item', style: whiteText),
+                            onPressed: () {
+                              if (currentJob.location.isNotEmpty && currentJob.dbPath.isNotEmpty) {
+                                //selectIndex = -1;
+                                // goToPage(context, const ScanItem());
+                              } else {
+                                showAlert(context,
+                                    "Alert",
+                                    'User Action Error:'
+                                        '${currentJob.location.isEmpty ? '\n* Create and set location before scanning.' : ''}'
+                                        '${currentJob.dbPath.isEmpty ? '\n* Spreadsheet file path is empty; need spreadsheet for item lookup.' : ''}'
+                                        '${spreadsheet.isEmpty ? '\n* Sheet has not been selected; select sheet when loading Spreadsheet.' : ''}'
+                                        "\n* Possible other reasons.",
+                                    Colors.red.withOpacity(0.8)
+                                );
+                              }
+                              },
+                          )
+                      ),
+                      mBox(
+                          context,
+                          Colors.blue,
+                          TextButton(
+                            child: Text('Search Item', style: whiteText),
+                            onPressed: () {
+                              if (currentJob.location.isNotEmpty && currentJob.dbPath.isNotEmpty) {
+                                // selectIndex = -1;
+                                goToPage(context, DynamicTable(dataList: spreadsheet + currentJob.nof, tableType: TableType.addItem, searchBar: true));
+                              } else {
+                                showAlert(context,
+                                    "Alert",
+                                    'User Action Error:'
+                                        '${currentJob.location.isEmpty ? '\n* Create and set location before scanning.' : ''}'
+                                        '${currentJob.dbPath.isEmpty ? '\n* Database is empty; need spreadsheet for item lookup.' : ''}'
+                                        "\n* Possible other reasons.",
+                                    Colors.red.withOpacity(0.8)
+                                );
+                              }
+                              },
+                          )
+                      ),
+                      mBox(
+                          context,
+                          Colors.blue,
+                          TextButton(
+                            child: Text('Add NOF', style: whiteText),
+                            onPressed: () {
+                              if (currentJob.location.isNotEmpty && currentJob.dbPath.isNotEmpty) {
+                                goToPage(context, const AddNOF());
+                              }
+                              },
+                          )
+                      ),
+                      mBox(
+                          context,
+                          Colors.blue,
+                          TextButton(
+                            child: Text('Edit Stocktake', style: whiteText),
+                            onPressed: () {
+                              goToPage(context, DynamicTable(dataList: currentJob.literal, tableType: TableType.editItem, searchBar: false,));
+                              },
                           )
                       ),
                       SizedBox(
                         width: MediaQuery.of(context).size.width,
-                        height: 30,
-                      )
+                        height: MediaQuery.of(context).size.height / 10.0,
+                      ),
                     ]
+                )
+            ),
+            bottomSheet: SingleChildScrollView(
+                child: Center(
+                    child: Column(
+                        children: [
+                          mBox(
+                              context,
+                              colorBack,
+                              TextButton(
+                                child: Text('Back', style: whiteText),
+                                onPressed: () {
+                                  goToPage(context, const OpenJob());
+                                  },
+                              )
+                          ),
+                        ]
                     )
                 )
             )
@@ -1366,269 +1234,11 @@ class _StocktakePageState extends State<StocktakePage> {
   }
 }
 
-/*
-==================
-  EditStock Page
-==================
-*/
-class EditStock extends StatefulWidget {
-  const EditStock({super.key});
-
-  @override
-  State<EditStock> createState() => _EditStockState();
-}
-class _EditStockState extends State<EditStock> {
-  int stockIndex = -1;
-  int selectIndex = -1;
-  TextEditingController removeCtrl = TextEditingController();
-
-  final tableKey = GlobalKey<PaginatedDataTableState>();
-
-  List<StockItem> stockList = spreadsheet + currentJob.nof;
-
-  @override
-  void initState() {
-    super.initState();
-    selectIndex = -1;
-    stockIndex = -1;
-  }
-
-  getIndex() {
-    return selectIndex;
-  }
-
-  setIndex(int stockIndex, int selectIndex) {
-    this.stockIndex = stockIndex; // position of stock item in database + nof
-    this.selectIndex = selectIndex; // position of selection on screen
-
-    mPrint("SELECT INDEX: $selectIndex");
-    if (selectIndex != -1) {
-      mPrint("ITEM INDEX: $stockIndex");
-      mPrint(currentJob.literal[selectIndex].description);
-    }
-
-    refresh(this);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: Scaffold(
-        appBar: AppBar(
-          centerTitle: true,
-          title: Text("Stocktake - Total: ${currentJob.getTotal()}",
-              textAlign: TextAlign.center),
-          //automaticallyImplyLeading: false,
-          leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                goToPage(context, const StocktakePage());
-              }),
-        ),
-        body: Center(
-            child: Column(children: [
-              mButton(
-                  context,
-                  selectIndex > -1 ? colorOk : colorDisable,
-                  TextButton(
-                    child: Text('EDIT ITEM', style: textStyle(Colors.white, fontBody)),
-                    onPressed: () {
-                      if (selectIndex > -1) {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          barrierColor: Colors.blue.withOpacity(0.8),
-                          builder: (context) => AlertDialog(
-                            title: const Text("Edit Item"),
-                            content: SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    Card(
-                                      child: ListTile(
-                                          title: Text("Table Index: $stockIndex")
-                                      ),
-                                    ),
-                                    Card(
-                                      child: ListTile(
-                                          title: Text(
-                                              "Barcode: ${stockList[stockIndex].barcode}")),
-                                    ),
-                                    Card(
-                                      child: ListTile(
-                                          title: Text(
-                                              "Description: ${stockList[stockIndex].description}")),
-                                    ),
-                                    Card(
-                                      child: ListTile(
-                                          title: Text(
-                                              "UOM: ${stockList[stockIndex].uom}")),
-                                    ),
-                                    Card(
-                                      child: ListTile(
-                                          title: Text(selectIndex >= 0 ? "Count: ${currentJob.literal[selectIndex].count}" : "Count: null_something_gone_wrong")
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: MediaQuery.of(context).size.width * 0.8,
-                                      height: 20.0,
-                                    ),
-                                    Card(
-                                        child: ListTile(
-                                          title: TextField(
-                                            decoration: const InputDecoration(
-                                                hintText: 'Remove: ',
-                                                border: InputBorder.none),
-                                            controller: removeCtrl,
-                                            keyboardType:
-                                            const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                            onSubmitted: (value) async {
-                                              currentJob.removeStock(selectIndex, stockList[stockIndex], double.parse(value));
-                                              removeCtrl.clear();
-                                              selectIndex = 0;
-                                              stockIndex = 0;
-                                              // refresh(this);
-                                              Navigator.pop(context);
-                                            },
-                                          ),
-                                          trailing: IconButton(
-                                            icon: const Icon(Icons.cancel),
-                                            onPressed: () {
-                                              removeCtrl.clear();
-                                              //refresh(this);
-                                            },
-                                          ),
-                                        )
-                                    ),
-                                  ],
-                                )
-                            ),
-                            actions: [
-                              ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                                  child: const Text("Cancel"),
-                                  onPressed: () {
-                                    removeCtrl.clear();
-                                    selectIndex = 0;
-                                    stockIndex = 0;
-                                    Navigator.pop(context);
-                                    refresh(this);
-                                  }
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                    },
-                  )
-              ),
-              Expanded(
-                  child: SingleChildScrollView(
-                      child: PaginatedDataTable(
-                          sortColumnIndex: 0,
-                          sortAscending: true,
-                          showCheckboxColumn: false,
-                          showFirstLastButtons: true,
-                          rowsPerPage: sFile.pageCount,
-                          key: tableKey,
-                          controller: ScrollController(),
-                          columns: const <DataColumn>[
-                            DataColumn(label: Text("Description")),
-                            DataColumn(label: Text("Count")),
-                            DataColumn(label: Text("UOM")),
-                            DataColumn(label: Text("Location")),
-                            DataColumn(label: Text("Barcode")),
-                          ],
-                          source: RowLiterals(
-                              dataList: currentJob.literal,
-                              parent: this
-                          )
-                      )
-                  )
-              ),
-            ])
-        ),
-      ),
-    );
-  }
-}
-
-/*
-==================
-  Location Page
-==================
-*/
-class Location extends StatefulWidget {
+/*=================
+  Location
+==================*/
+class Location extends StatelessWidget {
   const Location({super.key});
-
-  @override
-  State<Location> createState() => _LocationState();
-}
-class _LocationState extends State<Location> {
-  String location = currentJob.location;
-  TextEditingController loctnCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  void newLocation() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: colorOk.withOpacity(0.8),
-      builder: (context) => AlertDialog(
-        actionsAlignment: MainAxisAlignment.spaceAround,
-        title: const Text("Add Location"),
-        content: Card(
-            child: ListTile(
-              title: TextField(
-                autofocus: true,
-                decoration: const InputDecoration(hintText: 'Enter location name ', border: InputBorder.none),
-                controller: loctnCtrl,
-                keyboardType: TextInputType.name,
-                onSubmitted: (value) {
-                  // Add string to currentJob location list
-                  if (value.isNotEmpty) {
-                    currentJob.addLocation(value.toUpperCase());
-                  }
-                  loctnCtrl.clear();
-                  refresh(this);
-                  Navigator.pop(context);
-                },
-              ),
-            )
-        ),
-        actions: <Widget>[
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-            onPressed: () {
-              loctnCtrl.clear();
-              refresh(this);
-              Navigator.pop(context);
-            },
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-            onPressed: () async {
-              if (loctnCtrl.text.isNotEmpty) {
-                currentJob.addLocation(loctnCtrl.text.toUpperCase());
-              }
-
-              loctnCtrl.clear();
-              refresh(this);
-              Navigator.pop(context);
-            },
-            child: const Text("Add"),
-          ),
-        ],
-      ),
-    );
-
-    refresh(this);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1655,17 +1265,14 @@ class _LocationState extends State<Location> {
                             title: Text(currentJob.allLocations[index], textAlign: TextAlign.justify),
                             onTap: () {
                               currentJob.setLocation(index);
-                              refresh(this);
-                              // goToPage(context, const StocktakePage());
+                              goToPage(context, const Stocktake());
                             },
                           )
                       )
                   ) : [
                     Card(
                         child: ListTile(
-                          title: Text("No locations, create a new location...",
-                              style: textStyle(Colors.grey, fontBody),
-                              textAlign: TextAlign.justify),
+                          title: Text("No locations, create a new location...", style: greyText, textAlign: TextAlign.justify),
                         )
                     )
                   ],
@@ -1676,24 +1283,73 @@ class _LocationState extends State<Location> {
           bottomSheet: SingleChildScrollView(
               child: Center(
                   child: Column(children: [
-                    mButton(
+                    mBox(
                         context,
                         Colors.lightBlue,
                         TextButton(
-                          child: Text('Add Location', style: textStyle(Colors.white, fontTitle)),
+                          child: Text('Add Location', style: whiteText),
                           onPressed: () {
-                            newLocation();
+                            TextEditingController textCtrl = TextEditingController();
+                            showDialog(context: context,
+                              barrierDismissible: false,
+                              barrierColor: colorOk.withOpacity(0.8),
+                              builder: (context) => AlertDialog(
+                                actionsAlignment: MainAxisAlignment.spaceAround,
+                                title: const Text("Add Location"),
+                                content: Card(
+                                    child: ListTile(
+                                      title: TextField(
+                                        autofocus: true,
+                                        decoration: const InputDecoration(hintText: 'Enter location name ', border: InputBorder.none),
+                                        controller: textCtrl,
+                                        keyboardType: TextInputType.name,
+                                        onSubmitted: (value) {
+                                          // Add string to currentJob location list
+                                          if (value.isNotEmpty) {
+                                            currentJob.addLocation(value.toUpperCase());
+                                          }
+                                          textCtrl.clear();
+                                          //refresh(this);
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                    )
+                                ),
+                                actions: <Widget>[
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                                    onPressed: () {
+                                      textCtrl.clear();
+                                      refresh(this);
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("Cancel"),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                                    onPressed: () {
+                                      if (textCtrl.text.isNotEmpty) {
+                                        currentJob.addLocation(textCtrl.text.toUpperCase());
+                                      }
+                                      textCtrl.clear();
+                                      //refresh(this);
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("Add"),
+                                  ),
+                                ],
+                              ),
+                            );
                           },
                         )
                     ),
-                    mButton(
+                    mBox(
                         context,
                         colorBack,
                         TextButton(
-                          child: Text('Back', style: textStyle(Colors.white, fontTitle)),
-                          onPressed: () async {
-                            await goToPage(context, const StocktakePage());
-                            refresh(this);
+                          child: Text('Back', style: whiteText),
+                          onPressed: () {
+                            goToPage(context, const Stocktake());
                           },
                         )
                     )
@@ -1706,29 +1362,31 @@ class _LocationState extends State<Location> {
   }
 }
 
-/*
-==================
-  Add NOF Page
-==================
-*/
+/*================
+  Add NOF
+================*/
 class AddNOF extends StatefulWidget {
   const AddNOF({super.key});
 
   @override
-  State<AddNOF> createState() => _AddNOFState();
+  State<AddNOF> createState() => _AddNOF();
 }
-class _AddNOFState extends State<AddNOF> {
+class _AddNOF extends State<AddNOF> {
+  List<String> uomList = ["EACH", "6 PACK", "12 PACK", "PER CARTON", "PER LITRE", "PER GALLON", "PER KG", "PER TONNE"];
   TextEditingController barcodeCtrl = TextEditingController();
-  TextEditingController categoryCtrl = TextEditingController();
-  TextEditingController descriptCtrl = TextEditingController();
-  TextEditingController uomCtrl = TextEditingController();
+  TextEditingController descriptionCtrl = TextEditingController();
+  TextEditingController priceCtrl = TextEditingController();
   TextEditingController addCtrl = TextEditingController();
+  String uomValue = "EACH";
+  String categoryValue = "MISC";
 
-  bool goodNOF() {
-    return barcodeCtrl.text.isNotEmpty &&
-        categoryCtrl.text.isNotEmpty &&
-        descriptCtrl.text.isNotEmpty &&
-        uomCtrl.text.isNotEmpty;
+  @override
+  void initState() {
+    super.initState();
+    uomValue = uomList[0];
+    categoryValue = masterCategory[0];
+    addCtrl.text = "0.0";
+    priceCtrl.text = "0.0";
   }
 
   @override
@@ -1748,11 +1406,10 @@ class _AddNOFState extends State<AddNOF> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text('Barcode: ', textAlign: TextAlign.left, style: TextStyle(color: Colors.blue, fontSize: 20)),
-                    ),
-                    Card(
+                    headerPadding("Barcode:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
                         child: ListTile(
                           title: TextField(
                             scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
@@ -1761,178 +1418,183 @@ class _AddNOFState extends State<AddNOF> {
                             keyboardType: TextInputType.number,
                             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              refresh(this);
-                              barcodeCtrl.clear();
-                            },
-                          ),
                         )
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text(
-                          'Category: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)
                       ),
                     ),
-                    Card(
-                        child: ListTile(
-                          title: TextField(
-                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
-                            decoration: const InputDecoration(hintText: 'E.g. meat, ice-cream', border: InputBorder.none),
-                            controller: categoryCtrl,
-                            keyboardType: TextInputType.name,
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              refresh(this);
-                              categoryCtrl.clear();
-                            },
-                          ),
-                        )
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text(
-                          'Description:',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)
+                    headerPadding("Category:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                        child: DropdownButton(
+                          value: categoryValue,
+                          isExpanded: true,
+                          menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+                          icon: const Icon(Icons.keyboard_arrow_down),
+                          items: masterCategory.map((String items) {
+                            return DropdownMenuItem(
+                              value: items,
+                              child: Center(
+                                  child: Text(
+                                    items,
+                                    textAlign: TextAlign.center,
+                                  )
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              categoryValue = newValue!;
+                            });
+                          },
+                        ),
                       ),
                     ),
-                    Card(
+                    headerPadding("Description:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
                         child: ListTile(
                           title: TextField(
-                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
+                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                             decoration: const InputDecoration(hintText: 'E.g. PETERS I/CREAM VAN 1L', border: InputBorder.none),
-                            controller: descriptCtrl,
+                            controller: descriptionCtrl,
                             keyboardType: TextInputType.name,
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              refresh(this);
-                              descriptCtrl.clear();
-                            },
-                          ),
-                        )),
-                    const Padding(
-                      padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text(
-                          'UOM: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)
-                      ),
-                    ),
-                    Card(
-                        child: ListTile(
-                          title: TextField(
-                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
-                            decoration: const InputDecoration(hintText: 'E.g. EACH,CARTON', border: InputBorder.none),
-                            controller: uomCtrl,
-                            keyboardType: TextInputType.name,
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              refresh(this);
-                              uomCtrl.clear();
-                            },
                           ),
                         )
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 5),
-                      child: Text(
-                          'Add Count: ',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(color: Colors.blue, fontSize: 20)
                       ),
                     ),
-                    Card(
-                        child: ListTile(
-                          title: TextField(
-                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
-                            decoration: const InputDecoration(hintText: '0', border: InputBorder.none),
-                            controller: addCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              refresh(this);
-                              addCtrl.clear();
-                            },
-                          ),
+                    headerPadding("UOM:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                        child: DropdownButton(
+                          value: uomValue,
+                          menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down),
+                          items: uomList.map((String items) {
+                            return DropdownMenuItem(
+                              value: items,
+                              child: Center(
+                                  child: Text(items, textAlign: TextAlign.center,)
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            uomValue = newValue!;
+                          },
+                        ),
+                      ),
+                    ),
+                    headerPadding("Price:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                          child: ListTile(
+                            title: TextField(
+                              scrollPadding: const EdgeInsets.symmetric(vertical: 0), // EdgeInsets.symmetric(vertical: keyboardHeight),
+                              controller: priceCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                            ),
+                          )
+                      ),
+                    ),
+                    headerPadding("Add Count:", TextAlign.left),
+                    Padding(
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                        child: Card(
+                            child: ListTile(
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: () {
+                                  double count = double.parse(addCtrl.text) + 1;
+                                  addCtrl.text = count.toString();
+                                  refresh(this);
+                                },
+                              ),
+                              title: TextField(
+                                controller: addCtrl,
+                                textAlign: TextAlign.center,
+                                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                              ),
+                              leading: IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: () {
+                                  double count = double.parse(addCtrl.text) - 1.0;
+                                  addCtrl.text = max(count, 0).toString();
+                                  refresh(this);
+                                },
+                              ),
+                            )
                         )
                     ),
                     SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      height: 20.0,
+                      width: MediaQuery.of(context).size.width,
+                      height: MediaQuery.of(context).size.height / 10.0,
                     ),
                     Center(
-                      child: mButton(
+                      child: mBox(
                           context,
                           colorOk,
                           TextButton(
-                            child: Text('Add NOF', style: textStyle(Colors.white, fontBody)),
+                            child: Text('Add NOF', style: whiteText),
                             onPressed: () async {
-                              if (goodNOF()) {
+                              if (barcodeCtrl.text.isNotEmpty && descriptionCtrl.text.isNotEmpty) {
                                 StockItem nof = StockItem(
                                     index: spreadsheet.length + currentJob.nof.length,
-                                    barcode: barcodeCtrl.text.toUpperCase(),
-                                    category: categoryCtrl.text.toUpperCase(),
-                                    description: descriptCtrl.text.toUpperCase(),
-                                    uom: uomCtrl.text.toUpperCase(),
-                                    price: 0.00,
+                                    barcode: barcodeCtrl.text,
+                                    category: categoryValue,
+                                    description: descriptionCtrl.text,
+                                    uom: uomValue,
+                                    price: double.parse(priceCtrl.text),
                                     nof: true
                                 );
                                 if (currentJob.addNOF(nof)) {
-                                  if (addCtrl.text != "0" && addCtrl.text.isNotEmpty) {
-                                    currentJob.addStock(nof, double.parse(addCtrl.text));
+                                  double count = double.parse(addCtrl.text);
+                                  if (count > 0) {
+                                    currentJob.addLiteral(nof, count);
                                   }
-                                  showAlert(context, "NOF added!", '', Colors.blue.withOpacity(0.8)).then((value) {
-                                    goToPage(context, const StocktakePage());
-                                  }
-                                  );
-                                } else {
-                                  showAlert(
+                                  await showAlert(
+                                      context,
+                                      "NOF Added",
+                                      "\n* Barcode: ${nof.barcode}\n* Description: ${nof.description}\n* Added to stock: $count",
+                                      Colors.blue.withOpacity(0.8)
+                                  ).then((value) {
+                                    goToPage(context, const Stocktake());
+                                  });
+                                }
+                                else {
+                                  await showAlert(
                                       context,
                                       "Error!",
-                                      'DUPLICATE BARCODE: '
-                                          '\n* Item already exists.'
-                                          '\n* Go to "Search Item" page and find the NOF'
-                                          '\n* Barcode scanning should automatically find the NOF',
-                                      Colors.red.withOpacity(0.8)).then((value) {
-                                    goToPage(context, const StocktakePage());
+                                      "DUPLICATE BARCODE: \n* Item already exists.\n* Go to 'Search Item' page and find the NOF.\n* Barcode scanning should automatically find the NOF",
+                                      Colors.red.withOpacity(0.8)
+                                  ).then((value) {
+                                    goToPage(context, const Stocktake());
                                   }
                                   );
                                 }
-                              } else {
-                                showAlert(
+                              }
+                              else {
+                                await showAlert(
                                     context,
                                     'Error!',
-                                    'NOF IS INCOMPLETE: '
-                                        '\n* Make sure all text fields contain info',
-                                    Colors.blue.withOpacity(0.8));
+                                    'NOF IS INCOMPLETE:\n* Make sure all text fields contain info.',
+                                    Colors.blue.withOpacity(0.8)
+                                );
                               }
-
-                              //mPrint("NOF ITEMS ${currentJob.nof.length}");
                             },
                           )
                       ),
                     ),
                     Center(
-                        child: mButton(
+                        child: mBox(
                           context,
                           colorBack,
                           TextButton(
-                            child: Text('Cancel', style: textStyle(Colors.white, fontBody)),
+                            child: Text('Cancel', style: whiteText),
                             onPressed: () async {
-                              goToPage(context, const StocktakePage());
+                              goToPage(context, const Stocktake());
                             },
                           ),
                         )
@@ -1945,47 +1607,49 @@ class _AddNOFState extends State<AddNOF> {
   }
 }
 
-/*
-=============================
-  Search Item Page
-=============================
-*/
-class SearchItem extends StatefulWidget {
-  const SearchItem({super.key});
+/*======================
+  Spreadsheet Static
+======================*/
+class StaticTable extends StatelessWidget {
+  final TableType tableType;
 
-  @override
-  State<SearchItem> createState() => _SearchItemState();
-}
-class _SearchItemState extends State<SearchItem> {
-  int selectIndex = -1;
-  final tableKey = GlobalKey<PaginatedDataTableState>(); // reset page on search text deletion
-
-  TextEditingController searchCtrl = TextEditingController();
-  TextEditingController addCtrl = TextEditingController();
-  List<StockItem>? filterList; // contains list of items we are searching for
-  List<StockItem>? searchList; // full list of stock items + NOFs
-
-  @override
-  void initState() {
-    super.initState();
-    searchList = spreadsheet + currentJob.nof;
-    filterList = searchList;
-  }
+  const StaticTable({
+    super.key,
+    required this.tableType,
+  });
 
   getIndex() {
-    return selectIndex;
+    return -1;
   }
 
-  setIndex(int stockIndex, int selectIndex) {
-    this.selectIndex = selectIndex;
-
-    mPrint("SELECT INDEX: $selectIndex");
-    if (selectIndex != -1) {
-      mPrint("ITEM INDEX: $stockIndex");
-      mPrint(filterList![selectIndex].description);
-    }
-
-    refresh(this);
+  PaginatedDataTable get _table {
+    return PaginatedDataTable(
+      sortColumnIndex: 0,
+      sortAscending: true,
+      showCheckboxColumn: false,
+      showFirstLastButtons: true,
+      rowsPerPage: sFile["pageCount"],
+      controller: ScrollController(),
+      columns: tableType == TableType.literal ? const [
+        DataColumn(label: Text("Description")),
+        DataColumn(label: Text("Count")),
+        DataColumn(label: Text("UOM")),
+        DataColumn(label: Text("Location")),
+        DataColumn(label: Text("Barcode")),
+      ] : tableType == TableType.export ? const [
+        DataColumn(label: Text('Index')),
+        DataColumn(label: Text('Category')),
+        DataColumn(label: Text('Description')),
+        DataColumn(label: Text('UOM')),
+        DataColumn(label: Text('QTY')),
+        DataColumn(label: Text('Cost Ex GST')),
+        DataColumn(label: Text('GST RATE')),
+      ] : getColumns([]),
+      source: tableType == TableType.linear ? RowSource(parent: this, dataList: currentJob.getList()) :
+      tableType == TableType.literal ? RowLiterals(parent: this, dataList: currentJob.literal) :
+      tableType == TableType.export ?  RowExport(parent: this, dataList: currentJob.getFinalSheet()) :
+      RowSource(parent: this, dataList: spreadsheet + currentJob.nof),
+    );
   }
 
   @override
@@ -1993,255 +1657,55 @@ class _SearchItemState extends State<SearchItem> {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text("Search Item"),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                goToPage(context, const StocktakePage());
-              },
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text("Spreadsheet View: ${currentJob.id}", textAlign: TextAlign.center),
+              automaticallyImplyLeading: false,
             ),
-          ),
-
-          body: Center(
-              child: Column(
-                  children: [
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.search),
-                        title: TextField(
-                            controller: searchCtrl,
-                            decoration: const InputDecoration(
-                                hintText: 'Search', border: InputBorder.none),
-                            onChanged: (value) {
-                              String search = value.toUpperCase();
-                              // Jump back to first page if search input text is manually deleted by the user
-                              if (search.isEmpty) {
-                                tableKey.currentState?.pageTo(0);
-                              }
-                              filterList = searchList!.where((item) => item.description.contains(search) || item.barcode.toString().contains(search)).toList();
-                              refresh(this);
-                            }
-                            ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.cancel),
-                          onPressed: () {
-                            tableKey.currentState?.pageTo(0); // Jump back to first page on search text clear
-                            searchCtrl.clear();
-                            filterList = searchList;
-                            refresh(this);
-                            },
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                        child: SingleChildScrollView(
-                            child: PaginatedDataTable(
-                              key: tableKey,
-                              sortColumnIndex: 0,
-                              sortAscending: true,
-                              showCheckboxColumn: false,
-                              showFirstLastButtons: true,
-                              rowsPerPage: sFile.pageCount,
-                              controller: ScrollController(),
-                              // Only show description and UOM
-                              columns: getColumns([3, 4]),
-                              source: RowSource(
-                                  parent: this,
-                                  dataList: filterList,
-                                  showCells: [3, 4],
-                                  select: true
-                              ),
-                            )
-                        )
-                    ),
-                    Center(
-                        child: Column(children: [
-                          mButton(
-                              context,
-                              selectIndex > -1 ? Colors.blue : Colors.grey,
-                              TextButton(
-                                //itemIndex == -1 ? "ADD NOF" :
-                                child: Text("ADD ITEM", style: textStyle(Colors.white, fontTitle)),
-                                onPressed: () {
-                                  if (selectIndex > -1) {
-                                    showDialog(
-                                      barrierDismissible: false,
-                                      context: context,
-                                      barrierColor: Colors.blue.withOpacity(0.8),
-                                      builder: (context) => AlertDialog(
-                                        actionsAlignment: MainAxisAlignment.spaceAround,
-                                        content: Card(
-                                            child: ListTile(
-                                              title: Text("Add Count:", style: textStyle(Colors.black, fontBody)),
-                                              subtitle: TextField(
-                                                decoration: const InputDecoration(border: InputBorder.none),
-                                                controller: addCtrl,
-                                                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                                onSubmitted: (value) {
-                                                  currentJob.addStock(filterList![selectIndex], double.parse(value));
-                                                  String s = filterList![selectIndex].description;
-                                                  if (s.length > 12) {
-                                                    s = s.substring(0, 12);
-                                                  }
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                      showNotification(Text('Stock Added: $s -> ${addCtrl.text}', style: textStyle(Colors.black, fontTitle), textAlign: TextAlign.center), colorOk)
-                                                  );
-                                                  addCtrl.clear();
-                                                  selectIndex = -1;
-                                                  refresh(this);
-                                                  Navigator.pop(context);
-                                                },
-                                              ),
-                                              trailing: IconButton(
-                                                icon: const Icon(Icons.cancel),
-                                                onPressed: () {
-                                                  addCtrl.clear();
-                                                },
-                                              ),
-                                            )
-                                        ),
-                                        actions: [
-                                          ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                                              child: const Text("Cancel"),
-                                              onPressed: () {
-                                                addCtrl.clear();
-                                                selectIndex = -1;
-                                                refresh(this);
-                                                Navigator.pop(context);
-                                              }
-                                          ),
-                                          ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-                                              child: const Text("Ok"),
-                                              onPressed: () {
-                                                currentJob.addStock(filterList![selectIndex], double.parse(addCtrl.text));
-                                                String s = filterList![selectIndex].description;
-                                                if (s.length > 12) {
-                                                  s = s.substring(0, 12);
-                                                }
-                                                ScaffoldMessenger.of(context).showSnackBar(showNotification(
-                                                    Text('Stock Added: $s -> ${addCtrl.text}', style: textStyle(Colors.black, fontTitle), textAlign: TextAlign.center), colorOk)
-                                                );
-                                                addCtrl.clear();
-                                                selectIndex = -1;
-                                                refresh(this);
-                                                Navigator.pop(context);
-                                              }
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }
-                                  refresh(this);
-                                },
-                              )
-                          )
-                        ])
-                    )
-                  ]
-              )
-          ),
-        )
-    );
-  }
-}
-
-/*
-============================
-  View Spreadsheet Page
-============================
-*/
-class ViewSpreadSheet extends StatefulWidget {
-  final List<StockItem> mainList;
-
-  const ViewSpreadSheet({
-    super.key,
-    required this.mainList,
-  });
-
-  @override
-  State<ViewSpreadSheet> createState() => _SpreadSheetState();
-}
-class _SpreadSheetState extends State<ViewSpreadSheet> {
-  TextEditingController searchController = TextEditingController();
-  List<StockItem>? filterList;
-  final tableKey = GlobalKey<PaginatedDataTableState>();
-
-  @override
-  void initState() {
-    super.initState();
-    filterList = widget.mainList;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-        onWillPop: () async => false,
-        child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: "Sheet",
-            home: Scaffold(
-                appBar: AppBar(
-                  centerTitle: true,
-                  title: Text("Spreadsheet View: ${currentJob.id}",
-                      textAlign: TextAlign.center),
-                  leading: IconButton(
-                      onPressed: () {
-                        goToPage(context, const OpenJob());
-                      },
-                      icon: const Icon(Icons.arrow_back)),
-                ),
-                body: Center(
-                    child: Column(children: [
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.search),
-                          title: TextField(
-                              controller: searchController,
-                              decoration: const InputDecoration(
-                                  hintText: 'Search', border: InputBorder.none), onChanged: (value) {
-                            String result = value.toUpperCase();
-                            if (result == "") {
-                              tableKey.currentState!.pageTo(0);
-                            }
-                            filterList = widget.mainList.where((item) => item.description.contains(result) || item.barcode.toString().contains(result) || item.category.contains(result)).toList();
-                            refresh(this);
-                          }
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel),
-                            onPressed: () {
-                              searchController.clear();
-                              filterList = widget.mainList;
-                              tableKey.currentState!.pageTo(0);
-                              refresh(this);
-                            },
-                          ),
-                        ),
-                      ),
+            body: Center(
+                child: Column(
+                    children: [
                       Expanded(
                           child: SingleChildScrollView(
-                              child: PaginatedDataTable(
-                                  sortColumnIndex: 0,
-                                  sortAscending: true,
-                                  showCheckboxColumn: false,
-                                  showFirstLastButtons: true,
-                                  rowsPerPage: sFile.pageCount,
-                                  key: tableKey,
-                                  controller: ScrollController(),
-                                  columns: getColumns([]),
-                                  source: RowSource(
-                                      parent: this,
-                                      dataList: filterList,
-                                      select: false)
-                              )
+                            child: _table,
                           )
                       ),
-                    ])
+                      Center(
+                          child: Column(
+                              children: [
+                                tableType != TableType.export ? Container() :
+                                mBox(
+                                    context,
+                                    Colors.blue,
+                                    TextButton(
+                                      child: Text('Export Spreadsheet', style: whiteText),
+                                      onPressed: () async {
+                                        await pickDir(context).then((value){
+                                          exportJobToXLSX(currentJob.getFinalSheet(), value);
+                                          showNotification(context, Colors.orange, whiteText, 'Exported Spreadsheet', '* Save Path: stocktake_${currentJob.id}');
+                                        });
+                                      },
+                                    )
+                                ),
+                                mBox(
+                                    context,
+                                    colorBack,
+                                    TextButton(
+                                      child: Text("Back", style: whiteText),
+                                      onPressed: () {
+                                        if(tableType == TableType.editItem || tableType == TableType.addItem){
+                                          goToPage(context, const Stocktake());
+                                        }
+                                        else{
+                                          goToPage(context, const OpenJob());
+                                        }
+                                      },
+                                    )
+                                )
+                              ]
+                          )
+                      )
+                    ]
                 )
             )
         )
@@ -2249,12 +1713,361 @@ class _SpreadSheetState extends State<ViewSpreadSheet> {
   }
 }
 
-/*
-=====================================
-  TABLE/SPREADSHEET FUNCTIONS
-==================================
-*/
+/*=======================
+  Spreadsheet Dynamic
+=======================*/
+class DynamicTable extends StatefulWidget{
+  final TableType tableType;
+  final bool searchBar;
+  final List dataList;
+  const DynamicTable({
+    super.key,
+    required this.tableType,
+    required this.searchBar,
+    required this.dataList,
+  });
 
+  @override
+  State<DynamicTable> createState() => _DynamicTable();
+}
+class _DynamicTable extends State<DynamicTable>{
+  TextEditingController searchCtrl = TextEditingController();
+  TextEditingController addCtrl = TextEditingController();
+  final tableKey = GlobalKey<PaginatedDataTableState>();
+  late int listIndex;
+  late int selectIndex;
+  List filterList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _clearInput();
+
+    if(widget.searchBar){
+      filterList = widget.dataList;
+    }
+  }
+
+  getIndex() {
+    return selectIndex;
+  }
+
+  setIndex(int listIndex, int selectIndex) {
+    this.listIndex = listIndex; // position of item in the table list
+    this.selectIndex = selectIndex; // position of selection on screen
+
+    mPrint("SELECT INDEX: $selectIndex");
+    mPrint("LIST INDEX: $listIndex");
+
+    // if (selectIndex != -1) {
+    //   if(widget.tableType == TableType.literal){
+    //     mPrint(currentJob.literal[selectIndex].description);
+    //   }
+    //   if (widget.tableType == TableType.search){
+    //     mPrint(fullList[selectIndex].description);
+    //   }
+    // }
+
+    refresh(this);
+  }
+
+  _clearInput(){
+    addCtrl.text = "0";
+    searchCtrl.clear();
+    selectIndex = -1;
+    selectIndex = -1;
+    listIndex = -1;
+  }
+
+  actionEdit() {
+    return mBox(
+        context,
+        selectIndex > -1 ? colorOk : colorDisable,
+        TextButton(
+          child: Text('EDIT ITEM', style: whiteText),
+          onPressed: () {
+            if (selectIndex > -1) {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                barrierColor: Colors.blue.withOpacity(0.8),
+                builder: (context) => AlertDialog(
+                  actionsAlignment: MainAxisAlignment.spaceAround,
+                  title: const Text("Edit Item"),
+                  content: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          Card(child: ListTile(title: Text("Table Index: $selectIndex")),),
+                          Card(child: ListTile(title: Text("Barcode: ${widget.dataList[selectIndex].barcode}")),),
+                          Card(child: ListTile(title: Text("Description: ${widget.dataList[selectIndex].description}")),),
+                          Card(child: ListTile(title: Text("UOM: ${widget.dataList[selectIndex].uom}")),),
+                          Card(child: ListTile(title: Text(selectIndex >= 0 ? "Count: ${currentJob.literal[selectIndex].count}" : "Count: null_something_gone_wrong")),),
+                          Card(child: ListTile(title: Text("NOF: ${currentJob.literal[selectIndex].nof}")),),
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width,
+                            height: MediaQuery.of(context).size.height / 10.0,
+                          ),
+                          headerPadding("Remove Count", TextAlign.left),
+                          Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                              child: Card(
+                                  child: ListTile(
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.add_circle_outline),
+                                      onPressed: () {
+                                        double count = double.parse(addCtrl.text) + 1;
+                                        addCtrl.text = count.toString();
+                                      },
+                                    ),
+                                    title: TextField(
+                                      controller: addCtrl,
+                                      textAlign: TextAlign.center,
+                                      keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                    ),
+                                    leading: IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline),
+                                      onPressed: () {
+                                        double count = double.parse(addCtrl.text) - 1;
+                                        addCtrl.text = max(count, 0).toString();
+
+                                      },
+                                    ),
+                                  )
+                              )
+                          ),
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width,
+                            height: MediaQuery.of(context).size.height / 10.0,
+                          ),
+                        ],
+                      )
+                  ),
+                  actions: [
+                    ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                        child: const Text("Cancel"),
+                        onPressed: () {
+                          _clearInput();
+                          refresh(this);
+                          Navigator.pop(context);
+                        }
+                    ),
+                    ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                        child: const Text("Confirm"),
+                        onPressed: () async{
+                          double remove = double.parse(addCtrl.text);
+                          currentJob.removeLiteral(selectIndex, remove);
+                          _clearInput();
+                          refresh(this);
+                          Navigator.pop(context);
+                        }
+                    ),
+                  ],
+                ),
+              );
+            }
+          },
+        )
+    );
+  }
+
+  actionAdd(){
+    return mBox(
+        context,
+        selectIndex > -1 ? Colors.blue : Colors.grey,
+        TextButton(
+          child: Text("ADD ITEM", style: whiteText),
+          onPressed: () {
+            if (selectIndex > -1) {
+              showDialog(
+                barrierDismissible: false,
+                context: context,
+                barrierColor: Colors.blue.withOpacity(0.8),
+                builder: (context) => AlertDialog(
+                  actionsAlignment: MainAxisAlignment.spaceAround,
+                  content: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        Card(child: Text("Barcode: ${widget.dataList[selectIndex].barcode}")),
+                        Card(child: Text(widget.dataList[selectIndex].description)),
+                        headerPadding("Add Count", TextAlign.left),
+                        Padding(
+                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                            child: Card(
+                               child: ListTile(
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    onPressed: () {
+                                      double count = double.parse(addCtrl.text) + 1;
+                                      addCtrl.text = count.toString();
+                                      refresh(this);
+                                    },
+                                  ),
+                                  title: TextField(
+                                    controller: addCtrl,
+                                    textAlign: TextAlign.center,
+                                    keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                  ),
+                                  leading: IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline),
+                                    onPressed: () {
+                                      double count = double.parse(addCtrl.text) - 1;
+                                      addCtrl.text = max(count, 0).toString();
+                                      refresh(this);
+                                    },
+                                  ),
+                                )
+                            )
+                        ),
+                      ]
+                    )
+                  ),
+                  actions: [
+                    ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                        child: const Text("Cancel"),
+                        onPressed: () {
+                          _clearInput();
+                          refresh(this);
+                          Navigator.pop(context);
+                        }
+                    ),
+                    ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                        child: const Text("Confirm"),
+                        onPressed: () {
+                          double count = double.parse(addCtrl.text);
+                          currentJob.addLiteral(filterList[selectIndex], count);
+                          String s = filterList[selectIndex].description;
+                          if (s.length > 12) {
+                            s = s.substring(0, 12);
+                          }
+                          showNotification(context, colorOk, whiteText, "Stock Added", "* $s \n* Count: $count");
+                          _clearInput();
+                          refresh(this);
+                          Navigator.pop(context);
+                        }
+                    ),
+                  ],
+                ),
+              );
+            }
+            refresh(this);
+          },
+        )
+    );
+  }
+
+  searchBar(){
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.search),
+        title: TextField(
+            controller: searchCtrl,
+            decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none),
+            onChanged: (value) {
+              String search = value.toUpperCase();
+              tableKey.currentState?.pageTo(0);
+              filterList = widget.dataList.where((item) => item.description.contains(search) || item.barcode.toString().contains(search)).toList();
+              refresh(this);
+            }
+        ),
+      ),
+    );
+  }
+
+  PaginatedDataTable get _table {
+    return PaginatedDataTable(
+        sortColumnIndex: 0,
+        sortAscending: true,
+        showCheckboxColumn: false,
+        showFirstLastButtons: true,
+        rowsPerPage: sFile["pageCount"],
+        controller: ScrollController(),
+        columns:
+          widget.tableType == TableType.addItem ? getColumns([3, 4]) :
+          widget.tableType == TableType.editItem ? const [
+            DataColumn(label: Text("Description")),
+            DataColumn(label: Text("Count")),
+            DataColumn(label: Text("UOM")),
+            DataColumn(label: Text("Location")),
+            DataColumn(label: Text("Barcode"))] : getColumns([]),
+        source:
+          widget.tableType == TableType.addItem ? RowSource(parent: this, dataList: filterList, showCells: [3, 4], select: true) :
+          widget.tableType == TableType.editItem ? RowLiterals(parent: this, dataList: currentJob.literal, select: true) :
+          RowSource(parent: this, dataList: widget.dataList),
+
+      //   widget.tableType == TableType.search ? getColumns([3, 4]) :
+      //   widget.tableType == TableType.export ? const[
+      //   DataColumn(label: Text('Index')),
+      //   DataColumn(label: Text('Category')),
+      //   DataColumn(label: Text('Description')),
+      //   DataColumn(label: Text('UOM')),
+      //   DataColumn(label: Text('QTY')),
+      //   DataColumn(label: Text('Cost Ex GST')),
+      //   DataColumn(label: Text('GST RATE'))] :
+      //   getColumns([]),
+
+      //widget.tableType == TableType.literal ? RowLiterals(parent: this, dataList: currentJob.literal, select: true) :
+      //widget.tableType == TableType.linear ? RowSource(parent: this, dataList: currentJob.getList()) :
+      //widget.tableType == TableType.export ? RowExport(parent: this, dataList: currentJob.getFinalSheet()) :
+
+      //widget.tableType == TableType.search ? RowSource(parent: this, dataList: filterList, showCells: [3, 4], select: true) :
+      //RowSource(parent: this, dataList: itemList),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+        onWillPop: () async => false,
+        child: Scaffold(
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text("Spreadsheet View: ${currentJob.id}", textAlign: TextAlign.center),
+              automaticallyImplyLeading: false,
+            ),
+            body: Center(
+                child: Column(
+                    children: [
+                      widget.searchBar ? searchBar() : Container(),
+                      Expanded(
+                          child: SingleChildScrollView(
+                            child: _table,
+                          )
+                      ),
+                      Center(
+                          child: Column(
+                              children: [
+                                widget.tableType == TableType.editItem ? actionEdit() :
+                                widget.tableType == TableType.addItem ? actionAdd() :
+                                Container(),
+                                mBox(context, colorBack, TextButton(
+                                  child: Text("Back", style: whiteText),
+                                  onPressed: () {
+                                    if(widget.tableType == TableType.editItem || widget.tableType == TableType.addItem){
+                                      goToPage(context, const Stocktake());
+                                    }
+                                    else{
+                                      goToPage(context, const OpenJob());
+                                    }
+                                    },
+                                )),
+                              ]
+                          )
+                      )
+                    ]
+                )
+            )
+        )
+    );
+  }
+}
+
+/*=========================
+  SPREADSHEET FUNCTIONS
+===========================*/
 List<DataColumn> getColumns(List<int>? showColumn) {
   // [showColumn] defines which columns should be returned; an empty list will show every column of the table.
   // Returns columns in order of the [showColumn] e.g. [3, 1, 2] will show 3rd column first, 1st column second and so on.
@@ -2285,13 +2098,68 @@ List<DataColumn> getColumns(List<int>? showColumn) {
   return dc;
 }
 
-class RowLiterals extends DataTableSource {
-  List<StockLiteral>? dataList;
+class RowExport extends DataTableSource{
+  List? dataList = [];
   dynamic parent;
+  bool? select = false;
+
+  RowExport({
+    required this.dataList,
+    required this.parent,
+    this.select
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    assert(index >= 0);
+
+    if (index >= rowCount) {
+      return null;
+    }
+
+    mPrint(dataList![index].toString());
+    List sub = dataList![index] as List;
+
+    return DataRow.byIndex(
+        index: index,
+        selected: (select == true) ? index == parent.getIndex() : false,
+        onSelectChanged: (value) {
+          if(select == true){
+            int selectIndex = parent.getIndex() != index ? index : -1;
+            int listIndex = selectIndex > -1 ? dataList![selectIndex].index : -1;
+            notifyListeners();
+            parent.setIndex(listIndex, selectIndex);
+          }
+        },
+
+        cells: <DataCell>[
+          DataCell(Text(sub[0].toString())),
+          DataCell(Text(sub[1].toString())),
+          DataCell(Text(sub[2].toString())),
+          DataCell(Text(sub[3].toString())),
+          DataCell(Text(sub[4].toString())),
+          DataCell(Text(sub[5].toString())),
+          const DataCell(Text("10.0")),
+        ]
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => dataList!.length;
+  @override
+  int get selectedRowCount => (select == true && parent.getIndex() > -1) ? 1 : 0;
+}
+class RowLiterals extends DataTableSource {
+  List dataList;
+  dynamic parent;
+  bool? select = false;
 
   RowLiterals({
     required this.dataList,
     required this.parent,
+    this.select
   });
 
   @override
@@ -2304,47 +2172,47 @@ class RowLiterals extends DataTableSource {
 
     return DataRow.byIndex(
       index: index,
-      selected: index == parent.getIndex(),
+      selected: (select == true) ? index == parent.getIndex() : false,
 
-      // Select and return item index
       onSelectChanged: (value) {
-        int selectIndex = parent.getIndex() != index ? index : -1;
-        int stockIndex = selectIndex > -1 ? dataList![selectIndex].index : -1;
-
-        notifyListeners();
-        parent.setIndex(stockIndex, selectIndex);
+        if(select == true){
+          int selectIndex = parent.getIndex() != index ? index : -1;
+          int listIndex = selectIndex > -1 ? dataList[selectIndex].index : -1;
+          notifyListeners();
+          parent.setIndex(listIndex, selectIndex);
+        }
       },
 
       cells: <DataCell>[
-        DataCell(Text(dataList![index].description)),
-        DataCell(Text(dataList![index].count.toString())),
-        DataCell(Text(dataList![index].uom)),
-        DataCell(Text(dataList![index].location)),
-        DataCell(Text(dataList![index].barcode.toString())),
+        DataCell(Text(dataList[index].description)),
+        DataCell(Text(dataList[index].count.toString())),
+        DataCell(Text(dataList[index].uom)),
+        DataCell(Text(dataList[index].location)),
+        DataCell(Text(dataList[index].barcode.toString())),
       ],
+
     );
   }
 
   @override
   bool get isRowCountApproximate => false;
   @override
-  int get rowCount => dataList!.length;
+  int get rowCount => dataList.length;
   @override
-  int get selectedRowCount => parent.getIndex() != -1 ? 1 : 0;
+  int get selectedRowCount => (select == true && parent.getIndex() > -1) ? 1 : 0;
 }
-
 class RowSource extends DataTableSource {
-  List<StockItem>? dataList;
+  List dataList;
   List<int>? showCells; // hide/show specific cells
-  bool select = false;
-
+  bool? select = false;
   dynamic parent;
 
-  RowSource(
-      {required this.parent,
-        required this.dataList,
-        this.showCells,
-        required this.select});
+  RowSource({
+    required this.parent,
+    required this.dataList,
+    this.showCells,
+    this.select
+  });
 
   @override
   DataRow? getRow(int index) {
@@ -2355,12 +2223,12 @@ class RowSource extends DataTableSource {
     }
 
     List<DataCell> dataCells = <DataCell>[
-      DataCell(Text(dataList![index].index.toString())),
-      DataCell(Text(dataList![index].barcode.toString())),
-      DataCell(Text(dataList![index].category)),
-      DataCell(Text(dataList![index].description)),
-      DataCell(Text(dataList![index].uom)),
-      DataCell(Text(dataList![index].price.toString())),
+      DataCell(Text(dataList[index].index.toString())),
+      DataCell(Text(dataList[index].barcode.toString())),
+      DataCell(Text(dataList[index].category)),
+      DataCell(Text(dataList[index].description)),
+      DataCell(Text(dataList[index].uom)),
+      DataCell(Text(dataList[index].price.toString())),
     ];
 
     // Create list of cells in order of [showCells]
@@ -2379,16 +2247,12 @@ class RowSource extends DataTableSource {
     return DataRow.byIndex(
       index: index,
       selected: (select == true) ? index == parent.getIndex() : false,
-
-      // Select and return item index
       onSelectChanged: (value) {
         if (select == true) {
           int selectIndex = parent.getIndex() != index ? index : -1;
-          int stockIndex =
-          selectIndex != -1 ? dataList![selectIndex].index : -1;
-
+          int listIndex = selectIndex != -1 ? dataList[selectIndex].index : -1;
           notifyListeners();
-          parent.setIndex(stockIndex, selectIndex);
+          parent.setIndex(listIndex, selectIndex);
         }
       },
       cells: dataCells,
@@ -2398,32 +2262,26 @@ class RowSource extends DataTableSource {
   @override
   bool get isRowCountApproximate => false;
   @override
-  int get rowCount => dataList!.length;
+  int get rowCount => dataList.length;
   @override
-  int get selectedRowCount =>
-      (select == true && parent.getIndex() > -1) ? 1 : 0;
+  int get selectedRowCount => (select == true && parent.getIndex() > -1) ? 1 : 0;
 }
 
-/*
-======================================================
-      COLORS & STYLES
-======================================================
-*/
-
+/*===================
+  COLORS & STYLES
+===================*/
 Color colorOk = Colors.blue.shade400;
+Color colorEdit = Colors.blueGrey;
 Color colorWarning = Colors.deepPurple.shade200;
 Color colorDisable = Colors.blue.shade200;
-Color colorBack = Colors.grey.shade600;
+Color colorBack = Colors.redAccent;
+// Color colorBack = Colors.grey.shade600;
+// const double fontHeader = 20.0;
 
-const fontTitle = 18.0;
-const fontBody = 18.0;
-const fontSmall = 12.0;
-const fontBig = 24.0;
-const fontButton = 18.0;
-
-textStyle(Color c, var s) {
-  return TextStyle(color: c, fontSize: s);
-}
+TextStyle get warningText{ return TextStyle(color: Colors.red[900], fontSize: sFile["fontScale"]);}
+TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["fontScale"]);}
+TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
+TextStyle get blackText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 
 mPrint(var s) {
   // "Safely" prints something to terminal, otherwise IDE notifications chucks a sissy fit
@@ -2446,11 +2304,18 @@ shortFilePath(String s) {
   return sp[sp.length - 1];
 }
 
-/*
-======================================================
-      POP-UPs & RE-USABLE WIDGETS
-======================================================
-*/
+/*=====================
+  RE-USABLE WIDGETS
+=====================*/
+headerPadding(String title, TextAlign l){
+  return Padding(
+    padding: const EdgeInsets.all(15.0),
+    child: Text(
+        title,
+        textAlign: l,
+        style: const TextStyle(color: Colors.blue, fontSize: 20.0)),
+  );
+}
 
 goToPage(BuildContext context, Widget page) {
   // Jump to page with no animation
@@ -2464,31 +2329,45 @@ goToPage(BuildContext context, Widget page) {
   );
 }
 
-mButton(BuildContext context, Color c, TextButton t) {
+mBox(BuildContext context, Color c, Widget w){
   return Padding(
-    padding:
-    const EdgeInsets.only(left: 0.0, right: 0.0, top: 10.0, bottom: 10.0),
+    padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
     child: Container(
       height: 50,
       width: MediaQuery.of(context).size.width * 0.8,
-      decoration: BoxDecoration(color: c), //, borderRadius: BorderRadius.),
-      child: t,
+      decoration: BoxDecoration(color: c),
+      child: w,
     ),
   );
 }
 
-showNotification(Text message, Color bkgColor) {
-  return SnackBar(
-    content: message,
-    backgroundColor: bkgColor,
-    duration: const Duration(milliseconds: 1500),
-    //width: 280.0, // Width of the SnackBar.
-    padding: const EdgeInsets.symmetric(horizontal: 10.0),  // Inner padding for SnackBar content.
-    behavior: SnackBarBehavior.floating,
-    margin: const EdgeInsets.only(bottom: 65.0),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10.0),
+rBox(BuildContext context, Color c, Widget w){
+  return Padding(
+    padding: const EdgeInsets.all(10.0),
+    child: Container(
+      height: 50,
+      width: MediaQuery.sizeOf(context).width * 0.8,
+      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(20)),
+      child: w,
     ),
+  );
+}
+
+showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, String title, String message,) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$title\n$message', style: textStyle),
+      backgroundColor: bkgColor,
+      duration: const Duration(milliseconds: 2500),
+      //width: MediaQuery.sizeOf(context).width, // Width of the SnackBar.
+      padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
+      behavior: SnackBarBehavior.floating,
+      dismissDirection: DismissDirection.horizontal,
+      margin: const EdgeInsets.all(15.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+    )
   );
 }
 
@@ -2503,7 +2382,7 @@ showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
       actions: [
         ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-            child: const Text("Ok"),
+            child: Text("Ok", style: whiteText),
             onPressed: () {
               Navigator.pop(context);
             }
@@ -2531,12 +2410,9 @@ loadingDialog(BuildContext context) {
       });
 }
 
-/*
-======================================================
+/*=========================
   READ/WRITE OPERATIONS
-======================================================
-*/
-
+=========================*/
 Future<String> get _localPath async {
   final directory = await getApplicationDocumentsDirectory();
   return directory.path;
@@ -2544,28 +2420,16 @@ Future<String> get _localPath async {
 
 Future<void> _prepareStorage() async {
   rootDir = Directory('/storage/emulated/0/');
-
   var storage = await storageType.status;
   if (storage != PermissionStatus.granted) {
     await storageType.request();
   }
-
   bool b = storage == PermissionStatus.granted;
   mPrint("STORAGE ACCESS IS : $b");
-
-  // var storageExternal = await Permission.manageExternalStorage.status;
-  //
-  // if (storageExternal != PermissionStatus.granted) {
-  //   await Permission.manageExternalStorage.request();
-  // }
-  //
-  // b = storageExternal == PermissionStatus.granted;
-  // mPrint("STORAGE ACCESS IS : $b");
 }
 
 Future<String> pickFile(BuildContext context) async {
   String val = "";
-
   await FilesystemPicker.open(
     title: rootDir.toString(),
     context: context,
@@ -2579,13 +2443,11 @@ Future<String> pickFile(BuildContext context) async {
     //mPrint(value.toString());
     val = value.toString();
   });
-
   return val;
 }
 
 Future<String> pickDir(BuildContext context) async {
   String val = "";
-
   await FilesystemPicker.open(
     title: rootDir.toString(),
     context: context,
@@ -2599,13 +2461,11 @@ Future<String> pickDir(BuildContext context) async {
     //mPrint(value.toString());
     val = value.toString();
   });
-
   return val;
 }
 
-Future<String> pickSpredsheet(BuildContext context) async {
+Future<String> pickSpreadsheet(BuildContext context) async {
   String val = "";
-
   await FilesystemPicker.open(
     title: rootDir.toString(),
     context: context,
@@ -2617,17 +2477,43 @@ Future<String> pickSpredsheet(BuildContext context) async {
     folderIconColor: Colors.teal,
     requestPermission: () async => await storageType.request().isGranted,
   ).then((value){
-    //mPrint(value.toString());
     val = value.toString();
   });
-
   return val;
 }
 
-writeJob(StockJob job, String path) async {
-  //path.replaceAll('storage/emulated/0', 'sdcard');
+exportJobToXLSX( List<dynamic> fSheet, String outDir) async{
+  if(outDir.isEmpty){
+    return false;
+  }
+  var path = outDir;
+  if(isEmulating){
+    path = path.replaceAll('storage/emulated/0', 'sdcard');
+  }
+  var excel = Excel.createExcel();
+  var sheetObject = excel['Sheet1'];
+  sheetObject.isRTL = false;
+  // Add header row
+  sheetObject.insertRowIterables(["Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "GST RATE"], 0);
+  for(int i = 0; i < fSheet.length; i++){
+    List<String> dataList = [];
+    for(int j = 0; j < fSheet[i].length; j++){
+      dataList.add(fSheet[i][j].toString());
+    }
+    dataList.add("10"); //GST is always 10
+    sheetObject.insertRowIterables(dataList, i+1);
+  }
+  var fileBytes = excel.save();
+  File("$path/stocktake_${currentJob.id}.xlsx")
+    ..createSync(recursive: true)
+    ..writeAsBytesSync(fileBytes!);
+}
 
+writeJob(StockJob job, String path) async {
   var filePath = path;
+  if(isEmulating){
+    filePath = filePath.replaceAll('storage/emulated/0', 'sdcard');
+  }
   var jobFile = File(filePath);
   Map<String, dynamic> jMap = job.toJson();
   var jString = jsonEncode(jMap);
@@ -2635,29 +2521,179 @@ writeJob(StockJob job, String path) async {
 }
 
 writeSession() async {
+  Map<String, dynamic> jMap = {
+    "dirs" : jsonEncode(sFile["dirs"]),
+    "uid" : "",
+    "pageCount" : sFile["pageCount"],
+    'fontScale' : sFile["fontScale"],
+    'dropScale' : sFile["dropScale"],
+  };
+  var jString = jsonEncode(jMap);
   final path = await _localPath;
   final filePath = File('$path/session_file');
-  Map<String, dynamic> jMap = sFile.toJson();
-  var jString = jsonEncode(jMap);
   filePath.writeAsString(jString);
 }
 
-readSession() async {
+getSession() async {
   final path = await _localPath;
   var filePath = File('$path/session_file');
-
-  // create session file if it doesn't exist
   if(!await filePath.exists()) {
-    mPrint("Session Folder does not exist");
-    sFile = SessionFile();
+    // Make new session file
+    sFile = {
+      "dirs" : [],
+      "uid" : "",
+      "pageCount" : 15,
+      'fontScale' : 12.0,
+      'dropScale' : 50.0,
+    };
     writeSession();
     return true;
   }
   else{
-    mPrint("Session Folder exists");
+    // Load session file
     String fileContent = await filePath.readAsString();
-    var dynamic = json.decode(fileContent);
-    sFile = SessionFile.fromJson(dynamic);
+    var jsn = json.decode(fileContent);
+    sFile = {
+      "dirs" : jsn["dirs"] == null || jsn["dirs"].isEmpty ? [] : jsonDecode(jsn['dirs']),
+      "uid" : jsn['uid'] as String,
+      "pageCount" : jsn['pageCount'] as int,
+      "fontScale" : jsn['fontScale'] as double,
+      "dropScale" : jsn['dropScale'] as double
+    };
     return false;
   }
 }
+
+//region ++ zJUNK ++
+/*
+
+
+//==============
+//  Login Page
+//==============
+class LoginPage extends StatelessWidget {
+  const LoginPage({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      appBar: AppBar(
+        title: const Text('Login', textAlign: TextAlign.center),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.only(top: 60.0),
+              child: Center(
+                child: SizedBox(
+                  width: 470,
+                  height: 200,
+                  child: Image(image: AssetImage('assets/AS_Logo2.png')),
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 15),
+              child: TextField(
+                decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Email',
+                    hintText: 'Enter valid email id as user_name@email_client.com'
+                ),
+              ),
+            ),
+            const Padding(
+              padding:
+              EdgeInsets.only(left: 15.0, right: 15.0, top: 15, bottom: 0),
+              child: TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Password',
+                    hintText: 'Enter secure password'
+                ),
+              ),
+            ),
+            // TextButton(
+            //   child: const Text('Forgot Password', style: TextStyle(color: Colors.blue, fontSize: 15)),
+            //   onPressed: () {
+            //     mPrint('FORGOT PASSWORD LINK');
+            //   },
+            // ),
+            Container(
+              height: 50,
+              width: 250,
+              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(20)),
+              child: TextButton(
+                child: const Text('Login', style: TextStyle(color: Colors.white, fontSize: 25)),
+                onPressed: () async {
+                  await getSession().then((value){
+                    // use animation for login -> home
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+                    if(value == true){
+                      showNotification(context, Colors.orange, const TextStyle(color: Colors.black, fontSize: 18.0), "NEW SESSION FILE CREATED AND SAVED TO LOCAL APP DIR", "");
+                    }
+                  });
+                },
+              ),
+            ),
+            // const SizedBox(height: 130),
+            // const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey))
+          ],
+        ),
+      ),
+    );
+  }
+}
+onPressed: () {
+  TextEditingController textCtrl = TextEditingController();
+  showDialog(context: context,
+    barrierDismissible: false,
+    barrierColor: colorOk.withOpacity(0.8),
+    builder: (context) => AlertDialog(
+      actionsAlignment: MainAxisAlignment.spaceAround,
+      title: const Text("Add Location"),
+      content: Card(
+          child: ListTile(
+            title: TextField(
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'Enter location name ', border: InputBorder.none),
+              controller: textCtrl,
+              keyboardType: TextInputType.name,
+              onSubmitted: (value) {
+                if (value.isNotEmpty) {
+                  currentJob.addLocation(value.toUpperCase());
+                }
+                textCtrl.clear();
+                Navigator.pop(context);
+              },
+            ),
+          )
+      ),
+      actions: <Widget>[
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+          onPressed: () {
+            textCtrl.clear();
+            Navigator.pop(context);
+          },
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+          onPressed: () {
+            if (textCtrl.text.isNotEmpty) {
+              currentJob.addLocation(textCtrl.text.toUpperCase());
+            }
+            textCtrl.clear();
+            Navigator.pop(context);
+          },
+          child: const Text("Add"),
+        ),
+      ],
+    ),
+  );
+},
+ */
+//endregion
