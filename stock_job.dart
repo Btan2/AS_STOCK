@@ -1,49 +1,8 @@
 import 'dart:convert';
 
-/*
-=================
-  Session File
-=================
-*/
-class SessionFile {
-  List<String> dirs = [];
-  String uid;
-  int pageCount;
-  double fontScale;
-  // storageType?
-
-  SessionFile({
-    this.uid = "",
-    this.pageCount = 15,
-    this.fontScale = 12.0
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'dirs': jsonEncode(dirs),
-      'uid': uid,
-      'pageCount': pageCount,
-      'fontScale' : fontScale,
-    };
-  }
-
-  factory SessionFile.fromJson(dynamic json) {
-    SessionFile sf = SessionFile();
-    sf.uid = json['uid'] as String;
-    sf.pageCount = json['pageCount'] as int;
-    sf.fontScale = json['fontScale'] as double;
-    for(final entry in jsonDecode(json['dirs'])) {
-      sf.dirs.add(entry as String);
-    }
-    return sf;
-  }
-}
-
-/*
-=================
+/*=================
   StockJob
-=================
-*/
+=================*/
 class StockJob {
   String date = '';
   String id;
@@ -63,7 +22,6 @@ class StockJob {
   getList(){
     List<StockItem> stk = [];
     for(int i = 0; i < literal.length; i++){
-
       // Add whole count
       int count = literal[i].count.floor();
       while(count > 0){
@@ -78,7 +36,6 @@ class StockJob {
               price: literal[i].price,
             )
         );
-
         count--;
       }
 
@@ -94,20 +51,16 @@ class StockJob {
           uom: literal[i].uom,
           price: literal[i].price,
         );
-
         stockD.unit = d;
         stk.add(stockD);
       }
     }
 
     // Sort stock list by table index?
-    stk = stk
-      ..sort((x, y) => (x.index as dynamic)
-          .compareTo((y.index as dynamic)));
+    stk = stk..sort((x, y) => (x.index as dynamic).compareTo((y.index as dynamic)));
     return stk;
   }
 
-  // Calc Total
   calcTotal() {
     total = 0.0;
     for(int i = 0; i < literal.length; i++) {
@@ -115,15 +68,12 @@ class StockJob {
     }
   }
 
-  // Total
   getTotal(){
     return total;
   }
 
-  // Add Stock
-  addStock(StockItem item, double count) {
-    // .. but don't add negatives
-    if (count.sign == -1){
+  addLiteral(StockItem item, double count) {
+    if (count <= 0){
       return;
     }
 
@@ -131,43 +81,48 @@ class StockJob {
     calcTotal();
   }
 
-  // Get Final Sheet
   getFinalSheet(){
-    var fSheet = [];
-
-    // fuck it, do two loops
+    List<List<dynamic>> finalSheet = [];
+    List<dynamic> nofRow = [0, "NOF", "NOT ON FILE BARCODES", "MISC", 0.0, 0.0];
     for(int i =0; i < literal.length; i++){
-      int c = 0;
-
-      for(int j = 0; j < fSheet.length; j++) {
-        if(literal[i].category == fSheet[j][2]){
-          fSheet[j][4] += literal[i].count;
-          fSheet[j][5] += (literal[i].price * literal[i].count);
-          break;
-        }
-        c++;
+      if(literal[i].nof){
+        nofRow[4] += literal[i].count;
+        nofRow[5] += literal[i].price * literal[i].count;
       }
-
-      if (c >= fSheet.length){
-        fSheet.add(
-            [
-              fSheet.length,
+      else{
+        // if item(s) already exists in the final sheet append count and price
+        int count = 0;
+        for(int j = 0; j < finalSheet.length; j++) {
+          if (literal[i].category == finalSheet[j][2] && finalSheet[j][1] != "NOF") {
+            finalSheet[j][4] += literal[i].count;
+            finalSheet[j][5] += literal[i].price * literal[i].count;
+            break;
+          }
+          count++;
+        }
+        // add new item to final sheet
+        if(!literal[i].nof){
+          if (count >= finalSheet.length){
+            finalSheet.add([
+              finalSheet.length,
               "MISC",
               literal[i].category,
               literal[i].uom,
               literal[i].count,
               literal[i].price * literal[i].count
-            ]
-        );
+            ]);
+          }
+        }
       }
     }
-
-    return fSheet;
+    // add NOF row last
+    nofRow[0] = finalSheet.length;
+    finalSheet.add(nofRow);
+    return finalSheet;
   }
 
-  // Removed Stock
-  removeStock(int literalIndex, StockItem stockItem, double count ) {
-    // Don't remove negatives
+
+  removeLiteral(int literalIndex, double count ) {
     if (count.sign == -1) {
       return;
     }
@@ -191,7 +146,6 @@ class StockJob {
     calcTotal();
   }
 
-  // Add NOF
   addNOF(StockItem st){
     for(int n = 0; n < nof.length; n++) {
       if(nof[n].barcode == st.barcode){
@@ -203,17 +157,14 @@ class StockJob {
     return true;
   }
 
-  // Set Location
   setLocation(int index){
     location = allLocations[index];
   }
 
-  // Add Location
   addLocation(String s){
     allLocations.add(s);
   }
 
-  // Convert from JSON to StockJob object
   factory StockJob.fromJson(dynamic json) {
     StockJob j = StockJob(
         id: json['id'] as String,
@@ -238,12 +189,14 @@ class StockJob {
     ];
 
     j.allLocations.clear();
-    for(final entry in jsonDecode(json['allLocations'])) {
-      j.allLocations.add(entry as String);
+    if (json['allLocations'] != null && json["allLocations"].isNotEmpty){
+      for(final entry in jsonDecode(json['allLocations'])) {
+        j.allLocations.add(entry as String);
+      }
     }
 
     j.location = ''; // reset job location
-    j.dbPath = json['dbPath'] as String;
+    j.dbPath = "";// reset db path json['dbPath'] as String;
     return j;
   }
 
@@ -260,7 +213,6 @@ class StockJob {
         "nof": e.nof,
       };
     });
-
     return map.toList();
   }
 
@@ -273,7 +225,7 @@ class StockJob {
         "description": e.description,
         "uom": e.uom,
         "price": e.price,
-        "nof": e.nof.toString(),
+        "nof": e.nof,
         "count": e.count,
         "location": e.location,
       };
@@ -323,11 +275,9 @@ class StockJob {
   int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literal.hashCode ^ nof.hashCode ^ location.hashCode ^ dbPath.hashCode;
 }
 
-/*
-================
+/*================
   StockItem
-================
-*/
+================*/
 class StockItem {
   final int index;
   final String barcode;
@@ -338,7 +288,6 @@ class StockItem {
   final double price;
   final bool nof;
 
-  // Set Unit
   setUnit(double unit){
     this.unit = unit;
   }
@@ -353,16 +302,15 @@ class StockItem {
     required this.nof,
   });
 
-  // From JSON
   StockItem.fromJson(Map<String, dynamic> json)
       : index = json['index'] as int,
-        barcode = json['barcode'] ?? '',
-        category = json['category'] ?? '',
-        description = json['description'] ?? '',
-        uom = json['uom'] ?? '',
+        barcode = json['barcode'] as String,
+        category = json['category'] as String,
+        description = json['description'] as String,
+        uom = json['uom'] as String,
         unit = json['unit'] as double,
         price = json['price'] as double,
-        nof = json['nof'] == 'true' ? true : false;
+        nof = json['nof'] as bool;
 
   StockItem copy({
     int? index,
@@ -401,11 +349,9 @@ class StockItem {
   int get hashCode => index.hashCode ^ barcode.hashCode ^ category.hashCode ^ description.hashCode ^ uom.hashCode ^ unit.hashCode ^ price.hashCode ^ nof.hashCode;
 }
 
-/*
-=======================
+/*=======================
   StockLiteral
-=======================
-*/
+=======================*/
 class StockLiteral {
   final int index;
   final String barcode;
@@ -414,7 +360,6 @@ class StockLiteral {
   final String uom;
   final bool nof;
   final double price;
-
   double count = 0;
   String location = "";
 
@@ -432,14 +377,14 @@ class StockLiteral {
 
   StockLiteral.fromJson(Map<String, dynamic> json)
       : index = json['index'] as int,
-        barcode = json['barcode'] ?? '',
-        category = json['category'] ?? '',
-        description = json['description'] ?? '',
-        uom = json['uom'] ?? '',
-        nof = json['nof'] == 'true' ? true : false,
-        price = json['price'] ?? '',
+        barcode = json['barcode'] as String,
+        category = json['category'] as String,
+        description = json['description'] as String,
+        uom = json['uom'] as String,
+        nof = json['nof'] as bool,
+        price = json['price'] as double,
         count = json['count'] as double,
-        location = json['location'] ?? '';
+        location = json['location'] as String;
 
   StockLiteral copy({
     int? index,
@@ -481,3 +426,224 @@ class StockLiteral {
   @override
   int get hashCode => index.hashCode ^ barcode.hashCode ^ description.hashCode ^ uom.hashCode ^ nof.hashCode ^ price.hashCode ^ count.hashCode ^ location.hashCode;
 }
+
+/*=======================
+  masterCategory
+=======================*/
+List<String> masterCategory = [
+    "ADMINISTRATION",
+    'APPAREL',
+    "AUTOMOTIVE",
+    "BABY",
+    "BARGAIN BIN",
+    "BARGAIN BUYS",
+    "BEEF",
+    "BEVERAGES",
+    "BEVERAGES F/S",
+    "BISCUITS",
+    "BREAKFAST FOODS",
+    "CANNED SEAFOOD",
+    "CAT FOOD",
+    "CAT LITTER",
+    "CHEESE",
+    "CHILLED BREAD",
+    "CHILLED HEALTH",
+    "CHILLED JUICES & DRINKS",
+    "CHILLED SPREADS",
+    "CIGARETTES",
+    "CIGARS",
+    "CLEANING",
+    "CLEANING MATERIALS",
+    "CLIPSTRIPS",
+    "COFFEE",
+    "CONDIMENTS",
+    "CONFECTIONERY",
+    "COOKING NEEDS",
+    "CORDIALS",
+    "COSMETICS",
+    "CREAM",
+    "DELICATESSEN",
+    "DEODORANTS",
+    "DESSERT",
+    "DESSERTS",
+    "DESSERTS & TOPPINGS",
+    "DIPS",
+    "DISHWASHING",
+    "DISPOSABLE",
+    "DOG FOOD",
+    "DRY GROCERY F/S",
+    "EGGS",
+    "ELECTRICAL",
+    "ENERGY DRINKS",
+    "FACIAL TISSUES",
+    "FEMININE HYGIENE",
+    "FROZEN BREAD & PASTRY",
+    "FROZEN DESSERTS",
+    "FROZEN DIETARY",
+    "FROZEN F/S",
+    "FROZEN FRUIT & SMOOTHIES",
+    "FROZEN MEALS",
+    "FROZEN PIES & PASTRIES",
+    "FROZEN PIZZA",
+    "FROZEN POTATO",
+    "FROZEN POULTRY",
+    "FROZEN SEAFOOD",
+    "FROZEN SNACK/ENTERTAINING",
+    "FROZEN VEGETABLES",
+    "FRUIT",
+    "GAME",
+    "GARDENING PRODUCTS",
+    "GENERAL MERCHANDISE F/S",
+    "GM CONTINUITY",
+    "GRAINS & PASTA",
+    "GREEN LIFE",
+    "HABERDASHERY",
+    "HAIR CARE",
+    "HAIR COLOUR",
+    "HAIR STYLING",
+    "HARDWARE",
+    "HEALTH FOOD",
+    "HOME BREW",
+    "HOT & COLD MEALS",
+    "HOUSEHOLD CLEANERS",
+    "HOUSEHOLD CLEANING GM",
+    "HOUSEHOLD NEEDS",
+    "HOUSEWARES",
+    "ICE",
+    "ICE CREAM",
+    "ICE TEA",
+    "IN STORE BAKERY",
+    "INCONTINENCE",
+    "INTERNATIONAL FOOD",
+    "JUICE",
+    "LAMB",
+    "LAUNDRY NEEDS",
+    "LIFESTYLE BEVERAGES",
+    "MANCHESTER",
+    "MATCHES & LIGHTER",
+    "MEALS",
+    "MEDICINAL",
+    "MENS GROOMING",
+    "MILK",
+    "MISC",
+    "NON ALCOHOLIC BEVERAGES",
+    "NON FOODS F/S",
+    "NON-PRODUCT",
+    "NUTRITIONAL SNACKS",
+    "NUTS & JERKY",
+    "OFFAL",
+    "ORAL CARE",
+    "OUTDOOR / LEISURE",
+    "PACKAGED",
+    "PAPER GOODS",
+    "PARTY",
+    "PASTA - FRESH",
+    "PERSONAL NEEDS",
+    "PET ACCESSORIES",
+    "PET FOOD",
+    "PET NEEDS - GM",
+    "PIZZA",
+    "PORK",
+    "POULTRY",
+    "PREPACK SALADS",
+    "PRICE DRIVERS",
+    "PRODUCE BEVERAGE",
+    "PROPRIETARY",
+    "PUBLICATIONS",
+    "QUICHES & PIES",
+    "REFRIGERATED & DAIRY F/S",
+    "RYO",
+    "SANDWICHES/WRAPS/ROLLS",
+    "SEAFOOD",
+    "SEAFOOD - PRE-PACKED",
+    "SEASONAL",
+    "SEASONAL LINES",
+    "SKINCARE",
+    "SMALL ANIMAL FOOD",
+    "SMALLGOODS",
+    "SMALLGOODS - PRE-PACKED",
+    "SMOKING ACCESSORIES",
+    "SNACKS",
+    "SOAP & BATH",
+    "SOAP & BATH",
+    "SOFT DRINKS",
+    "SOUPS",
+    "SOUP",
+    "SPORTS DRINKS",
+    "SPREADS",
+    "STATIONERY",
+    "STORE FIXTURES",
+    "STORE USE EQUIPMENT",
+    "STORE USE SUPPLIES",
+    "SUN CARE",
+    "TOILET TISSUE",
+    "TOYS",
+    "TRAVEL",
+    "VEGETABLES & SALADS",
+    "VIRTUAL PRODUCT",
+    "VITAMINS & SUPPLEMENTS",
+    "WATER",
+    "WIPES / WET TOWELS",
+    "WOMEN'S HAIR REMOVAL",
+    "YOGHURTS",
+];
+
+/*
+/*=================
+  Session File
+=================*/
+
+class SessionFile {
+  // List<String> dirs = [];
+  // String uid;
+  // int pageCount;
+  // double fontScale;
+  // double dropScale;
+  //
+  // SessionFile({
+  //   this.uid = "",
+  //   this.pageCount = 15,
+  //   this.fontScale = 12.0,
+  //   this.dropScale = 50.0,
+  // });
+
+  Map<String, dynamic> newFile() {
+    return{
+      "dirs" : <String>[],
+      "uid" : "",
+      "pageCount" : 0,
+      'dropScale' : 0.0,
+      'fontScale' : 0.0,
+    };
+  }
+
+  // Map<String, dynamic> toJson() {
+  //   return {
+  //     'dirs': jsonEncode(dirs),
+  //     'uid': uid,
+  //     'pageCount': pageCount,
+  //     'dropScale' : dropScale,
+  //     'fontScale' : fontScale,
+  //   };
+  // }
+
+  Map<String, dynamic> fromJson(dynamic json) {
+    return {
+      "dirs" : jsonDecode(json['dirs']) as List<String>,
+      "uid" : json['uid'] as String,
+      "pageCount" : json['pageCount'] as int,
+      "fontScale" : json['fontScale'] as double,
+      "dropScale" : 50.0,
+    };
+
+    // for(final entry in jsonDecode(json['dirs'])) {
+    //   sf["dirs"].add(entry as String);
+    // }
+    // sf["uid"] = json['uid'] as String;
+    // sf["pageCount"] = json['pageCount'] as int;
+    // sf["fontScale"] = json['fontScale'] as double;
+    // //sf.dropScale = json['dropScale'] as double;
+    //return sf;
+  }
+}
+ */
