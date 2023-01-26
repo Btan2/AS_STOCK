@@ -20,7 +20,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart';
 import 'stock_job.dart';
 
-bool isEmulating = true; // DEBUG VARS
+bool isEmulating = false; // DEBUG VARS
 Permission storageType = Permission.manageExternalStorage;
 
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
@@ -30,12 +30,11 @@ String dbPath = '';
 SpreadsheetTable? mainTable;
 List<String> jobList = [];
 
+final tableKey = GlobalKey<PaginatedDataTableState>();
 enum TableType { literal, linear, export, full, search}
 enum ActionType {edit, add, addNOF, view}
 
-/*========
-  main
-========*/
+// Main
 void main() {
   runApp(
     const MaterialApp(
@@ -45,9 +44,7 @@ void main() {
   );
 }
 
-/*=============
-  Home Page
-=============*/
+// Home Page
 class HomePage extends StatefulWidget{
   const HomePage({super.key});
   @override
@@ -117,9 +114,9 @@ class _HomePage extends State<HomePage> {
                         TextButton(
                           child: const Text('Sync Master Database', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                           onPressed: () async {
-                            loadMasterSheet();
-
-                            //goToPage(context, const LoadSpreadsheet(), false);
+                            loadingDialog(context, true);
+                            // load default spreadsheet
+                            await loadMasterSheet().then(goToPage(context, const HomePage(), false));
                           },
                         )
                     ),
@@ -170,9 +167,7 @@ class _HomePage extends State<HomePage> {
   }
 }
 
-/*=================
-  App Settings
-=================*/
+// App Settings
 class AppSettings extends StatefulWidget{
   const AppSettings({ super.key, });
   @override
@@ -290,7 +285,7 @@ class _AppSettings extends State<AppSettings> {
 
           bottomSheet: SingleChildScrollView(
             child: Center(
-              child: mBox(
+              child: rBox(
                   context,
                   colorBack,
                   TextButton(
@@ -311,9 +306,7 @@ class _AppSettings extends State<AppSettings> {
   }
 }
 
-/*======================
-  Load Spreadsheet
-======================*/
+// Load Spreadsheet
 class LoadSpreadsheet extends StatefulWidget {
   const LoadSpreadsheet({super.key});
 
@@ -334,7 +327,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
   }
 
   _getSheets(String path) {
-    if(mainTable != null && dbPath.isNotEmpty){
+    if(dbPath.isNotEmpty){
       File file = File(dbPath);
       var bytes = file.readAsBytesSync();
       var decoder = SpreadsheetDecoder.decodeBytes(bytes);
@@ -404,7 +397,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
                 child: Center(
                   child: Column(
                     children: [
-                      mBox(
+                      rBox(
                           context,
                           loadSheet.isNotEmpty ? colorOk : colorDisable,
                           TextButton(
@@ -417,7 +410,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
                             },
                           )
                       ),
-                      mBox(
+                      rBox(
                           context,
                           colorEdit,
                           TextButton(
@@ -428,7 +421,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
                             },
                           )
                       ),
-                      mBox(
+                      rBox(
                           context,
                           colorBack,
                           TextButton(
@@ -447,9 +440,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
   }
 }
 
-/*===============
-  Jobs Page
-===============*/
+// Jobs Page
 class JobsPage extends StatefulWidget {
   const JobsPage({
     super.key,
@@ -511,6 +502,9 @@ class _JobsPage extends State<JobsPage> {
     var dynamic = json.decode(fileContent);
     job = StockJob.fromJson(dynamic);
     job.calcTotal();
+
+    // REMOVE ME
+    job.date = job.date.replaceAll("/", "_");
   }
 
   @override
@@ -540,6 +534,7 @@ class _JobsPage extends State<JobsPage> {
                   onSelected: (value) async {
                     if(value is int){
                       jobList.clear();
+                      refresh(this);
                     }
                     else{
                       goToPage(context, StaticTable(dataList: mainTable!.rows, tableType: value as TableType), true);
@@ -574,7 +569,6 @@ class _JobsPage extends State<JobsPage> {
                                     goToPage(context, const OpenJob(), true);
                                   }
                                   else{
-                                    await writeSession();
                                     await _readJob(jobList[index]).then((value) {
                                       goToPage(context, const OpenJob(), true);
                                     });
@@ -602,7 +596,7 @@ class _JobsPage extends State<JobsPage> {
                       Center(
                           child: Column(
                               children: [
-                                mBox(
+                                rBox(
                                     context,
                                     Colors.lightBlue,
                                     TextButton(
@@ -613,7 +607,7 @@ class _JobsPage extends State<JobsPage> {
                                       },
                                     )
                                 ),
-                                mBox(
+                                rBox(
                                     context,
                                     Colors.blue[800]!,
                                     TextButton(
@@ -626,7 +620,7 @@ class _JobsPage extends State<JobsPage> {
                                           });
 
                                           // Check if path is valid
-                                          if(path.isEmpty){
+                                          if(path.isEmpty || path == "null" || !path.contains("job_")){
                                             return;
                                           }
                                           if(!jobList.contains(path)){
@@ -668,7 +662,7 @@ class _JobsPage extends State<JobsPage> {
               child: Center(
                   child: Column(
                       children: [
-                        mBox(
+                        rBox(
                             context,
                             colorBack,
                             TextButton(
@@ -689,9 +683,7 @@ class _JobsPage extends State<JobsPage> {
   }
 }
 
-/*=================
-  New Job
-=================*/
+// New Job
 class NewJob extends StatefulWidget {
   const NewJob({
     super.key,
@@ -783,7 +775,7 @@ class _NewJob extends State<NewJob> {
               child: SingleChildScrollView(
                   child: Center(
                       child: Column(children: [
-                      mBox(
+                        rBox(
                           context,
                           colorOk,
                           TextButton(
@@ -796,9 +788,12 @@ class _NewJob extends State<NewJob> {
 
                               newJob.id = idCtrl.text;
                               newJob.name = nameCtrl.text;
+                              newJob.date = "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}";
                               writeJob(newJob);
 
-                              String path = "storage/emulated/0/Documents/job_${newJob.id}_${newJob.name}";
+                              String date = newJob.date.replaceAll("_", "");
+
+                              String path = "storage/emulated/0/Documents/job_${newJob.id}_${newJob.name}_$date";
                               if(!jobList.contains(path)){
                                 jobList.add(path);
                               }
@@ -810,7 +805,7 @@ class _NewJob extends State<NewJob> {
                             },
                           )
                       ),
-                      mBox(
+                        rBox(
                           context,
                           colorBack,
                           TextButton(
@@ -831,9 +826,7 @@ class _NewJob extends State<NewJob> {
   }
 }
 
-/*==============
-  Open Job
-==============*/
+// Open Job
 class OpenJob extends StatelessWidget {
   const OpenJob({
     super.key,
@@ -888,7 +881,7 @@ class OpenJob extends StatelessWidget {
               children: [
                 Card(
                   child: ListTile(
-                    title: Text(job.date),
+                    title: Text(job.date.replaceAll("_", "/")),
                     leading: const Icon(Icons.date_range, color: Colors.blueGrey),
                   ),
                 ),
@@ -899,7 +892,7 @@ class OpenJob extends StatelessWidget {
                 Center(
                     child: Column(
                         children: [
-                          mBox(
+                          rBox(
                               context,
                               Colors.blue,
                               TextButton(
@@ -913,17 +906,17 @@ class OpenJob extends StatelessWidget {
                                 },
                               )
                           ),
-                          mBox(
+                          rBox(
                               context,
                               Colors.blue,
                               TextButton(
                                 child: Text('Export Spreadsheet', style: whiteText),
                                 onPressed: () {
-                                  // goToPage(context, const StaticTable(dataList:job.getFinalSheet(), tableType: TableType.export), true);
+                                  goToPage(context, StaticTable(dataList: job.getFinalSheet(), tableType: TableType.export), true);
                                   },
                               )
                           ),
-                          mBox(
+                          rBox(
                               context,
                               Colors.green,
                               TextButton(
@@ -948,7 +941,7 @@ class OpenJob extends StatelessWidget {
           child: Center(
             child: Column(
               children: [
-                mBox(
+                rBox(
                     context,
                     colorBack,
                     TextButton(
@@ -968,9 +961,7 @@ class OpenJob extends StatelessWidget {
   }
 }
 
-/*====================
-  Stocktake
-====================*/
+// Stocktake
 class Stocktake extends StatelessWidget{
   const Stocktake({super.key});
 
@@ -1004,14 +995,14 @@ class Stocktake extends StatelessWidget{
                         width: MediaQuery.of(context).size.width,
                         height: MediaQuery.of(context).size.height / 10.0,
                       ),
-                      mBox(
+                      rBox(
                           context,
                           Colors.blue,
                           TextButton(
                             child: Text('Scan Item', style: whiteText),
                             onPressed: () {
                               if (job.location.isNotEmpty) {
-                                // goToPage(context, const ScanItem());
+                                goToPage(context, const ScanItem(), false);
                               } else {
                                 showAlert(context,
                                     "Alert",
@@ -1022,7 +1013,7 @@ class Stocktake extends StatelessWidget{
                             },
                           )
                       ),
-                      mBox(
+                      rBox(
                           context,
                           Colors.blue,
                           TextButton(
@@ -1044,7 +1035,7 @@ class Stocktake extends StatelessWidget{
                             },
                           )
                       ),
-                      mBox(
+                      rBox(
                           context,
                           Colors.blue,
                           TextButton(
@@ -1054,7 +1045,7 @@ class Stocktake extends StatelessWidget{
                             },
                           )
                       ),
-                      mBox(
+                      rBox(
                           context,
                           Colors.blue,
                           TextButton(
@@ -1075,7 +1066,7 @@ class Stocktake extends StatelessWidget{
                 child: Center(
                     child: Column(
                         children: [
-                          mBox(
+                          rBox(
                               context,
                               colorBack,
                               TextButton(
@@ -1094,9 +1085,7 @@ class Stocktake extends StatelessWidget{
   }
 }
 
-/*==============
-  Scan Item
-==============*/
+// Scan Item
 class ScanItem extends StatefulWidget{
   const ScanItem({super.key});
 
@@ -1104,12 +1093,28 @@ class ScanItem extends StatefulWidget{
   State<ScanItem> createState() => _ScanItem();
 }
 class _ScanItem extends State<ScanItem>{
-  bool camera = false;
-  bool scanner = false;
+  TextEditingController searchCtrl= TextEditingController();
+  FocusNode searchFocus = FocusNode();
+  TextEditingController countCtrl = TextEditingController();
+  var countFocus = FocusNode();
+  late List<List<dynamic>> dataList;
+  List<List<dynamic>> filterList = List.empty();
+  bool found = false;
+  int itemIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    searchFocus.unfocus();
+    dataList = mainTable!.rows + job.nofList();
+    // filterList = mainTable!.rows + job.nofList();
+    countCtrl.text = "0.0";
+    found = false;
+  }
+
+  _clearFocus(){
+    searchFocus.unfocus();
+    countFocus.unfocus();
   }
 
   @override
@@ -1122,14 +1127,200 @@ class _ScanItem extends State<ScanItem>{
               automaticallyImplyLeading: false,
               title: const Text("Barcode Scanning", textAlign: TextAlign.center)
           ),
+
+          body: GestureDetector(
+            onTapDown: (_) => _clearFocus(),
+           child:  SingleChildScrollView(
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 15.0, right: 15.0, top: 30, bottom: 5),
+                  ),
+
+                  headerPadding("Barcode:", TextAlign.left),
+                  Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                        child: ListTile(
+                          title: TextField(
+                            controller: searchCtrl,
+                            focusNode: searchFocus,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.name,
+                            onChanged: (String? value){
+                              if(value!.isEmpty){
+                                filterList.clear();
+                                found = false;
+                              }
+                              else{
+                                itemIndex = 0;
+                                filterList = dataList.where((List<dynamic> item) => (item[1].contains(value))).toList(growable: true);
+                                // Sort by barcode number
+                                //filterList = filterList..sort((x, y) => (x[1] as dynamic).compareTo((y[1] as dynamic)));
+                                found = filterList.isNotEmpty;
+                              }
+                              refresh(this);
+                            },
+                          ),
+                        ),
+                      )
+                  ),
+
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height / 10.0,
+                  ),
+
+                  headerPadding("Result:", TextAlign.left),
+                  GestureDetector(
+                    onTapDown: (_) => _clearFocus(),
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height/5,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: <Widget>[
+                            Container(
+                                width: MediaQuery.of(context).size.width / 10,
+                                color: Colors.grey.shade400,
+                                child: IconButton(
+                                    onPressed: () {
+                                      _clearFocus();
+                                      countCtrl.text = "0.0";
+                                      if(filterList.isNotEmpty){
+                                        itemIndex = (itemIndex - 1) % filterList.length;
+                                      }
+                                      refresh(this);
+                                      },
+                                    icon: const Icon(Icons.arrow_back)
+                                )
+                            ),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.8,
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    // Card(
+                                    //   child: ListTile(
+                                    //     title: Text("${found ? filterList[itemIndex][1] : ""}", textAlign: TextAlign.center,),
+                                    //   ),
+                                    // ),
+                                    Card(
+                                       child: ListTile(
+                                         title: Text("${found ? filterList[itemIndex][3] : ""}", textAlign: TextAlign.center,),
+                                       ),
+                                    ),
+                                    Card(
+                                        child: ListTile(
+                                          trailing: found ? IconButton(
+                                            icon: const Icon(Icons.add_circle_outline),
+                                            onPressed: () {
+                                              _clearFocus();
+                                              double count = double.parse(countCtrl.text) + 1;
+                                              countCtrl.text = count.toString();
+                                              refresh(this);
+                                              },
+                                          ) : null,
+                                          title: TextField(
+                                            controller: countCtrl,
+                                            focusNode: countFocus,
+                                            textAlign: TextAlign.center,
+                                            keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                          ),
+                                          leading: found ? IconButton(
+                                            icon: const Icon(Icons.remove_circle_outline),
+                                            onPressed: () {
+                                              _clearFocus();
+                                              double count = double.parse(countCtrl.text) - 1.0;
+                                              countCtrl.text = max(count, 0).toString();
+                                              refresh(this);
+                                              },
+                                          ) : null,
+                                        )
+                                    ),
+                                    headerPadding("$itemIndex of ${filterList.length}", TextAlign.left),
+                                  ]
+                                )
+                              )
+                            ),
+                            Container(
+                                width: MediaQuery.of(context).size.width / 10,
+                                color: Colors.grey.shade400,
+                                child: IconButton(
+                                    onPressed: () {
+                                      _clearFocus();
+                                      countCtrl.text = "0.0";
+                                      if(filterList.isNotEmpty){
+                                        itemIndex = (itemIndex + 1) % filterList.length;
+                                      }
+                                      refresh(this);
+                                      },
+                                    icon: const Icon(Icons.arrow_forward)
+                                )
+                            ),
+                          ],
+                        ),
+                      )
+                  ),
+
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height / 10.0,
+                  ),
+                  rBox(
+                    context,
+                    found ? colorOk : colorDisable,
+                    TextButton(
+                        child: Text('ADD ITEM', style: whiteText),
+                        onPressed: () {
+                          if(found){
+                            double count = double.parse(countCtrl.text);
+
+                            if(count <= 0){
+                              showNotification(context, colorWarning, whiteText, "", "Count is zero (0), can't add zero items");
+                              return;
+                            }
+
+                            countCtrl.text = "0.0";
+                            var item = rowToItem(filterList[itemIndex], false);
+                            item['count'] = count;
+                            item['location'] = job.location;
+                            job.literals.add(item);
+                            job.calcTotal();
+                            showNotification(context, colorOk, whiteText, "Item Added", "* ${item['description']} \n * Count: $count");
+                            refresh(this);
+                          }
+                        }
+                    ),
+                  ),
+                  GestureDetector(
+                      onTapDown: (_) => _clearFocus(),
+                      child: SingleChildScrollView(
+                          child: Center(
+                            child: Column(
+                                children: [
+                                  rBox(context, colorBack, TextButton(
+                                    child: Text("Back", style: whiteText),
+                                    onPressed: () {
+                                      goToPage(context, const Stocktake(), false);
+                                    },
+                                  )),
+                                ]
+                            ),
+                          )
+                      )
+                  ),
+                ],
+              )
+           )
+          ),
+          // bottomSheet:
         )
     );
   }
 }
 
-/*==============
-  Location
-==============*/
+// Location
 class Location extends StatefulWidget {
   const Location({super.key});
 
@@ -1203,7 +1394,7 @@ class _Location extends State<Location> {
           bottomSheet: SingleChildScrollView(
               child: Center(
                   child: Column(children: [
-                    mBox(
+                    rBox(
                         context,
                         Colors.lightBlue,
                         TextButton(
@@ -1217,7 +1408,7 @@ class _Location extends State<Location> {
                           },
                         )
                     ),
-                    mBox(
+                    rBox(
                         context,
                         colorBack,
                         TextButton(
@@ -1236,9 +1427,7 @@ class _Location extends State<Location> {
   }
 }
 
-/*================
-  StockItem
-================*/
+// StockItem
 class StockItem extends StatefulWidget {
   final Map<String,dynamic> item;
   final ActionType action;
@@ -1270,7 +1459,7 @@ class _StockItem extends State<StockItem>{
   String locationValue = "LOCATION -1";
   String uomValue = "EACH";
   String categoryValue = "MISC";
-  late bool isNof;
+  //late bool isNof;
 
   _clearFocus(){
     barcodeFocus.unfocus();
@@ -1291,7 +1480,7 @@ class _StockItem extends State<StockItem>{
     priceCtrl.text = widget.item['price'].toString();
     countCtrl.text = widget.item['count'].toString();
     locationCtrl.text = widget.item['location'];
-    isNof = widget.item['nof'];
+    //isNof = widget.item['nof'];
   }
 
   bool get changed {
@@ -1359,8 +1548,11 @@ class _StockItem extends State<StockItem>{
   }
 
   _addNOF(){
+
+    int newIndex =mainTable!.maxRows + job.nof.length;
+
     var nofItem = {
-      "index" : mainTable!.maxRows + job.nof.length,
+      "index" : newIndex,
       "barcode" : barcodeCtrl.text,
       "category" : categoryValue,
       "description" : descriptionCtrl.text.isEmpty ? "NO DESCRIPTION" : descriptionCtrl.text.toUpperCase(),
@@ -1371,12 +1563,12 @@ class _StockItem extends State<StockItem>{
     };
 
     if(job.newNOF(nofItem)){
-      job.nof.add(nofItem);
+    job.nof.add(nofItem);
     }
 
     if(double.parse(countCtrl.text) > 0){
       var item = {
-        "index" : mainTable!.maxRows + job.nof.length,
+        "index" : newIndex,
         "barcode" : barcodeCtrl.text,
         "category" : categoryValue,
         "description" : descriptionCtrl.text.isEmpty ? "NO DESCRIPTION" : descriptionCtrl.text.toUpperCase(),
@@ -1395,11 +1587,8 @@ class _StockItem extends State<StockItem>{
   }
 
   _saveChanges() async {
-    // check if item details were changed, create new nof
-    //bool isNew = changed;
-
     var item = {
-      "index" : isNof ? mainTable!.maxRows + job.nof.length : widget.item['index'],
+      "index" : widget.item['index'],
       "barcode" : barcodeCtrl.text,
       "category" : categoryValue,
       "description" : descriptionCtrl.text.isEmpty ? "NO DESCRIPTION" : descriptionCtrl.text,
@@ -1407,7 +1596,7 @@ class _StockItem extends State<StockItem>{
       "price" : double.parse(priceCtrl.text),
       "count" : double.parse(countCtrl.text),
       "location" : job.location,
-      "nof" : isNof,
+      "nof" : widget.item['nof'],
     };
 
     if(double.parse(countCtrl.text) >= 0){
@@ -1417,7 +1606,10 @@ class _StockItem extends State<StockItem>{
           job.calcTotal();
           showNotification(context, Colors.greenAccent, blackText, "", "Item at index [${widget.index}] was changed");
           goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
+
           // Ask to apply changes to other items with same index?
+          // Automatically create a new NOF?
+
         }
       });
     }
@@ -1509,7 +1701,7 @@ class _StockItem extends State<StockItem>{
                   );
                 }).toList(),
                 onChanged: (String? newValue) {
-                  uomValue = newValue!;
+                  setState((){uomValue = newValue!;});
                 },
               ),
             ),
@@ -1537,51 +1729,20 @@ class _StockItem extends State<StockItem>{
       headerPadding("Count:", TextAlign.left),
       _editCount(),
 
-      widget.action == ActionType.edit ? headerPadding("Not On File?", TextAlign.left) : Container(),
-      widget.action == ActionType.edit ? Padding(
-          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-          child: Card(
-              child: CheckboxListTile(
-                value: isNof,
-                title: const Text(""),
-                onChanged: (value) {
-                  isNof = value as bool;
-                  refresh(this);
-                },
-              )
-          )
-      ) : Container(),
-
-      widget.action == ActionType.edit ? SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height / 10.0,
-      ) : Container(),
-
-      widget.action == ActionType.edit ? GestureDetector(
-          onTapDown: (_) => _clearFocus(),
-          child: Center(
-            child: mBox(
-                context,
-                colorWarning,
-                TextButton(
-                  child: Text('Delete Item', style: whiteText),
-                  onPressed: () async {
-                    _clearFocus();
-                    await confirmDialog(context, "Remove Item from stock count?").then((bool value) async{
-                      if(value){
-                        int i = widget.index;
-                        job.literals.removeAt(i);
-                        job.calcTotal();
-                        showNotification(context, colorOk, whiteText, "", "Item at [$i] was removed");
-                        goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
-                        // Navigator.pop(context, refresh(this));
-                      }
-                    });
-                  },
-                )
-            ),
-          )
-      ) : Container(),
+      // widget.action == ActionType.edit ? headerPadding("Not On File?", TextAlign.left) : Container(),
+      // widget.action == ActionType.edit ? Padding(
+      //     padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+      //     child: Card(
+      //         child: CheckboxListTile(
+      //           value: isNof,
+      //           title: const Text(""),
+      //           onChanged: (value) {
+      //             isNof = value as bool;
+      //             refresh(this);
+      //           },
+      //         )
+      //     )
+      // ) : Container(),
 
       SizedBox(
         width: MediaQuery.of(context).size.width,
@@ -1591,7 +1752,7 @@ class _StockItem extends State<StockItem>{
       GestureDetector(
           onTapDown: (_) => _clearFocus(),
           child: Center(
-            child: mBox(
+            child: rBox(
                 context,
                 colorOk,
                 TextButton(
@@ -1640,29 +1801,21 @@ class _StockItem extends State<StockItem>{
       GestureDetector(
           onTapDown: (_) => _clearFocus(),
           child: Center(
-            child: mBox(
+            child: rBox(
                 context,
                 colorOk,
                 TextButton(
                     child: Text('Add Item', style: whiteText),
                     onPressed: () {
-
-                      var item = {
-                        "index" : widget.item['index'],
-                        "barcode" : widget.item['barcode'],
-                        "category" : widget.item['category'],
-                        "description" : widget.item['description'],
-                        "uom" : widget.item['uom'],
-                        "price" : widget.item['price'],
-                        "count" : double.parse(countCtrl.text),
-                        "location" : locationCtrl.text,
-                        "nof" : widget.item['nof'],
-                      };
-
-                      if( item['count'] <= 0){
+                      double count = double.parse(countCtrl.text);
+                      if(count <= 0){
                         showNotification(context, colorWarning, whiteText, "", "Count is zero (0), can't add zero items");
                         return;
                       }
+
+                      var item = widget.item;
+                      item['count'] = count;
+                      item['location'] = locationCtrl.text;
 
                       job.literals.add(item);
                       job.calcTotal();
@@ -1682,7 +1835,7 @@ class _StockItem extends State<StockItem>{
     return GestureDetector(
         onTapDown: (_) => _clearFocus(),
         child:Center(
-            child: mBox(
+            child: rBox(
               context,
               colorBack,
               TextButton(
@@ -1717,6 +1870,30 @@ class _StockItem extends State<StockItem>{
               centerTitle: true,
               title: const Text("Stock Item Details"),
               automaticallyImplyLeading: false,
+              actions: widget.action == ActionType.edit ? [
+                GestureDetector(
+                    onTapDown: (_) => _clearFocus(),
+                    child: PopupMenuButton(
+                        itemBuilder: (context){
+                          return [PopupMenuItem<int>(value: -1, child: Text("DELETE", style: warningText),)];
+                          },
+                        onSelected: (value) async {
+                          _clearFocus();
+                          if(value == -1){
+                            await confirmDialog(context, "Remove Item from stock count?")
+                                .then((bool value2) async{
+                                  if(value2){
+                                    job.literals.removeAt(widget.index);
+                                    job.calcTotal();
+                                    showNotification(context, colorWarning.withOpacity(0.8), whiteText, "", "Item at table index [${widget.index}] was removed.");
+                                    goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
+                                  }
+                                });
+                            }
+                        }
+                    )
+                ),
+              ] : [],
             ),
             body: GestureDetector(
                 onTapDown: (_) => _clearFocus(),
@@ -1738,9 +1915,7 @@ class _StockItem extends State<StockItem>{
   }
 }
 
-/*=======================
-  Spreadsheet Static
-=======================*/
+// TABLE FUNCTIONS
 class StaticTable extends StatelessWidget {
   final TableType tableType;
   final List dataList;
@@ -1753,20 +1928,6 @@ class StaticTable extends StatelessWidget {
 
   getIndex() {
     return -1;
-  }
-
-  PaginatedDataTable get _table {
-    return PaginatedDataTable(
-      sortColumnIndex: 0,
-      sortAscending: true,
-      showCheckboxColumn: false,
-      showFirstLastButtons: true,
-      rowsPerPage: sFile["pageCount"],
-      controller: ScrollController(),
-
-      columns: getColumns(tableType),
-      source: RowSource(parent: this, dataList: dataList, type: tableType),
-    );
   }
 
   @override
@@ -1784,14 +1945,23 @@ class StaticTable extends StatelessWidget {
                     children: [
                       Expanded(
                           child: SingleChildScrollView(
-                            child: _table,
+                            child: PaginatedDataTable(
+                              sortColumnIndex: 0,
+                              sortAscending: true,
+                              showCheckboxColumn: false,
+                              showFirstLastButtons: true,
+                              rowsPerPage: sFile["pageCount"],
+                              controller: ScrollController(),
+                              columns: getColumns(tableType),
+                              source: RowSource(parent: this, dataList: dataList, type: tableType),
+                            ),
                           )
                       ),
                       Center(
                           child: Column(
                               children: [
                                 tableType == TableType.export ?
-                                mBox(
+                                rBox(
                                     context,
                                     Colors.blue,
                                     TextButton(
@@ -1802,25 +1972,13 @@ class StaticTable extends StatelessWidget {
                                       },
                                     )
                                 ) :  Container(),
-                                mBox(
+                                rBox(
                                     context,
                                     colorBack,
                                     TextButton(
                                       child: Text("Back", style: whiteText),
                                       onPressed: () {
                                         Navigator.of(context).pop();
-
-                                        // SystemNavigator.pop();
-                                        // if(tableType == TableType.editItem || tableType == TableType.addItem){
-                                        //   SystemNavigator.pop();
-                                        //   //Navigator.pop(context);
-                                        //   //goToPage(context, const Stocktake());
-                                        // }
-                                        // else{
-                                        //   SystemNavigator.pop();
-                                        //   //Navigator.pop(context);
-                                        //   //goToPage(context, const OpenJob());
-                                        // }
                                       },
                                     )
                                 )
@@ -1835,9 +1993,6 @@ class StaticTable extends StatelessWidget {
   }
 }
 
-/*=======================
-  Spreadsheet Dynamic
-=======================*/
 class DynamicTable extends StatefulWidget{
   final TableType tableType;
   final ActionType action;
@@ -1853,7 +2008,7 @@ class DynamicTable extends StatefulWidget{
 }
 class _DynamicTable extends State<DynamicTable>{
   late List<List<dynamic>> dataList;
-  final tableKey = GlobalKey<PaginatedDataTableState>();
+
   TextEditingController searchCtrl = TextEditingController();
   var textFocus = FocusNode();
   List<List<dynamic>> filterList = [[]];
@@ -1886,6 +2041,66 @@ class _DynamicTable extends State<DynamicTable>{
     filterList = dataList;
   }
 
+  bool _searchItem(String item, String search){
+    var splt = item.split(" ");
+    for(int i = 0; i < splt.length; i++){
+      if (splt[i] == search){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  _searchList(){
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.search),
+        title: TextField(
+            controller: searchCtrl,
+            focusNode: textFocus,
+            decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none),
+            onChanged: (value) {
+              tableKey.currentState?.pageTo(0);
+
+              if(value.isEmpty){
+                filterList = dataList;
+                refresh(this);
+                return;
+              }
+
+              String s = value.trim();
+              List<String> search = s.split(" ");
+              bool got = false;
+              for(int i = 0; i < search.length; i++){
+                search[i] = search[i].replaceAll(" ", "");
+                if(!got){
+                  var first = dataList.where((List<dynamic> item) => _searchItem(item[3],search[i].toUpperCase())).toList();
+                  //var first = dataList.where((List<dynamic> item) => item[3].contains(search[i].toUpperCase())).toList();
+                  if(first.isNotEmpty){
+                    filterList = first;
+                    got = true;
+                  }
+                  else{
+                    filterList = dataList;
+                  }
+                }
+                else{
+
+                  //var refined = filterList.where((List<dynamic> item) => item[3].contains(search[i].toUpperCase())).toList();
+                  var refined = filterList.where((List<dynamic> item) => _searchItem(item[3],search[i].toUpperCase())).toList();
+                  if(refined.isNotEmpty){
+                    filterList = refined;
+                  }
+                }
+              }
+
+              refresh(this);
+            }
+        ),
+      ),
+    );
+  }
+
   setIndex(int selectIndex) {
     //masterIndex = filterList[listIndex][0]; // position of the item in the MainList
     this.selectIndex = selectIndex; // position of selection on screen
@@ -1907,54 +2122,6 @@ class _DynamicTable extends State<DynamicTable>{
               centerTitle: true,
               title: Text("Spreadsheet View: ${job.id}", textAlign: TextAlign.center),
               automaticallyImplyLeading: false,
-              actions: widget.tableType == TableType.search ? [
-                PopupMenuButton(
-                    itemBuilder: (context) {
-                      return [
-                        PopupMenuItem<int>(
-                            value: 0,
-                            child: Card(
-                              child: ListTile(
-                                title: const Text("Description"),
-                                trailing: filters[0] ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
-                              ),
-                            )
-                        ),
-                        PopupMenuItem<int>(
-                            value: 1,
-                            child: Card(
-                              child: ListTile(
-                                title: const Text("Category"),
-                                trailing: filters[1] ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
-                              ),
-                            )
-                        ),
-                        PopupMenuItem<int>(
-                            value: 2,
-                            child: Card(
-                              child: ListTile(
-                                title: const Text("Barcode"),
-                                trailing: filters[2] ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
-                              ),
-                            )
-                        ),
-                      ];
-                    },
-                    onSelected: (value) async {
-                      textFocus.unfocus();
-                      filters[value] = filters[value] ? false : true;
-                      // Disable other filters if barcode filter is on
-                      if(filters[2]){
-                        filters[0] = false;
-                        filters[1] = false;
-                      }
-                      // Description filter is on if all filters are disabled
-                      if(!filters[0] && !filters[1] && !filters[2]) {
-                        filters[0] = true;
-                      }
-                    }
-                ),
-              ] : null,
             ),
 
             body: GestureDetector(
@@ -1962,23 +2129,7 @@ class _DynamicTable extends State<DynamicTable>{
                 child: Center(
                     child: Column(
                         children: [
-                          widget.tableType == TableType.search ? Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.search),
-                              title: TextField(
-                                  controller: searchCtrl,
-                                  focusNode: textFocus,
-                                  decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none),
-                                  onChanged: (value) {
-                                    String search = value.toUpperCase();
-                                    tableKey.currentState?.pageTo(0);
-                                    filterList = dataList.where((List<dynamic> item) =>
-                                      (filters[0] && item[3].contains(search)) || (filters[1] && item[2].contains(search)) || (filters[2] && item[1].contains(search))).toList(growable: true);
-                                    refresh(this);
-                                  }
-                              ),
-                            ),
-                          ) : Container(),
+                          widget.tableType == TableType.search ? _searchList() : Container(),
                           dataList.isNotEmpty ? Expanded(
                               child: SingleChildScrollView(
                                 child: PaginatedDataTable(
@@ -2001,17 +2152,17 @@ class _DynamicTable extends State<DynamicTable>{
                                     child: Column(
                                         children: [
                                           widget.action == ActionType.edit || widget.action == ActionType.add ?
-                                          mBox(
+                                          rBox(
                                             context,
                                             selectIndex > -1 ? colorOk : colorDisable,
                                             TextButton(
                                               child: Text(widget.action == ActionType.edit ? 'EDIT ITEM' : 'ADD ITEM', style: whiteText),
                                                 onPressed: () {
-                                                  goToPage(context, StockItem(item: rowToItem(filterList[selectIndex], widget.tableType == TableType.literal), action: widget.action, index: selectIndex), false);
+                                                  goToPage(context, StockItem(item: rowToItem(filterList[selectIndex], widget.tableType == TableType.literal), action: widget.action, index: widget.action == ActionType.add ? filterList[selectIndex][0] : selectIndex), false);
                                                 }
                                             ),
                                           ) : Container(),
-                                          mBox(context, colorBack, TextButton(
+                                          rBox(context, colorBack, TextButton(
                                             child: Text("Back", style: whiteText),
                                             onPressed: () {
                                               goToPage(context, const Stocktake(), false);
@@ -2031,9 +2182,6 @@ class _DynamicTable extends State<DynamicTable>{
   }
 }
 
-/*===========================
-  SPREADSHEET FUNCTIONS
-===========================*/
 List<DataColumn> getColumns(TableType t) {
   List<int>? showColumn;
   List<DataColumn> dataColumns;
@@ -2128,7 +2276,9 @@ class RowSource extends DataTableSource {
         DataCell(Text(dataList[index][3].toString())),
         DataCell(Text(dataList[index][4].toString())),
         DataCell(Text(dataList[index][5].toString())),
-        const DataCell(Text("10.0")),
+        DataCell(Text(dataList[index][6].toString())),
+        DataCell(Text(dataList[index][7].toString())),
+        //const DataCell(Text("10.0")),
       ];
     }
     else if(type == TableType.literal) {
@@ -2186,9 +2336,7 @@ class RowSource extends DataTableSource {
   }
 }
 
-/*===================
-  COLORS & STYLES
-===================*/
+// COLORS & STYLES
 Color colorOk = Colors.blue.shade400;
 Color colorEdit = Colors.blueGrey;
 Color colorWarning = Colors.deepPurple.shade200;
@@ -2199,6 +2347,7 @@ TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["
 TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 TextStyle get blackText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 
+// RE-USABLE WIDGETS
 mPrint(var s) {
   // "Safely" prints something to terminal, otherwise IDE notifications chucks a sissy fit
   if (s == null) {
@@ -2220,9 +2369,6 @@ shortFilePath(String s) {
   return sp[sp.length - 1];
 }
 
-/*=====================
-  RE-USABLE WIDGETS
-=====================*/
 headerPadding(String title, TextAlign l){
   return Padding(
     padding: const EdgeInsets.all(15.0),
@@ -2248,21 +2394,9 @@ goToPage(BuildContext context, Widget page, bool animate) {
   );
 }
 
-mBox(BuildContext context, Color c, Widget w){
-  return Padding(
-    padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
-    child: Container(
-      height: 50,
-      width: MediaQuery.of(context).size.width * 0.8,
-      decoration: BoxDecoration(color: c),
-      child: w,
-    ),
-  );
-}
-
 rBox(BuildContext context, Color c, Widget w){
   return Padding(
-    padding: const EdgeInsets.all(10.0),
+    padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
     child: Container(
       height: 50,
       width: MediaQuery.sizeOf(context).width * 0.8,
@@ -2277,12 +2411,14 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
     SnackBar(
       content: Text('$title\n$message', style: textStyle),
       backgroundColor: bkgColor,
-      duration: const Duration(milliseconds: 2500),
-      width: MediaQuery.sizeOf(context).width * 0.9, // Width of the SnackBar.
+      duration: const Duration(milliseconds: 2000),
       padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
       behavior: SnackBarBehavior.floating,
       dismissDirection: DismissDirection.horizontal,
-      //margin: const EdgeInsets.all(15.0),
+      margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height * 0.7,
+          right: 20,
+          left: 20),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10.0),
       ),
@@ -2420,16 +2556,14 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   return confirmation;
 }
 
-/*=========================
-  READ/WRITE OPERATIONS
-=========================*/
+// READ/WRITE OPERATIONS
 Future<String> get _localPath async {
   final directory = await getApplicationDocumentsDirectory();
   return directory.path;
 }
 
 Future<void> _prepareStorage() async {
-  var path = isEmulating ? 'storage/emulated/0' : 'sdcard';
+  var path = !isEmulating ? 'storage/emulated/0' : 'sdcard';
   rootDir = Directory(path);
   var storage = await storageType.status;
   if (storage != PermissionStatus.granted) {
@@ -2476,27 +2610,34 @@ Future<String> pickSpreadsheet(BuildContext context) async {
 }
 
 loadMasterSheet() async{
-  // // Load Excel spreadsheet
+  Uint8List bytes;
   final path = await _localPath;
-  var filename = 'MASTER_SHEET.xlsx'; // change to user defined -> show list of available books
+  String filePath = "$path/MASTER_SHEET.xlsx";
 
-  var sheets = [];
-  if (File("$path/$filename").existsSync()) {
-    File file = File("$path/$filename");
-    var bytes = file.readAsBytesSync();
-    var decoder = SpreadsheetDecoder.decodeBytes(bytes);
-    sheets = decoder.tables.keys.toList();
-    mainTable = decoder.tables[sheets[0]];
+  if(!File(filePath).existsSync()){
+    mPrint("No master sheet in app dir, copying asset file to app dir...");
+    ByteData data = await rootBundle.load("assets/MASTER_SHEET.xlsx");
+    bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 
-    // Remove first row as it contains header/title info
-    mainTable!.rows.removeRange(0, 1);
-
-    dbPath = "$path/$filename";
-    mPrint(mainTable?.maxRows);
+    await File(filePath).writeAsBytes(bytes);
   }
   else{
-    mPrint("NO SPREADSHEET");
+    mPrint("Master sheet exists! Grabbing the file...");
+    File file = File(filePath);
+    bytes = file.readAsBytesSync();
   }
+
+  var decoder = SpreadsheetDecoder.decodeBytes(bytes);
+  var sheets = decoder.tables.keys.toList();
+  mainTable = decoder.tables[sheets[0]];
+
+  // Remove first row as it contains header/title info
+  mainTable!.rows.removeRange(0, 1);
+
+  dbPath = filePath;
+
+  mPrint("GOT the Master Sheet");
+  mPrint(mainTable?.maxRows);
 }
 
 exportJobToXLSX( List<dynamic> fSheet) async{
@@ -2505,13 +2646,13 @@ exportJobToXLSX( List<dynamic> fSheet) async{
   var sheetObject = excel['Sheet1'];
   sheetObject.isRTL = false;
   // Add header row
-  sheetObject.insertRowIterables(["Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "GST RATE"], 0);
+  sheetObject.insertRowIterables(["Master Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "Barcode", "NOF"], 0);
   for(int i = 0; i < fSheet.length; i++){
     List<String> dataList = [];
     for(int j = 0; j < fSheet[i].length; j++){
       dataList.add(fSheet[i][j].toString());
     }
-    dataList.add("10"); //GST is always 10
+
     sheetObject.insertRowIterables(dataList, i+1);
   }
   var fileBytes = excel.save();
@@ -2522,8 +2663,8 @@ exportJobToXLSX( List<dynamic> fSheet) async{
 
 writeJob(StockJob job) async {
   var filePath = isEmulating ? 'sdcard/Documents/' : 'storage/emulated/0/Documents/';
-  //String dateString = job.date.replaceAll("/", "");
-  filePath += 'job_${job.id}_${job.name}'; //_$dateString
+  String date = job.date.replaceAll("_", "");
+  filePath += 'job_${job.id}_${job.name}_$date';
 
   mPrint(filePath);
 
@@ -2588,7 +2729,7 @@ Map<String, dynamic> rowToItem(List<dynamic> row, bool literal){
     "price" : row[5],
     "count" : literal ? row[6] : 0.0,
     "location" : job.location,
-    "nof" : false,
+    "nof" : row[0] >= mainTable!.maxRows, //literal ? false :
   };
 }
 
@@ -2607,4 +2748,5 @@ Map<String, dynamic> blankItem(bool nof){
 }
 
 /* ZJunk
+
 */
