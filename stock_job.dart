@@ -12,7 +12,6 @@ class StockJob {
   List<Map<String, dynamic>> nof = List.empty(growable: true);
   List<String> allLocations = List.empty(growable: true);
   String location = "";
-  //String dbPath = ""; // location of the xlsx or csv spreadsheet file (absolute path or won't work)
 
   @override
   bool operator ==(Object other) =>
@@ -26,8 +25,6 @@ class StockJob {
               nof == other.nof &&
               allLocations == other.allLocations &&
               location == other.location;
-  // &&
-              //dbPath == other.dbPath;
 
   @override
   int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literals.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode;// ^ dbPath.hashCode;
@@ -39,7 +36,7 @@ class StockJob {
     total,
     literals,
     nof,
-    allLoctions,
+    allLocations,
   });
 
   StockJob copy({
@@ -58,7 +55,7 @@ class StockJob {
           total: total ?? this.total,
           literals: literals ?? this.literals,
           nof: nof ?? this.nof,
-          allLoctions: allLocations ?? this.allLocations
+          allLocations: allLocations ?? this.allLocations
       );
 
   factory StockJob.fromJson(dynamic json) {
@@ -88,19 +85,17 @@ class StockJob {
     ];
 
     job.location = ''; // reset job location
-    //job.dbPath = ""; // reset db path json['dbPath'] as String;
     return job;
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'date': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
+      'date': "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}",
       'id': id,
       'name': name,
       'literals': jsonEncode(literals),
       'nof': jsonEncode(nof),
       'allLocations': jsonEncode(allLocations),
-      //'dbPath': dbPath,
       'location': '',
     };
   }
@@ -171,34 +166,27 @@ class StockJob {
   }
 
   getFinalSheet(){
-    //List<dynamic> nofRow = [-1, "MISC", "NOT ON FILE BARCODES", "MISC", 0.0, 0.0];
-
     List<List<dynamic>> finalSheet = [];
     for(int i =0; i < literals.length; i++){
-    //   if(literal[i].nof){
-    //     nofRow[4] += literal[i].count;
-    //     nofRow[5] += literal[i].price * literal[i].count;
-    //   }
-    //   else{
-        // if item(s) already exists in the final sheet append count and price
-        int count = 0;
+        bool skip = false;
         for(int j = 0; j < finalSheet.length; j++) {
-          if(finalSheet[j][0] == literals[i]["index"]){
+          // Check if item already exists
+          skip = finalSheet[j][0] == literals[i]["index"] &&
+              finalSheet[j][1] == literals[i]["category"] &&
+              finalSheet[j][2] == literals[i]["description"] &&
+              finalSheet[j][3] == literals[i]["uom"] &&
+              finalSheet[j][6] == literals[i]["barcode"] &&
+              finalSheet[j][7] == literals[i]["nof"].toString().toUpperCase();
+
+          if(skip){
+            // Add price and count to existing item
             finalSheet[j][4] += literals[i]["count"];
             finalSheet[j][5] += literals[i]["price"] * literals[i]["count"];
+            break;
           }
-
-          // if (literal[i].category == finalSheet[j][2] && finalSheet[j][1] != "NOF") {
-          //   finalSheet[j][4] += literal[i].count;
-          //   finalSheet[j][5] += literal[i].price * literal[i].count;
-          //   break;
-          // }
-          count++;
         }
-
-        // add new item to final sheet
-        // if(!literal[i].nof){
-        if (count >= finalSheet.length){
+        // Item doesn't exist, so add new item to list
+        if(!skip){
           finalSheet.add([
             literals[i]['index'],
             literals[i]['category'],
@@ -207,15 +195,10 @@ class StockJob {
             literals[i]["count"],
             literals[i]["price"] * literals[i]['count'],
             literals[i]["barcode"],
-            literals[i]["nof"]
+            literals[i]["nof"].toString().toUpperCase()
           ]);
         }
-        // }
       }
-    // }
-    // add NOF row last
-    // nofRow[0] = finalSheet.length;
-    // finalSheet.add(nofRow);
     return finalSheet;
   }
 
@@ -416,16 +399,3 @@ List<String> masterCategory = [
     "WOMEN'S HAIR REMOVAL",
     "YOGHURTS",
 ];
-
-
-/*
-    //Export Sheet Columns
-    'Master Index',
-    'Category',
-    'Description',
-    'UOM',
-    'QTY',
-    'Cost Ex GST',
-    'Barcode',
-    'NOF',
- */
