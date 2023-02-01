@@ -30,6 +30,8 @@ dependencies:
   excel: any
   spreadsheet_decoder: any
   archive: ^3.3.4
+  flutter_barcode_scanner: ^2.0.0
+#  camera: any
   flutter:
     sdk: flutter
 
@@ -53,6 +55,7 @@ flutter:
     - assets/AS_Logo.png
     - assets/AS_Logo2.png
     - assets/AS_symbol.png
+    - assets/MASTER_SHEET.xlsx
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware
