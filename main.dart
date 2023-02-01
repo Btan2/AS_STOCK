@@ -14,15 +14,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart';
+//import 'package:camera/camera.dart';
+
 import 'stock_job.dart';
 
-bool isEmulating = false; // DEBUG VARS
-Permission storageType = Permission.manageExternalStorage;
 
+Permission storageType = Permission.manageExternalStorage;
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
 Directory? rootDir;
 Map<String, dynamic> sFile = {};
@@ -30,8 +32,7 @@ String dbPath = '';
 SpreadsheetTable? mainTable;
 List<String> jobList = [];
 
-final tableKey = GlobalKey<PaginatedDataTableState>();
-enum TableType { literal, linear, export, full, search}
+enum TableType {literal, linear, export, full, search}
 enum ActionType {edit, add, addNOF, view}
 
 // Main
@@ -53,9 +54,17 @@ class HomePage extends StatefulWidget{
 class _HomePage extends State<HomePage> {
   late String defSheet;
 
+  bool loading = false;
+
   @override
   void initState() {
     super.initState();
+
+    getMicPermission();
+  }
+
+  Future<void> getMicPermission() async{
+    await Permission.microphone.request();
   }
 
   @override
@@ -63,13 +72,12 @@ class _HomePage extends State<HomePage> {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          resizeToAvoidBottomInset: false,
           body: SingleChildScrollView(
             child: Center(
               child: Column(
                   children: <Widget>[
                     const Padding(
-                      padding: EdgeInsets.only(top: 30.0),
+                      padding: EdgeInsets.only(top: 35.0),
                       child: Center(
                         child: SizedBox(
                           width: 470,
@@ -96,10 +104,13 @@ class _HomePage extends State<HomePage> {
 
                             if(mainTable == null) {
                               mPrint("LOADING TABLE");
-                              //isLoading = true;
-                              loadingDialog(context, true);
+                              loadingAlert(context);
+
                               // load default spreadsheet
-                              await loadMasterSheet();
+                              await loadMasterSheet().then((value){
+                                loading = false;
+                                refresh(this);
+                              });
                             }
 
                             await getSession().then((value){
@@ -114,9 +125,13 @@ class _HomePage extends State<HomePage> {
                         TextButton(
                           child: const Text('Sync Master Database', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                           onPressed: () async {
-                            loadingDialog(context, true);
-                            // load default spreadsheet
-                            await loadMasterSheet().then(goToPage(context, const HomePage(), false));
+                            loadingAlert(context);
+
+                            await loadMasterSheet().then((value) {
+                              loading = false;
+                              refresh(this);
+                              goToPage(context, const HomePage(), false);
+                            });
                           },
                         )
                     ),
@@ -130,8 +145,12 @@ class _HomePage extends State<HomePage> {
                             // Load default if not loaded
                             if(mainTable == null){
                               mPrint("LOADING TABLE");
-                              loadingDialog(context, true);
-                              await loadMasterSheet();
+                              loadingAlert(context);
+
+                              await loadMasterSheet().then((value){
+                                loading = false;
+                                refresh(this);
+                              });
                             }
 
                             await getSession().then((value){
@@ -140,28 +159,33 @@ class _HomePage extends State<HomePage> {
                             },
                         ),
                     ),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height/10.0,
+                    ),
+                    rBox(
+                        context,
+                        colorBack,
+                        TextButton(
+                          child: const Text("Close App", style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                          onPressed: () async {
+                            await writeSession().then((value){
+                              mPrint("CLOSE APP: Probably shouldn't do this according to official documentation");
+                              // SystemNavigator.pop();
+                            });
+                          },
+                        ),
+                    ),
                   ]
               )
             )
           ),
-            bottomSheet: SingleChildScrollView(
-              child: Center(
-                child: Platform.isIOS ? SizedBox(width: MediaQuery.sizeOf(context).width, height: 5.0) :
-                rBox(
-                    context,
-                    colorBack,
-                    TextButton(
-                      child: const Text("Close App", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-                      onPressed: () async {
-                        await writeSession().then((value){
-                          mPrint("CLOSE APP: Probably shouldn't do this according to official documentation");
-                          // SystemNavigator.pop();
-                        });
-                        },
-                    ),
-                ),
-              ),
-            )
+            // bottomSheet: SingleChildScrollView(
+            //   child: Center(
+            //     child: Platform.isIOS ? SizedBox(width: MediaQuery.sizeOf(context).width, height: 5.0) :
+            //
+            //     ),
+            //   ),
+
         )
     );
   }
@@ -193,18 +217,18 @@ class _AppSettings extends State<AppSettings> {
             ),
 
             body: SingleChildScrollView(
-                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       headerPadding('Storage Permission Type', TextAlign.left),
                       Padding(
-                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                          padding: const EdgeInsets.only(bottom: 5),
                           child: Card(
                             child: ListTile(
                               title: DropdownButton(
-                                menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+                                //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+
                                 value: storageType,
                                 icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
                                 items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
@@ -278,30 +302,29 @@ class _AppSettings extends State<AppSettings> {
                           },
                         ),
                       ),
+                      SizedBox(
+                        height : MediaQuery.of(context).size.height/10.0,
+                      ),
+                      Center(
+                        child: rBox(
+                          context,
+                          colorBack,
+                          TextButton(
+                            child: Text('Back', style: whiteText),
+                            onPressed: () async {
+                              await writeSession().then((value)
+                              {
+                                goToPage(context, const HomePage(), true);
+                              });
+                              //goToPage(context, const HomePage());
+                            },
+                          )
+                        ),
+                      ),
                     ],
                   )
               )
           ),
-
-          bottomSheet: SingleChildScrollView(
-            child: Center(
-              child: rBox(
-                  context,
-                  colorBack,
-                  TextButton(
-                    child: Text('Back', style: whiteText),
-                    onPressed: () async {
-                      await writeSession().then((value)
-                      {
-                        goToPage(context, const HomePage(), true);
-                      });
-                      //goToPage(context, const HomePage());
-                    },
-                  )
-              ),
-            ),
-          )
-        )
     );
   }
 }
@@ -713,6 +736,7 @@ class _NewJob extends State<NewJob> {
 
   @override
   Widget build(BuildContext context) {
+    double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
@@ -734,6 +758,7 @@ class _NewJob extends State<NewJob> {
                             padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                             child: Card(
                                 child: TextFormField(
+                                  scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                                   controller: idCtrl,
                                   focusNode: idFocus,
                                   textAlign: TextAlign.left,
@@ -745,6 +770,7 @@ class _NewJob extends State<NewJob> {
                             padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                             child: Card(
                                 child: TextFormField(
+                                  scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                                   controller: nameCtrl,
                                   focusNode: nameFocus,
                                   textAlign: TextAlign.left,
@@ -970,13 +996,13 @@ class Stocktake extends StatelessWidget{
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-            resizeToAvoidBottomInset: false,
+            // resizeToAvoidBottomInset: false,
             appBar: AppBar(
               centerTitle: true,
               title: Text("Stocktake - Total: ${job.total}", textAlign: TextAlign.center),
               automaticallyImplyLeading: false,
             ),
-            body: Center(
+            body:SingleChildScrollView( child: Center(
                 child: Column(
                     children: [
                       headerPadding("Current Location:", TextAlign.left),
@@ -1022,7 +1048,7 @@ class Stocktake extends StatelessWidget{
                               if (job.location.isNotEmpty) {
                                 goToPage(
                                     context,
-                                    const DynamicTable(tableType: TableType.search, action: ActionType.add),
+                                    DynamicTable(tableType: TableType.search, action: ActionType.add),
                                     true // animate
                                 );
                               } else {
@@ -1041,7 +1067,7 @@ class Stocktake extends StatelessWidget{
                           TextButton(
                             child: Text('Add NOF', style: whiteText),
                             onPressed: () {
-                              goToPage(context, StockItem(item: blankItem(true), action: ActionType.addNOF, index: -1,), false);
+                              goToPage(context, StockItem(item: blankItem(), action: ActionType.addNOF, index: -1,), false);
                             },
                           )
                       ),
@@ -1051,7 +1077,7 @@ class Stocktake extends StatelessWidget{
                           TextButton(
                             child: Text('Edit Stocktake', style: whiteText),
                             onPressed: () {
-                              goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), true);
+                              goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), true);
                             },
                           )
                       ),
@@ -1059,28 +1085,38 @@ class Stocktake extends StatelessWidget{
                         width: MediaQuery.of(context).size.width,
                         height: MediaQuery.of(context).size.height / 10.0,
                       ),
+                      rBox(
+                          context,
+                          colorBack,
+                          TextButton(
+                            child: Text('Back', style: whiteText),
+                            onPressed: () {
+                              goToPage(context, const OpenJob(), false);
+                            },
+                          )
+                      ),
                     ]
                 )
             ),
-            bottomSheet: SingleChildScrollView(
-                child: Center(
-                    child: Column(
-                        children: [
-                          rBox(
-                              context,
-                              colorBack,
-                              TextButton(
-                                child: Text('Back', style: whiteText),
-                                onPressed: () {
-                                  goToPage(context, const OpenJob(), false);
-                                },
-                              )
-                          ),
-                        ]
-                    )
-                )
-            )
-        )
+            // bottomSheet: SingleChildScrollView(
+            //     child: Center(
+            //         child: Column(
+            //             children: [
+            //               rBox(
+            //                   context,
+            //                   colorBack,
+            //                   TextButton(
+            //                     child: Text('Back', style: whiteText),
+            //                     onPressed: () {
+            //                       goToPage(context, const OpenJob(), false);
+            //                     },
+            //                   )
+            //               ),
+            //             ]
+            //         )
+            //     )
+            // )
+        ))
     );
   }
 }
@@ -1100,6 +1136,7 @@ class _ScanItem extends State<ScanItem>{
   late List<List<dynamic>> dataList;
   List<List<dynamic>> filterList = List.empty();
   bool found = false;
+  bool wholeBarcode = true;
   int itemIndex = 0;
 
   @override
@@ -1107,7 +1144,6 @@ class _ScanItem extends State<ScanItem>{
     super.initState();
     searchFocus.unfocus();
     dataList = mainTable!.rows + job.nofList();
-    // filterList = mainTable!.rows + job.nofList();
     countCtrl.text = "0.0";
     found = false;
   }
@@ -1116,16 +1152,56 @@ class _ScanItem extends State<ScanItem>{
     searchFocus.unfocus();
     countFocus.unfocus();
   }
+  _scanString(String value){
+    if(value.isEmpty){
+      filterList.clear();
+      found = false;
+    }
+    else{
+      itemIndex = 0;
+      filterList = dataList.where(
+              (List<dynamic> item) => wholeBarcode ? item[1] == value : item[1].contains(value)
+      ).toList(growable: true);
+
+      // Sort by barcode number
+      //filterList = filterList..sort((x, y) => (x[1] as dynamic).compareTo((y[1] as dynamic)));
+      found = filterList.isNotEmpty;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    double keyboardHeight = MediaQuery.of(context).viewInsets.bottom; // + 5;
+
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
           appBar: AppBar(
               centerTitle: true,
               automaticallyImplyLeading: false,
-              title: const Text("Barcode Scanning", textAlign: TextAlign.center)
+              title: const Text("Barcode Scanning", textAlign: TextAlign.center),
+              actions: [
+              PopupMenuButton(
+                  itemBuilder: (context) {
+                    return [
+                      PopupMenuItem<int>(
+                          value: 0,
+                          child: Card(
+                            child: ListTile(
+                              title: const Text("Check Full Barcode"),
+                              trailing: wholeBarcode ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
+                            ),
+                          )
+                      ),];
+                  },
+                  onSelected: (value) async {
+                    _clearFocus();
+                    searchCtrl.clear();
+                    wholeBarcode = wholeBarcode ? false : true;
+                    refresh(this);
+                  }
+              ),
+            ],
           ),
 
           body: GestureDetector(
@@ -1142,23 +1218,28 @@ class _ScanItem extends State<ScanItem>{
                       padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                       child: Card(
                         child: ListTile(
+                          trailing: IconButton(
+                            onPressed: () async {
+                              // String value = await FlutterBarcodeScanner.scanBarcode(
+                              //     Colors.redAccent.toString(),
+                              //     'Cancel',
+                              //     true,
+                              //     ScanMode.BARCODE
+                              // );
+                              // mPrint(value);
+                              //_scanString(value);
+                              refresh(this);
+                            },
+                            icon: const Icon(Icons.camera_enhance_outlined, color: Colors.blueGrey),
+                          ),
                           title: TextField(
+                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                             controller: searchCtrl,
                             focusNode: searchFocus,
                             textAlign: TextAlign.center,
                             keyboardType: TextInputType.name,
                             onChanged: (String? value){
-                              if(value!.isEmpty){
-                                filterList.clear();
-                                found = false;
-                              }
-                              else{
-                                itemIndex = 0;
-                                filterList = dataList.where((List<dynamic> item) => (item[1].contains(value))).toList(growable: true);
-                                // Sort by barcode number
-                                //filterList = filterList..sort((x, y) => (x[1] as dynamic).compareTo((y[1] as dynamic)));
-                                found = filterList.isNotEmpty;
-                              }
+                              _scanString(value as String);
                               refresh(this);
                             },
                           ),
@@ -1182,7 +1263,7 @@ class _ScanItem extends State<ScanItem>{
                           children: <Widget>[
                             Container(
                                 width: MediaQuery.of(context).size.width / 10,
-                                color: Colors.grey.shade400,
+                                color: Colors.grey.shade200,
                                 child: IconButton(
                                     onPressed: () {
                                       _clearFocus();
@@ -1200,11 +1281,6 @@ class _ScanItem extends State<ScanItem>{
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: [
-                                    // Card(
-                                    //   child: ListTile(
-                                    //     title: Text("${found ? filterList[itemIndex][1] : ""}", textAlign: TextAlign.center,),
-                                    //   ),
-                                    // ),
                                     Card(
                                        child: ListTile(
                                          title: Text("${found ? filterList[itemIndex][3] : ""}", textAlign: TextAlign.center,),
@@ -1212,40 +1288,48 @@ class _ScanItem extends State<ScanItem>{
                                     ),
                                     Card(
                                         child: ListTile(
-                                          trailing: found ? IconButton(
+                                          trailing: IconButton(
                                             icon: const Icon(Icons.add_circle_outline),
                                             onPressed: () {
                                               _clearFocus();
-                                              double count = double.parse(countCtrl.text) + 1;
-                                              countCtrl.text = count.toString();
+                                              if(found){
+                                                double count = double.parse(countCtrl.text) + 1;
+                                                countCtrl.text = count.toString();
+                                              }
                                               refresh(this);
-                                              },
-                                          ) : null,
+                                            },
+                                          ),
                                           title: TextField(
+                                            scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                                             controller: countCtrl,
                                             focusNode: countFocus,
                                             textAlign: TextAlign.center,
                                             keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
                                           ),
-                                          leading: found ? IconButton(
+                                          leading: IconButton(
                                             icon: const Icon(Icons.remove_circle_outline),
                                             onPressed: () {
                                               _clearFocus();
-                                              double count = double.parse(countCtrl.text) - 1.0;
-                                              countCtrl.text = max(count, 0).toString();
+                                              if(found){
+                                                double count = double.parse(countCtrl.text) - 1.0;
+                                                countCtrl.text = max(count, 0).toString();
+                                              }
                                               refresh(this);
-                                              },
-                                          ) : null,
+                                            },
+                                          ),
                                         )
                                     ),
-                                    headerPadding("$itemIndex of ${filterList.length}", TextAlign.left),
+                                    Card(
+                                      child: Text("$itemIndex of ${filterList.length-1}", textAlign: TextAlign.left, style: greyText),
+                                    )
+                                    // headerPadding("$itemIndex of ${filterList.length-1}", TextAlign.left),
                                   ]
                                 )
                               )
                             ),
                             Container(
                                 width: MediaQuery.of(context).size.width / 10,
-                                color: Colors.grey.shade400,
+                                color: Colors.grey.shade200,
                                 child: IconButton(
                                     onPressed: () {
                                       _clearFocus();
@@ -1461,6 +1545,8 @@ class _StockItem extends State<StockItem>{
   String categoryValue = "MISC";
   //late bool isNof;
 
+  late double keyboardHeight;
+
   _clearFocus(){
     barcodeFocus.unfocus();
     descriptionFocus.unfocus();
@@ -1499,6 +1585,7 @@ class _StockItem extends State<StockItem>{
             child: Card(
               child: ListTile(
                 title: TextField(
+                  scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                   controller: locationCtrl,
                   focusNode: locationFocus,
                   textAlign: TextAlign.center,
@@ -1528,6 +1615,7 @@ class _StockItem extends State<StockItem>{
                 },
               ),
               title: TextField(
+                scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                 controller: countCtrl,
                 focusNode: countFocus,
                 textAlign: TextAlign.center,
@@ -1548,7 +1636,6 @@ class _StockItem extends State<StockItem>{
   }
 
   _addNOF(){
-
     int newIndex =mainTable!.maxRows + job.nof.length;
 
     var nofItem = {
@@ -1595,7 +1682,7 @@ class _StockItem extends State<StockItem>{
       "uom" : uomValue,
       "price" : double.parse(priceCtrl.text),
       "count" : double.parse(countCtrl.text),
-      "location" : job.location,
+      "location" : locationCtrl.text,
       "nof" : widget.item['nof'],
     };
 
@@ -1605,7 +1692,7 @@ class _StockItem extends State<StockItem>{
           job.literals[widget.index] = item;
           job.calcTotal();
           showNotification(context, Colors.greenAccent, blackText, "", "Item at index [${widget.index}] was changed");
-          goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
+          goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
 
           // Ask to apply changes to other items with same index?
           // Automatically create a new NOF?
@@ -1616,7 +1703,6 @@ class _StockItem extends State<StockItem>{
   }
 
   List<Widget> _editItem(){
-    var keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     return <Widget>[
       headerPadding("Barcode:", TextAlign.left),
       Padding(
@@ -1624,7 +1710,7 @@ class _StockItem extends State<StockItem>{
         child: Card(
             child: ListTile(
               title: TextField(
-                scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight + 15),
+                scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                 decoration: const InputDecoration(hintText: 'e.g 123456789', border: InputBorder.none),
                 controller: barcodeCtrl,
                 focusNode: barcodeFocus,
@@ -1714,7 +1800,7 @@ class _StockItem extends State<StockItem>{
         child: Card(
             child: ListTile(
               title: TextField(
-                scrollPadding: const EdgeInsets.symmetric(vertical: 0), // EdgeInsets.symmetric(vertical: keyboardHeight),
+                scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
                 controller: priceCtrl,
                 focusNode: priceFocus,
                 keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
@@ -1842,7 +1928,7 @@ class _StockItem extends State<StockItem>{
                 child: Text('Cancel', style: whiteText),
                 onPressed: () async {
                   if(widget.action == ActionType.edit){
-                    goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
+                    goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
                   }
                   else if(widget.action == ActionType.addNOF) {
                     goToPage(context, const Stocktake(), false);
@@ -1862,6 +1948,8 @@ class _StockItem extends State<StockItem>{
 
   @override
   Widget build(BuildContext context) {
+    keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
+
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
@@ -1873,23 +1961,22 @@ class _StockItem extends State<StockItem>{
               actions: widget.action == ActionType.edit ? [
                 GestureDetector(
                     onTapDown: (_) => _clearFocus(),
-                    child: PopupMenuButton(
-                        itemBuilder: (context){
-                          return [PopupMenuItem<int>(value: -1, child: Text("DELETE", style: warningText),)];
-                          },
-                        onSelected: (value) async {
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_forever_sharp),
+                        // itemBuilder: (context){
+                        //   return [PopupMenuItem<int>(value: -1, child: Text("DELETE", style: warningText),)];
+                        //   },
+                        onPressed: () async {
                           _clearFocus();
-                          if(value == -1){
                             await confirmDialog(context, "Remove Item from stock count?")
                                 .then((bool value2) async{
                                   if(value2){
                                     job.literals.removeAt(widget.index);
                                     job.calcTotal();
                                     showNotification(context, colorWarning.withOpacity(0.8), whiteText, "", "Item at table index [${widget.index}] was removed.");
-                                    goToPage(context, const DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
+                                    goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
                                   }
                                 });
-                            }
                         }
                     )
                 ),
@@ -1952,7 +2039,7 @@ class StaticTable extends StatelessWidget {
                               showFirstLastButtons: true,
                               rowsPerPage: sFile["pageCount"],
                               controller: ScrollController(),
-                              columns: getColumns(tableType),
+                              columns: getColumns(tableType,MediaQuery.of(context).size.width),
                               source: RowSource(parent: this, dataList: dataList, type: tableType),
                             ),
                           )
@@ -1996,8 +2083,9 @@ class StaticTable extends StatelessWidget {
 class DynamicTable extends StatefulWidget{
   final TableType tableType;
   final ActionType action;
+  final tableKey = GlobalKey<PaginatedDataTableState>();
 
-  const DynamicTable({
+  DynamicTable({
     super.key,
     required this.tableType,
     required this.action,
@@ -2022,7 +2110,7 @@ class _DynamicTable extends State<DynamicTable>{
     getDataList();
   }
 
-  getDataList(){
+  getDataList() {
     if(widget.tableType == TableType.literal){
       dataList = job.literalList();
     }
@@ -2038,18 +2126,21 @@ class _DynamicTable extends State<DynamicTable>{
     else{
       dataList = mainTable!.rows;
     }
+
     filterList = dataList;
   }
 
-  bool _searchItem(String item, String search){
-    var splt = item.split(" ");
-    for(int i = 0; i < splt.length; i++){
-      if (splt[i] == search){
-        return true;
-      }
-    }
-    return false;
+  bool _searchItem(String item, String search) {
+    return item.split(' ').where((item) => item.isNotEmpty).toList().contains(search);
   }
+
+  //var splt = item.split(' ');
+  // for(int i = 0; i < splt.length; i++){
+  //   if (splt[i] == search){
+  //     return true;
+  //   }
+  // }
+  // return false;
 
   _searchList(){
     return Card(
@@ -2060,7 +2151,7 @@ class _DynamicTable extends State<DynamicTable>{
             focusNode: textFocus,
             decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none),
             onChanged: (value) {
-              tableKey.currentState?.pageTo(0);
+              widget.tableKey.currentState?.pageTo(0);
 
               if(value.isEmpty){
                 filterList = dataList;
@@ -2068,14 +2159,12 @@ class _DynamicTable extends State<DynamicTable>{
                 return;
               }
 
-              String s = value.trim();
-              List<String> search = s.split(" ");
               bool got = false;
+              List<String> search = value.split(' ').where((item) => item.isNotEmpty).toList();
               for(int i = 0; i < search.length; i++){
-                search[i] = search[i].replaceAll(" ", "");
                 if(!got){
+                  // Return filtered list of MASTER SHEET items that match the search string
                   var first = dataList.where((List<dynamic> item) => _searchItem(item[3],search[i].toUpperCase())).toList();
-                  //var first = dataList.where((List<dynamic> item) => item[3].contains(search[i].toUpperCase())).toList();
                   if(first.isNotEmpty){
                     filterList = first;
                     got = true;
@@ -2085,8 +2174,7 @@ class _DynamicTable extends State<DynamicTable>{
                   }
                 }
                 else{
-
-                  //var refined = filterList.where((List<dynamic> item) => item[3].contains(search[i].toUpperCase())).toList();
+                  // Check remaining search strings and return a refined search list
                   var refined = filterList.where((List<dynamic> item) => _searchItem(item[3],search[i].toUpperCase())).toList();
                   if(refined.isNotEmpty){
                     filterList = refined;
@@ -2130,17 +2218,17 @@ class _DynamicTable extends State<DynamicTable>{
                     child: Column(
                         children: [
                           widget.tableType == TableType.search ? _searchList() : Container(),
-                          dataList.isNotEmpty ? Expanded(
+                          dataList!.isNotEmpty ? Expanded(
                               child: SingleChildScrollView(
                                 child: PaginatedDataTable(
                                   sortColumnIndex: 0,
-                                  key: tableKey,
+                                  key: widget.tableKey,
                                   sortAscending: true,
                                   showCheckboxColumn: false,
                                   showFirstLastButtons: true,
                                   rowsPerPage: sFile["pageCount"],
                                   controller: ScrollController(),
-                                  columns: getColumns(widget.tableType),
+                                  columns: getColumns(widget.tableType, MediaQuery.of(context).size.width),
                                   source: RowSource(parent: this, dataList: filterList, select: true, type: widget.tableType),
                                 ),
                               )
@@ -2182,15 +2270,15 @@ class _DynamicTable extends State<DynamicTable>{
   }
 }
 
-List<DataColumn> getColumns(TableType t) {
+List<DataColumn> getColumns(TableType t, double width) {
   List<int>? showColumn;
   List<DataColumn> dataColumns;
 
   if(t == TableType.literal) {
     dataColumns = <DataColumn>[
-      const DataColumn(label: Text("Description")),
+      DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
       const DataColumn(label: Text("Count")),
-      const DataColumn(label: Text("UOM")),
+      DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
       const DataColumn(label: Text("Location")),
       const DataColumn(label: Text("Barcode"))
       ];
@@ -2199,8 +2287,8 @@ List<DataColumn> getColumns(TableType t) {
     dataColumns = <DataColumn>[
       const DataColumn(label: Text('Index')),
       const DataColumn(label: Text('Category')),
-      const DataColumn(label: Text('Description')),
-      const DataColumn(label: Text('UOM')),
+      DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
+      DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
       const DataColumn(label: Text('QTY')),
       const DataColumn(label: Text('Cost Ex GST')),
       const DataColumn(label: Text('Barcode')),
@@ -2212,8 +2300,8 @@ List<DataColumn> getColumns(TableType t) {
       const DataColumn(label: Text('Index')),
       const DataColumn(label: Text('Barcode')),
       const DataColumn(label: Text('Category')),
-      const DataColumn(label: Text('Description')),
-      const DataColumn(label: Text('UOM')),
+      DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
+      DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
       const DataColumn(label: Text('Price')),
     ];
   }
@@ -2447,8 +2535,24 @@ showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   );
 }
 
+loadingAlert(BuildContext context){
+  showDialog(
+      barrierDismissible: false,
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Row(
+              children: [
+                Container(
+                    margin: const EdgeInsets.only(left: 10),
+                    child: const Text("Loading...")),
+              ]
+          ),
+        );
+      });
+}
+
 loadingDialog(BuildContext context, bool loading) {
-  loading ?
   showDialog(
       barrierDismissible: false,
       context: context,
@@ -2463,7 +2567,7 @@ loadingDialog(BuildContext context, bool loading) {
               ]
           ),
         );
-      }) : Container();
+      });
 }
 
 Future<String> textEditDialog(BuildContext context, String str) async{
@@ -2563,7 +2667,7 @@ Future<String> get _localPath async {
 }
 
 Future<void> _prepareStorage() async {
-  var path = !isEmulating ? 'storage/emulated/0' : 'sdcard';
+  var path = 'storage/emulated/0';//!isEmulating ? 'storage/emulated/0' : 'sdcard';
   rootDir = Directory(path);
   var storage = await storageType.status;
   if (storage != PermissionStatus.granted) {
@@ -2609,11 +2713,11 @@ Future<String> pickSpreadsheet(BuildContext context) async {
   return val;
 }
 
-loadMasterSheet() async{
+Future<void> loadMasterSheet() async{
   Uint8List bytes;
   final path = await _localPath;
   String filePath = "$path/MASTER_SHEET.xlsx";
-
+  await Future.delayed(const Duration(microseconds: 0));
   if(!File(filePath).existsSync()){
     mPrint("No master sheet in app dir, copying asset file to app dir...");
     ByteData data = await rootBundle.load("assets/MASTER_SHEET.xlsx");
@@ -2641,7 +2745,7 @@ loadMasterSheet() async{
 }
 
 exportJobToXLSX( List<dynamic> fSheet) async{
-  var path = isEmulating ? 'sdcard/Documents' : 'storage/emulated/0/Documents';
+  var path = 'storage/emulated/0/Documents'; //isEmulating ? 'sdcard/Documents' : 'storage/emulated/0/Documents';
   var excel = Excel.createExcel();
   var sheetObject = excel['Sheet1'];
   sheetObject.isRTL = false;
@@ -2662,7 +2766,7 @@ exportJobToXLSX( List<dynamic> fSheet) async{
 }
 
 writeJob(StockJob job) async {
-  var filePath = isEmulating ? 'sdcard/Documents/' : 'storage/emulated/0/Documents/';
+  var filePath = 'storage/emulated/0/Documents/'; //isEmulating ? 'sdcard/Documents/' : 'storage/emulated/0/Documents/';
   String date = job.date.replaceAll("_", "");
   filePath += 'job_${job.id}_${job.name}_$date';
 
@@ -2728,12 +2832,12 @@ Map<String, dynamic> rowToItem(List<dynamic> row, bool literal){
     "uom" : row[4],
     "price" : row[5],
     "count" : literal ? row[6] : 0.0,
-    "location" : job.location,
-    "nof" : row[0] >= mainTable!.maxRows, //literal ? false :
+    "location" : literal ? row[7] : job.location,
+    "nof" : row[0] >= mainTable!.maxRows, // if index is greater than master list it must be a NOF
   };
 }
 
-Map<String, dynamic> blankItem(bool nof){
+Map<String, dynamic> blankItem(){
   return {
     "index" : 0,
     "barcode" : 0,
