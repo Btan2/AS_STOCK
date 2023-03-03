@@ -1,6 +1,9 @@
 /*
+   This script was programmed by Callum Jack Buchanan.
+   Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
+
    This program is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
@@ -8,8 +11,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-//import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -19,13 +22,17 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart';
 import 'stock_job.dart';
 
-Permission storageType = Permission.storage;
+Permission storageType = Permission.manageExternalStorage; // Permission.storage FOR REAL PHONES
+
+String jobStartStr = "ASJob_";
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
+List<String> jobList = [];
+List<List<dynamic>> jobTable = List.empty(growable: true);
+
 String dbPath = '';
 Directory? rootDir;
 SpreadsheetTable? mainTable;
 List<String> masterCategory = [];
-List<String> jobList = [];
 Map<String, dynamic> sFile = {};
 enum TableType {literal, linear, export, full, search}
 enum ActionType {edit, add, addNOF, view}
@@ -38,8 +45,11 @@ Color colorDisable = Colors.blue.shade200;
 Color colorBack = Colors.redAccent;
 TextStyle get warningText{ return TextStyle(color: Colors.red[900], fontSize: sFile["fontScale"]);}
 TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["fontScale"]);}
+TextStyle get rText{ return TextStyle(color: Colors.red.shade400, fontSize: 16.0);}
 TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 TextStyle get blackText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
+TextStyle get titleText{ return const TextStyle(color: Colors.black87, fontSize: 20.0, fontWeight: FontWeight.bold);}
+TextStyle get blueText{ return const TextStyle(color: Colors.lightBlue, fontSize: 20.0, fontWeight: FontWeight.bold);}
 
 // Main
 void main() {
@@ -52,7 +62,7 @@ void main() {
 }
 
 // Home Page
-class HomePage extends StatefulWidget{
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
   State<HomePage> createState() => _HomePage();
@@ -72,7 +82,6 @@ class _HomePage extends State<HomePage> {
     versionNum = packageInfo.version;
     buildNum = packageInfo.buildNumber;
     refresh(this);
-
     // Check for new version
     // Link to new version/download new version and install option?
   }
@@ -113,7 +122,7 @@ class _HomePage extends State<HomePage> {
                               onPressed: () async {
 
                                 if(mainTable == null) {
-                                  //mPrint("LOADING TABLE");
+                                  mPrint("LOADING TABLE");
                                   loadingAlert(context);
                                   refresh(this);
 
@@ -158,9 +167,24 @@ class _HomePage extends State<HomePage> {
                               },
                             )
                         ),
+                        rBox(
+                          context,
+                          Colors.black,
+                          TextButton(
+                              child: const Text("TEST TABLE"),
+                              onPressed: (){
+                                if(mainTable != null || mainTable!.rows.isNotEmpty) {
+                                    jobTable = mainTable!.rows;
+                                    goToPage(context, const TableView2(action: ActionType.view), false);
+                                  }
+                                },
+                          ),
+                        ),
+
                         SizedBox(
                           height: MediaQuery.of(context).size.height/40.0,
                         ),
+
                         rBox(
                           context,
                           Colors.redAccent.shade200,
@@ -170,7 +194,7 @@ class _HomePage extends State<HomePage> {
 
                               // Load default if not loaded
                               if(mainTable == null){
-                                //mPrint("LOADING TABLE");
+                                mPrint("LOADING TABLE");
                                 loadingAlert(context);
                                 refresh(this);
 
@@ -212,7 +236,7 @@ class _HomePage extends State<HomePage> {
 }
 
 // App Settings
-class AppSettings extends StatefulWidget{
+class AppSettings extends StatefulWidget {
   const AppSettings({ super.key, });
   @override
   State<AppSettings> createState() => _AppSettings();
@@ -420,7 +444,7 @@ class _LoadSpreadsheet extends State<LoadSpreadsheet> {
     }
     else{
       masterCategory = defCategory();
-      //mPrint("using def categories");
+      mPrint("using def categories");
     }
 
     // Remove header and cell description rows
@@ -587,7 +611,7 @@ class _JobsPage extends State<JobsPage> {
     var spt = path.split("/");
     String str = spt[spt.length - 1];
 
-    if (str.startsWith("job_")){
+    if (str.startsWith(jobStartStr)){
       //String newPath = path;
       bool copyJob = false;
 
@@ -597,7 +621,7 @@ class _JobsPage extends State<JobsPage> {
           copyJob = true;
         }
       }
-      else if(!path.contains("storage/emulated/0/Documents")){
+      else if(!path.contains("/storage/emulated/0/Documents")){
         //newPath = 'storage/emulated/0/Documents/$str';
         copyJob = true;
       }
@@ -608,9 +632,18 @@ class _JobsPage extends State<JobsPage> {
         String fileContent = await jsn.readAsString();
         var dynamic = json.decode(fileContent);
         var j = StockJob.fromJson(dynamic);
-        writeJob(j);
+        writeJob(j, false);
 
-        //mPrint("Job file copied from [ $path ] to [ $newPath ]");
+        // SHOULD BE
+        // Job1234_PiaraWaters_1
+
+        // IF DUPLICATE
+        // Job1234_PiaraWaters_2
+        // Job1234_PiaraWaters_3
+        // and so on
+
+
+        // mPrint("Job file copied from [ $path ] to [ $newPath ]");
       }
     }
 
@@ -624,7 +657,7 @@ class _JobsPage extends State<JobsPage> {
     job = StockJob.fromJson(dynamic);
     job.calcTotal();
 
-    //mPrint("JOB: ${job.id}_${job.name}_${job.date}");
+    //mPrint("JOB: $jobStartStr${job.id}_[x]");
 
     // // REMOVE ME
     // var sp = path.split("_");
@@ -666,7 +699,7 @@ class _JobsPage extends State<JobsPage> {
                       refresh(this);
                     }
                     else{
-                      goToPage(context, StaticTable(dataList: mainTable!.rows, tableType: value as TableType), true);
+                      //goToPage(context, StaticTable(dataList: mainTable!.rows, tableType: value as TableType), true);
                     }
                   }
               ),
@@ -691,7 +724,9 @@ class _JobsPage extends State<JobsPage> {
                                 ),
                                 onTap: () async {
                                   if(access) {
+                                    // jobTable = mainTable!.rows + job.nofList();
                                     await writeSession();
+
 
                                     //String n = shortFilePath(jobList[index]);
                                     // if("job_${job.id}_${job.name}" == n){
@@ -701,6 +736,7 @@ class _JobsPage extends State<JobsPage> {
                                     // }
 
                                     await _readJob(jobList[index]).then((value) {
+                                      jobTable = mainTable!.rows + job.nofList();
                                       goToPage(context, const OpenJob(), true);
                                     });
                                   }
@@ -743,15 +779,20 @@ class _JobsPage extends State<JobsPage> {
                                     child: Text('Load from Storage', style: whiteText),
                                     onPressed: () async{
                                       if(access){
+
+
                                         String path = "";
                                         await pickFile(context).then((String value){
                                           path = value;
                                         });
 
                                         // Check if path is valid
-                                        if(path.isEmpty || path == "null" || !path.contains("job_")){
+                                        if(path.isEmpty || path == "null" || !path.contains(jobStartStr)){
                                           return;
                                         }
+
+                                        mPrint(jobList);
+
                                         if(!jobList.contains(path)){
                                           jobList.add(path);
                                         }
@@ -761,6 +802,7 @@ class _JobsPage extends State<JobsPage> {
                                         // copy job file to documents folder if it is not there
                                         await _copyJobFile(path);
                                         await _readJob(path).then((value) {
+                                          jobTable = mainTable!.rows + job.nofList();
                                           goToPage(context, const OpenJob(), true);
                                         });
                                       }
@@ -773,6 +815,7 @@ class _JobsPage extends State<JobsPage> {
                                             "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'"
                                         );
                                       }
+
                                     },
                                   )
                               )
@@ -833,16 +876,16 @@ class _NewJob extends State<NewJob> {
     nameFocus.unfocus();
   }
 
-  Future<bool> _checkFile(String path) async{
-    // Show confirmation window if job file already exists
-    await File(path).exists().then((value) async{
-      if(value){
-        return await confirmDialog(context, "Job file with the same path already exists! \n\n -> Confirm overwrite?");
-      }
-    });
-
-    return true;
-  }
+  // Future<bool> _checkFile(String path) async{
+  //   // Show confirmation window if job file already exists
+  //   await File(path).exists().then((value) async{
+  //     if(value){
+  //       return await confirmDialog(context, "Job file with the same path already exists! \n\n -> Confirm overwrite?");
+  //     }
+  //   });
+  //
+  //   return true;
+  // }
 
   @override
   void initState() {
@@ -857,7 +900,7 @@ class _NewJob extends State<NewJob> {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          resizeToAvoidBottomInset: false,
+          //resizeToAvoidBottomInset: false,
           appBar: AppBar(
             centerTitle: true,
             title: const Text("New Job"),
@@ -919,34 +962,35 @@ class _NewJob extends State<NewJob> {
                                 newJob.id = idCtrl.text;
                                 newJob.name = nameCtrl.text;
                                 newJob.date = "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}";
-                                String date = newJob.date.replaceAll("_", "");
-                                String path = "storage/emulated/0/Documents/job_${newJob.id}_${newJob.name}_$date";
+                                //String date = newJob.date.replaceAll("_", "");
+                                String path = "/storage/emulated/0/Documents/$jobStartStr${newJob.id}_0";
 
-                                await _checkFile(path).then((value){
-                                  if(value){
-                                    writeJob(newJob);
+                                // Do not overwrite any other existing jobs
+                                writeJob(newJob, false);
 
-                                    job = newJob;
-                                    job.calcTotal();
+                                job = newJob;
+                                job.calcTotal();
 
-                                    // manually check through job list?
-                                    for(int i = 0; i < jobList.length; i++)
-                                    {
-                                      var s = jobList[i].split("_");
-                                      if(s.contains(newJob.id) && s.contains(newJob.name) && s.contains(date)){
-                                        break;
-                                      }
+                                if(!jobList.contains(path)){
+                                  jobList.add(path);
+                                }
 
-                                      if(i >= jobList.length-1){
-                                        jobList.add(path);
-                                      }
-                                    }
+                                // // manually check through job list?
+                                // for(int i = 0; i < jobList.length; i++)
+                                // {
+                                //   if (jobList[i] == path){
+                                //     break;
+                                //   }
+                                //
+                                //   if(i >= jobList.length-1){
+                                //     jobList.add(path);
+                                //   }
+                                // }
 
-                                    showNotification(context, colorOk, whiteText, "Job Created", "* Save path: $path");
-                                    goToPage(context, const OpenJob(), true);
-                                  }
-                                });
-                              },
+                                //showNotification(context, colorOk, whiteText, "Job Created", "* Save path: $path");
+                                jobTable = mainTable!.rows;
+                                goToPage(context, const OpenJob(), true);
+                                },
                             )
                         ),
                         rBox(
@@ -1007,13 +1051,13 @@ class OpenJob extends StatelessWidget {
                 },
                 onSelected: (value) {
                   if(value == TableType.literal){
-                    goToPage(context, StaticTable(dataList: job.literalList(), tableType: value), true);
+                    //goToPage(context, StaticTable(dataList: job.literalList(), tableType: value), true);
                   }
                   else if (value == TableType.linear){
-                    goToPage(context, StaticTable(dataList: job.linearList(), tableType: value), true);
+                    //goToPage(context, StaticTable(dataList: job.linearList(), tableType: value), true);
                   }
                   else if(value == TableType.full){
-                    goToPage(context, StaticTable(dataList: mainTable!.rows + job.nofList(), tableType: value), true);
+                    //goToPage(context, StaticTable(dataList: jobTable, tableType: value), true);
                   }
                 }
             ),
@@ -1042,7 +1086,7 @@ class OpenJob extends StatelessWidget {
                               TextButton(
                                 child: Text('Stocktake', style: whiteText),
                                 onPressed: () {
-                                  if(mainTable == null || mainTable!.rows.isEmpty){
+                                  if(jobTable.isEmpty){
                                     showAlert(context, "Alert", "No spreadsheet data!\n* Press 'Sync with Server' to get latest MASTER SHEET. \n*You can also load a spreadsheet file from storage via the Settings page", colorOk);
                                   }
                                   else{
@@ -1057,7 +1101,7 @@ class OpenJob extends StatelessWidget {
                               TextButton(
                                 child: Text('Export Spreadsheet', style: whiteText),
                                 onPressed: () {
-                                  goToPage(context, StaticTable(dataList: job.getFinalSheet(), tableType: TableType.export), true);
+                                  goToPage(context, const StaticTable(tableType: TableType.export), true);
                                 },
                               )
                           ),
@@ -1067,9 +1111,9 @@ class OpenJob extends StatelessWidget {
                               TextButton(
                                 child: Text('Save Job', style: whiteText),
                                 onPressed: () async {
-                                  await writeJob(job).then((value){
-                                    String date = job.date.replaceAll("_", "");
-                                    showAlert(context, "Job Saved", "Save path: \n /Documents/job_${job.id}_${job.name}_$date", Colors.orange);
+                                  await writeJob(job, true).then((value){
+                                    // String date = job.date.replaceAll("_", "");
+                                    showAlert(context, "Job Saved", "Save path: \n /Documents/$jobStartStr${job.id}...", Colors.orange);
                                   });
                                 },
                               )
@@ -1094,7 +1138,7 @@ class OpenJob extends StatelessWidget {
                           TextButton(
                             child: Text('Close Job', style: whiteText),
                             onPressed: () async {
-                              await writeJob(job).then((value){
+                              await writeJob(job, true).then((value){
                                 goToPage(context, const JobsPage(), true);
                               });
                             },
@@ -1110,21 +1154,35 @@ class OpenJob extends StatelessWidget {
 }
 
 // Stocktake
-class Stocktake extends StatelessWidget{
+class Stocktake extends StatelessWidget {
   const Stocktake({super.key});
 
-  Map<String, dynamic> _blankItem(){
-    return {
-      "index" : 0,
-      "barcode" : 0,
-      "category" : "MISC",
-      "description" : "",
-      "uom" : "EACH",
-      "price" : 0.0,
-      "count" : 0.0,
-      "location" : job.location.isEmpty ? "LOCATION1" : job.location,
-      "nof" : true,
-    };
+  // Map<String, dynamic> _blankItem(){
+  //   return {
+  //     "index" : 0,
+  //     "barcode" : 0,
+  //     "category" : "MISC",
+  //     "description" : "",
+  //     "uom" : "EACH",
+  //     "price" : 0.0,
+  //     "count" : 0.0,
+  //     "location" : job.location.isEmpty ? "LOCATION1" : job.location,
+  //     "nof" : true,
+  //   };
+  // }
+
+  List<dynamic> _blankItem(){
+    return[
+      0,
+      0,
+      "MISC",
+      "",
+      "EACH",
+      0.0,
+      0.0,
+      job.location.isEmpty ? "LOCATION1" : job.location,
+      true,
+    ];
   }
 
   @override
@@ -1182,17 +1240,9 @@ class Stocktake extends StatelessWidget{
                             child: Text('Search Item', style: whiteText),
                             onPressed: () {
                               if (job.location.isNotEmpty) {
-                                goToPage(
-                                    context,
-                                    DynamicTable(tableType: TableType.search, action: ActionType.add),
-                                    true // animate
-                                );
+                                goToPage(context, const TableView2(action: ActionType.add), false);
                               } else {
-                                showAlert(context,
-                                    "Alert",
-                                    'Create and set location before adding items.',
-                                    Colors.red.withOpacity(0.8)
-                                );
+                                showAlert(context, "Alert", 'Create and set location before adding items.', Colors.red.withOpacity(0.8));
                               }
                             },
                           )
@@ -1203,7 +1253,10 @@ class Stocktake extends StatelessWidget{
                           TextButton(
                             child: Text('Add NOF', style: whiteText),
                             onPressed: () {
-                              goToPage(context, StockItem(item: _blankItem(), action: ActionType.addNOF, index: -1,), false);
+                              addNOF(context);
+                              //itemViewer(context, _blankItem(), ActionType.addNOF, 0);
+                              //
+                              // goToPage(context, StockItem(item: _blankItem(), action: ActionType.addNOF, index: -1,), false);
                             },
                           )
                       ),
@@ -1213,14 +1266,13 @@ class Stocktake extends StatelessWidget{
                           TextButton(
                             child: Text('Edit Stocktake', style: whiteText),
                             onPressed: () {
-                              job.literals.isNotEmpty ? goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), true)
-                                  : showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
+                              job.literals.isNotEmpty ? goToPage(context, const TableView2(action: ActionType.edit), false) : showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
+                              // goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), true)
                             },
                           )
                       ),
                     ]
-                )
-            ),
+                )),
             ),
             bottomSheet: SingleChildScrollView(
                 child: Center(
@@ -1246,13 +1298,13 @@ class Stocktake extends StatelessWidget{
 }
 
 // Scan Item
-class ScanItem extends StatefulWidget{
+class ScanItem extends StatefulWidget {
   const ScanItem({super.key});
 
   @override
   State<ScanItem> createState() => _ScanItem();
 }
-class _ScanItem extends State<ScanItem>{
+class _ScanItem extends State<ScanItem> {
   TextEditingController searchCtrl= TextEditingController();
   FocusNode searchFocus = FocusNode();
   TextEditingController countCtrl = TextEditingController();
@@ -1595,7 +1647,7 @@ class _Location extends State<Location> {
       ),
     );
 
-    //mPrint(newText);
+    mPrint(newText);
     return newText;
   }
 
@@ -1716,65 +1768,66 @@ class _Location extends State<Location> {
   }
 }
 
-// StockItem
-class StockItem extends StatefulWidget {
-  final Map<String,dynamic> item;
+// TableView2
+class TableView2 extends StatefulWidget {
   final ActionType action;
-  final int index;
-
-  const StockItem({
+  const TableView2({
     super.key,
-    required this.item,
     required this.action,
-    required this.index,
   });
 
   @override
-  State<StockItem> createState() => _StockItem();
+  State<TableView2>  createState() => _TableView2();
 }
-class _StockItem extends State<StockItem>{
-  TextEditingController uomCtrl = TextEditingController();
-  var uomFocus = FocusNode();
+class _TableView2 extends State<TableView2> {
   TextEditingController barcodeCtrl = TextEditingController();
   var barcodeFocus = FocusNode();
-  TextEditingController descriptionCtrl = TextEditingController();
-  var descriptionFocus = FocusNode();
   TextEditingController priceCtrl = TextEditingController();
   var priceFocus = FocusNode();
+  TextEditingController descriptionCtrl = TextEditingController();
+  var descriptionFocus = FocusNode();
+  TextEditingController uomCtrl = TextEditingController();
+  var uomFocus = FocusNode();
   TextEditingController countCtrl = TextEditingController();
   var countFocus = FocusNode();
   TextEditingController locationCtrl = TextEditingController();
   var locationFocus = FocusNode();
-
   String categoryValue = "MISC";
-  late double keyboardHeight;
 
-  bool isEditing = false;
+  List<List<dynamic>> filterList = List.empty(growable: true);
+  TextEditingController searchCtrl = TextEditingController();
+  var searchFocus = FocusNode();
+  int pageLength = 20;
+  double keyboardHeight = 20.0;
+  final int iIndex = 0;
+  final int barcode = 1;
+  final int category = 2;
+  final int description = 3;
+  final int uom = 4;
+  final int price = 5;
+  final int iCount = 6;
+  final int location = 7;
 
   @override
   void initState() {
     super.initState();
-    _clearFocus();
-
-    barcodeCtrl.text = widget.item['barcode'].toString().toUpperCase();
-
-    String catCheck = widget.item['category'].toString().toUpperCase();
-    categoryValue = catCheck != "NULL" ? catCheck : "MISC";
-
-    descriptionCtrl.text = widget.item['description'];
-
-    String uomCheck = widget.item['uom'].toString().toUpperCase();
-    uomCtrl.text = uomCheck != "NULL" ? uomCheck : "EACH";
-
-    priceCtrl.text = widget.item['price'].toString();
-    countCtrl.text = widget.item['count'].toString();
-    locationCtrl.text = widget.item['location'].toString();
-    //isNof = widget.item['nof'];
-
-    isEditing = widget.action == ActionType.addNOF || widget.action == ActionType.edit;
+    filterList = widget.action == ActionType.edit ? job.literalList() : jobTable;
   }
 
-  _clearFocus(){
+  setText(var item){
+    clearFocus();
+    barcodeCtrl.text = item[barcode].toString().toUpperCase();
+    String catCheck = item[category].toString().toUpperCase();
+    categoryValue = catCheck != "NULL" ? catCheck : "MISC";
+    descriptionCtrl.text = item[description];
+    String uomCheck = item[uom].toString().toUpperCase();
+    uomCtrl.text = uomCheck != "NULL" ? uomCheck : "EACH";
+    priceCtrl.text = item[price].toString();
+    countCtrl.text = widget.action == ActionType.edit ? item[iCount].toString() : "0.0";
+    locationCtrl.text = widget.action == ActionType.edit ? item[location].toString() : job.location;
+  }
+
+  void clearFocus(){
     uomFocus.unfocus();
     barcodeFocus.unfocus();
     descriptionFocus.unfocus();
@@ -1783,607 +1836,49 @@ class _StockItem extends State<StockItem>{
     locationFocus.unfocus();
   }
 
-  _actionsEdit(){
-    return [
-      // DELETE item
-      GestureDetector(
-          onTapDown: (_) => _clearFocus(),
-          child: IconButton(
-              icon: const Icon(Icons.delete_forever_sharp),
-              onPressed: () async {
-                _clearFocus();
-                await confirmDialog(context, "Remove Item from stock count?").then((bool value2) async{
-                  if(value2){
-                    job.literals.removeAt(widget.index);
-                    job.calcTotal();
-                    showNotification(context, colorWarning.withOpacity(0.8), whiteText, "", "Item at table index [${widget.index}] was removed.");
-                    goToPage(context, job.literals.isNotEmpty ? DynamicTable(tableType: TableType.literal, action: ActionType.edit) : const Stocktake(), false);
-                  }
-                });
-              }
-          )
-      ),
-    ];
-  }
-
-  _addItem(){
-    return <Widget>[
-      headerPadding("Description:", TextAlign.left),
-      Padding(
-        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-        child: Card(
-            child: ListTile(
-              title: Text(widget.item["description"]),
-            )
-        ),
-      ),
-
-      headerPadding("Location:", TextAlign.left),
-      _editLocation(),
-
-      headerPadding("Count:", TextAlign.left),
-      _editCount(),
-
-      SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height / 10.0,
-      ),
-
-      GestureDetector(
-          onTapDown: (_) => _clearFocus(),
-          child: Center(
-            child: rBox(
-                context,
-                colorOk,
-                TextButton(
-                    child: Text('Add Item', style: whiteText),
-                    onPressed: () {
-                      double count = double.parse(countCtrl.text);
-                      if(count <= 0){
-                        showNotification(context, colorWarning, whiteText, "Cannot add zero (0) items","",);
-                        return;
-                      }
-
-                      var item = widget.item;
-                      item['count'] = count;
-                      item['location'] = locationCtrl.text;
-
-                      job.literals.add(item);
-                      job.calcTotal();
-
-                      showNotification(context, colorOk, whiteText, "Item Added:", " ${item['description']}\n Count: ${countCtrl.text}");
-                      Navigator.pop(context);
-                    }
-                )
-            ),
-          )
-      ),
-      _backBtn(),
-    ];
-  }
-
-  _addNOF(){
-    int newIndex =mainTable!.maxRows + job.nof.length;
-    var nofItem = {
-      "index" : newIndex,
-      "barcode" : barcodeCtrl.text,
-      "category" : categoryValue,
-      "description" : descriptionCtrl.text,
-      "uom" : uomCtrl.text,
-      "unit" : 1.0,
-      "price" : double.parse(priceCtrl.text),
-      "nof" : true,
-    };
-
-    if(job.newNOF(nofItem)){
-      job.nof.add(nofItem);
-    }
-
-    if(double.parse(countCtrl.text) > 0){
-      var item = {
-        "index" : newIndex,
-        "barcode" : barcodeCtrl.text,
-        "category" : categoryValue,
-        "description" : descriptionCtrl.text,
-        "uom" : uomCtrl.text,
-        "price" : double.parse(priceCtrl.text),
-        "count" : double.parse(countCtrl.text),
-        "location" : locationCtrl.text,
-        "nof" : true,
-      };
-
-      job.literals.add(item);
-      job.calcTotal();
-    }
-
-    showNotification(context, colorOk, whiteText, "NOF Added", "${descriptionCtrl.text} \nCount: ${countCtrl.text}");
-    goToPage(context, const Stocktake(), true);
-  }
-
-  _editItem(){
-    return <Widget>[
-      headerPadding("Barcode:", TextAlign.left),
-      _editBarcode(),
-      headerPadding("Category:", TextAlign.left),
-      _editCategory(),
-      headerPadding("Description:", TextAlign.left),
-      _editDescription(),
-      headerPadding("UOM:", TextAlign.left),
-      _editUOM(),
-      headerPadding("Price:", TextAlign.left),
-      _editPrice(),
-      headerPadding("Location:", TextAlign.left),
-      _editLocation(),
-      headerPadding("Count:", TextAlign.left),
-      _editCount(),
-
-      SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height / 10.0,
-      ),
-
-      GestureDetector(
-          onTapDown: (_) => _clearFocus(),
-          child: Center(
-            child: rBox(
-                context,
-                colorOk,
-                TextButton(
-                    child: Text(widget.action == ActionType.edit ? 'Save Changes' : "Add NOF", style: whiteText),
-                    onPressed: () async {
-                      _clearFocus();
-
-                      locationCtrl.text = locationCtrl.text.isEmpty ? "LOCATION1" : locationCtrl.text;
-                      descriptionCtrl.text = descriptionCtrl.text.isEmpty ? "NO DESCRIPTION" : descriptionCtrl.text;
-
-                      // ADD NOF
-                      if(widget.action == ActionType.addNOF){
-                        _addNOF();
-                      }
-                      // SAVE EDIT
-                      if (widget.action == ActionType.edit){
-                        _saveEdit();
-                      }
-                    }
-                )
-            ),
-          )
-      ),
-      _backBtn(),
-    ];
-  }
-
-  _editLocation(){
-    return GestureDetector(
-        onTapDown: (_) => _clearFocus(),
-        child: Padding(
-            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-            child: Card(
-              child: ListTile(
-                title: TextField(
-                  scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-                  controller: locationCtrl,
-                  focusNode: locationFocus,
-                  textAlign: TextAlign.center,
-                  keyboardType: TextInputType.name,
-                  onChanged: (value){
-                    locationCtrl.value = TextEditingValue(text: value.toUpperCase(), selection: locationCtrl.selection);
-                  },
-                ),
-              ),
-            )
-        )
-    );
-  }
-
-  _editCount(){
-    return Padding(
-        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-        child: Card(
-            child: ListTile(
-              trailing: IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: () {
-                  _clearFocus();
-                  double count = double.parse(countCtrl.text) + 1;
-                  countCtrl.text = count.toString();
-                  refresh(this);
-                },
-              ),
-              title: TextField(
-                scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-                controller: countCtrl,
-                focusNode: countFocus,
-                textAlign: TextAlign.center,
-                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: () {
-                  _clearFocus();
-                  double count = double.parse(countCtrl.text) - 1.0;
-                  countCtrl.text = max(count, 0).toString();
-                  refresh(this);
-                },
-              ),
-            )
-        )
-    );
-  }
-
-  _editBarcode(){
-    return Padding(
-      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-      child: Card(
-          child: ListTile(
-            title: TextField(
-              scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-              decoration: const InputDecoration(hintText: 'e.g 123456789', border: InputBorder.none),
-              controller: barcodeCtrl,
-              focusNode: barcodeFocus,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-          )
-      ),
-    );
-  }
-
-  _editCategory(){
-    return GestureDetector(
-        onTapDown: (_) => _clearFocus(),
-        child: Padding(
-          padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-          child: Card(
-            child: DropdownButton(
-              value: categoryValue,
-              isExpanded: true,
-              menuMaxHeight: MediaQuery.of(context).size.height/2.0,
-              icon: const Icon(Icons.keyboard_arrow_down),
-              items: masterCategory.map((String items) {
-                return DropdownMenuItem(
-                  value: items,
-                  child: Center(
-                      child: Text(items, textAlign: TextAlign.center,)
-                  ),
-                );}).toList(),
-
-              onChanged: (String? newValue) {
-                setState(() {
-                  categoryValue = newValue!;
-                });
-              },
-            ),
-          ),
-        )
-    );
-  }
-
-  _editDescription(){
-    return Padding(
-      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-      child: Card(
-          child: ListTile(
-            title: TextField(
-              scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-              decoration: const InputDecoration(hintText: 'E.g. PETERS I/CREAM VAN 1L', border: InputBorder.none),
-              controller: descriptionCtrl,
-              focusNode: descriptionFocus,
-              keyboardType: TextInputType.name,
-              onChanged: (value){
-                descriptionCtrl.value = TextEditingValue(text: value.toUpperCase(), selection: descriptionCtrl.selection);
-              },
-            ),
-          )
-      ),
-    );
-  }
-
-  _editUOM(){
-    return Padding(
-      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-      child: Card(
-          child: ListTile(
-            title: TextField(
-              scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-              decoration: const InputDecoration(hintText: 'E.g. EACH, 24 PACK, 1.5 L', border: InputBorder.none),
-              controller: uomCtrl,
-              focusNode: uomFocus,
-              keyboardType: TextInputType.name,
-              onChanged: (value){
-                uomCtrl.value = TextEditingValue(text: value.toUpperCase(), selection: uomCtrl.selection);
-              },
-            ),
-          )
-      ),
-    );
-  }
-
-  _editPrice(){
-    return Padding(
-      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-      child: Card(
-          child: ListTile(
-            title: TextField(
-              scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
-              controller: priceCtrl,
-              focusNode: priceFocus,
-              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-            ),
-          )
-      ),
-    );
-  }
-
-  _saveEdit() async{
-    if(double.parse(countCtrl.text) <= 0){
-      await confirmDialog(context, "Item count is <= 0\n -> Remove item from stocktake?").then((bool value) async{
-        if(value){
-          job.literals.removeAt(widget.index);
-          job.calcTotal();
-          showNotification(context, colorWarning.withOpacity(0.8), whiteText, "", "Item at table index [${widget.index}] was removed.");
-          goToPage(context, job.literals.isNotEmpty ? DynamicTable(tableType: TableType.literal, action: ActionType.edit) : const Stocktake(), false);
-        }
-      });
-    }
-    else{
-      await confirmDialog(context, "Confirm changes to stock item?").then((bool value) async {
-        if (value) {
-
-          job.literals[widget.index] = {
-            "index" : widget.item['index'],
-            "barcode" : barcodeCtrl.text,
-            "category" : categoryValue,
-            "description" : descriptionCtrl.text,
-            "uom" : uomCtrl.text,
-            "price" : double.parse(priceCtrl.text),
-            "count" : double.parse(countCtrl.text),
-            "location" : locationCtrl.text,
-            "nof" : widget.item['nof'],
-          };
-
-          job.calcTotal();
-
-          // Add location to list if it doesn't exist
-          if(!job.allLocations.contains(locationCtrl.text)){
-            job.allLocations.add(locationCtrl.text);
-          }
-
-          goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
-
-          // Ask to apply changes to other items with same index?
-          // Automatically create a new NOF?
-        }
-      });
-    }
-  }
-
-  _backBtn(){
-    return GestureDetector(
-        onTapDown: (_) => _clearFocus(),
-        child:Center(
-            child: rBox(
-              context,
-              colorBack,
-              TextButton(
-                child: Text('Cancel', style: whiteText),
-                onPressed: () async {
-                  if(widget.action == ActionType.edit){
-                    goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), false);
-                  }
-                  else if(widget.action == ActionType.addNOF) {
-                    goToPage(context, const Stocktake(), false);
-                  }
-                  else{
-                    //if(widget.itemType == ItemType.view) {
-                    //if(widget.itemType == ItemType.add) {
-                    Navigator.pop(context);
-                    // go back to last page?
-                  }
-                },
-              ),
-            )
-        )
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
-    return WillPopScope(
-        onWillPop: () async => false,
-        child: Scaffold(
-            resizeToAvoidBottomInset: true,
-            appBar: AppBar(
-              centerTitle: true,
-              title: const Text("Stock Item Details"),
-              automaticallyImplyLeading: false,
-              actions: isEditing ? _actionsEdit() : [],
-            ),
-            body: GestureDetector(
-                onTapDown: (_) => _clearFocus(),
-                child:SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: isEditing ? _editItem() : _addItem(),
-                    )
-                )
-            )
-        )
-    );
-  }
-}
-
-// Static Table
-class StaticTable extends StatelessWidget {
-  final TableType tableType;
-  final List dataList;
-
-  const StaticTable({
-    super.key,
-    required this.tableType,
-    required this.dataList,
-  });
-
-  getIndex() {
-    return -1;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-        onWillPop: () async => false,
-        child: Scaffold(
-            appBar: AppBar(
-              centerTitle: true,
-              title: Text("Spreadsheet View: ${job.id}", textAlign: TextAlign.center),
-              automaticallyImplyLeading: false,
-            ),
-            body: Center(
-                child: Column(
-                    children: [
-                      Expanded(
-                          child: SingleChildScrollView(
-                            child: PaginatedDataTable(
-                              sortColumnIndex: 0,
-                              sortAscending: true,
-                              showCheckboxColumn: false,
-                              showFirstLastButtons: true,
-                              rowsPerPage: sFile["pageCount"],
-                              controller: ScrollController(),
-                              columns: getColumns(tableType,MediaQuery.of(context).size.width),
-                              source: RowSource(parent: this, dataList: dataList, type: tableType),
-                            ),
-                          )
-                      ),
-                      Center(
-                          child: Column(
-                              children: [
-                                tableType == TableType.export ?
-                                rBox(
-                                    context,
-                                    Colors.blue,
-                                    TextButton(
-                                      child: Text('Export Spreadsheet', style: whiteText),
-                                      onPressed: () async {
-                                        exportJobToXLSX(job.getFinalSheet());
-                                        showAlert(context, "Job Export", "Stocktake exported to: /Documents/stocktake_${job.id}.xlsx", Colors.orange);
-                                        //showNotification(context, Colors.orange, whiteText, 'Exported Spreadsheet', '* Save Path: stocktake_${job.id}');
-                                      },
-                                    )
-                                ) :  Container(),
-                                rBox(
-                                    context,
-                                    colorBack,
-                                    TextButton(
-                                      child: Text("Back", style: whiteText),
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                    )
-                                )
-                              ]
-                          )
-                      )
-                    ]
-                )
-            )
-        )
-    );
-  }
-}
-
-// Dynamic Table
-class DynamicTable extends StatefulWidget{
-  final TableType tableType;
-  final ActionType action;
-  final tableKey = GlobalKey<PaginatedDataTableState>();
-
-  DynamicTable({
-    super.key,
-    required this.tableType,
-    required this.action,
-  });
-
-  @override
-  State<DynamicTable> createState() => _DynamicTable();
-}
-class _DynamicTable extends State<DynamicTable>{
-  late List<List<dynamic>> dataList;
-  List<List<dynamic>> filterList = [[]];
-  TextEditingController searchCtrl = TextEditingController();
-  var textFocus = FocusNode();
-  var filters = [true, false, false];
-  late int selectIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    selectIndex = -1;
-
-    // Get dataList
-    switch(widget.tableType){
-      case TableType.literal:
-        dataList = job.literalList();
-        break;
-      case TableType.linear:
-        dataList = job.linearList();
-        break;
-      case TableType.full:
-        dataList = mainTable!.rows + job.nofList();
-        break;
-      case TableType.search:
-        dataList = mainTable!.rows + job.nofList();
-        break;
-      default:
-        dataList = mainTable!.rows;
-        break;
-    }
-
-    filterList = dataList;
-  }
-
   bool _findWord(String word, String search) {
     return word.split(' ').where((s) => s.isNotEmpty).toList().contains(search);
   }
 
-  _searchList(){
+  Widget _searchList() {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.search),
         title: TextField(
             controller: searchCtrl,
-            focusNode: textFocus,
-            decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none),
+            focusNode: searchFocus,
+            decoration: const InputDecoration(
+                hintText: 'Search', border: InputBorder.none),
             onChanged: (String value) {
-              widget.tableKey.currentState?.pageTo(0);
-              if(value.isEmpty){
-                filterList = dataList;
+              if (value.isEmpty) {
+                filterList = widget.action == ActionType.edit ? job.literalList() : jobTable;
                 refresh(this);
                 return;
               }
 
               String search = value.toUpperCase();
-              List<String> searchWords = search.split(' ').where((s) => s.isNotEmpty).toList();
+              List<String> searchWords = search.split(' ').where((s) =>
+              s.isNotEmpty).toList();
 
               bool found = false;
-              for(int i = 0; i < searchWords.length; i++){
-                if(!found){
+              for (int i = 0; i < searchWords.length; i++) {
+                if (!found) {
                   // Return filtered list of MASTER SHEET items that match the search string
-                  var first = dataList.where((List<dynamic> column) => _findWord(column[3], searchWords[i])).toList();
-                  if(first.isNotEmpty){
+                  var first = (widget.action == ActionType.edit ? job.literalList() : jobTable).where((List<dynamic> column) =>
+                      _findWord(column[3], searchWords[i])).toList();
+                  if (first.isNotEmpty) {
                     filterList = first;
                     found = true;
                   }
-                  else{
-                    filterList = dataList;
+                  else {
+                    filterList = widget.action == ActionType.edit ? job.literalList() : jobTable;
                   }
                 }
-                else{
+                else {
                   // Check remaining search strings and return a refined search list
-                  var refined = filterList.where((List<dynamic> column) => _findWord(column[3], searchWords[i])).toList();
-                  if(refined.isNotEmpty){
+                  var refined = filterList.where((List<dynamic> column) =>
+                      _findWord(column[3], searchWords[i])).toList();
+                  if (refined.isNotEmpty) {
                     filterList = refined;
                   }
                 }
@@ -2396,286 +1891,794 @@ class _DynamicTable extends State<DynamicTable>{
     );
   }
 
-  setIndex(int selectIndex) {
-    //masterIndex = filterList[listIndex][0]; // position of the item in the MainList
-    this.selectIndex = selectIndex; // position of selection on screen
-    //mPrint("SELECT INDEX: $selectIndex");
-    //if(selectIndex != -1){
-    //  mPrint(filterList[selectIndex].toString());
-   // }
-    textFocus.unfocus();
-    refresh(this);
+  Widget editCount() {
+    return Padding(
+        padding: const EdgeInsets.only(
+            left: 15.0, right: 15.0, top: 0, bottom: 5),
+        child: Card(
+            child: ListTile(
+              trailing: IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () {
+                  clearFocus();
+                  double count = double.parse(countCtrl.text) + 1;
+                  countCtrl.text = count.toString();
+                  // refresh(this);
+                },
+              ),
+              title: TextField(
+                //scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
+                controller: countCtrl,
+                focusNode: countFocus,
+                textAlign: TextAlign.center,
+                keyboardType: const TextInputType.numberWithOptions(
+                    signed: false, decimal: true),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: () {
+                  clearFocus();
+                  double count = double.parse(countCtrl.text) - 1.0;
+                  countCtrl.text = max(count, 0.0).toString();
+                  // refresh(this);
+                },
+              ),
+            )
+        )
+    );
+  }
+
+  Widget editCategory() {
+    return GestureDetector(
+        onTapDown: (_) => clearFocus(),
+        child: Padding(
+          padding: const EdgeInsets.only(
+              left: 15.0, right: 15.0, top: 0, bottom: 5),
+          child: Card(
+            child: DropdownButton(
+              value: categoryValue,
+              isExpanded: true,
+              menuMaxHeight: MediaQuery.of(context).size.height / 2.0,
+              icon: const Icon(Icons.keyboard_arrow_down),
+              items: masterCategory.map((String items) {
+                return DropdownMenuItem(
+                  value: items,
+                  child: Center(
+                      child: Text(items, textAlign: TextAlign.center,)
+                  ),
+                );
+              }).toList(),
+
+              onChanged: (String? newValue) {
+                categoryValue = newValue!;
+                // setState(() {
+                //   categoryValue = newValue!;
+                // });
+              },
+            ),
+          ),
+        )
+    );
+  }
+
+  Widget titlePadding(String title, TextAlign l){
+    return Padding(
+        padding: const EdgeInsets.only(top: 15.0),
+        child: DefaultTextStyle(
+          style: blueText,
+          child: Text(title, textAlign: l),
+        )
+    );
+  }
+
+  confirmEdit(int index) async{
+    List<dynamic> item = filterList[index];
+    if (double.parse(countCtrl.text) <= 0) {
+      await confirmDialog(context, "Item count is <= 0\n -> Remove item from stocktake?").then((bool value) async {
+        if (value) {
+          job.literals.removeAt(index);
+          job.calcTotal();
+          refresh(this);
+          Navigator.pop(context);
+          //showNotification(context, colorWarning.withOpacity(0.8), whiteText, "", "Item at table index [$index] was removed.");
+          //goToPage(context, job.literals.isNotEmpty ? const TableView2(action: ActionType.edit) : const Stocktake(), false);
+        }
+      });
+    }
+    else {
+      await confirmDialog(context, "Confirm changes to stock item?").then((
+          bool value) async {
+        if (value) {
+          job.literals[index] = {
+            "index": item[iIndex],
+            "barcode": barcodeCtrl.text,
+            "category": categoryValue,
+            "description": descriptionCtrl.text,
+            "uom": uomCtrl.text,
+            "price": double.parse(priceCtrl.text),
+            "count": double.parse(countCtrl.text),
+            "location": locationCtrl.text,
+            "nof": item[7], //nof
+          };
+
+          job.calcTotal();
+
+          // Add location to list if it doesn't exist
+          if (!job.allLocations.contains(locationCtrl.text)) {
+            job.allLocations.add(locationCtrl.text);
+          }
+
+          Navigator.pop(context);
+
+          //Navigator.pop(context);
+          //refresh(context);
+
+          //goToPage(context, TableView2(tableType: TableType.literal, action: ActionType.edit), false);
+          // Ask to apply changes to other items with same index?
+          // Automatically create a new NOF?
+        }
+      });
+    }
+  }
+
+  editFields(int index) {
+    return <Widget>[
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height/20.0,
+      ),
+
+      titlePadding("Barcode:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(barcodeCtrl, barcodeFocus, '00000',keyboardHeight)
+      ),
+
+      titlePadding("Category:", TextAlign.left),
+      editCategory(),
+
+      titlePadding("Description:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(descriptionCtrl, descriptionFocus, 'E.G. PETERS I/CREAM VAN 1L',keyboardHeight)
+      ),
+
+      titlePadding("UOM:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(uomCtrl, uomFocus, 'EACH',keyboardHeight)
+      ),
+
+      titlePadding("Price:", TextAlign.left),
+      Padding(
+        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+        child: Card(
+            child: ListTile(
+              title: TextField(
+                controller: priceCtrl,
+                focusNode: priceFocus,
+                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+              ),
+            )
+        ),
+      ),
+
+      titlePadding("Location:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(locationCtrl, locationFocus, '', keyboardHeight)
+      ),
+
+      titlePadding("Count:", TextAlign.left),
+      editCount(),
+
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height / 10.0,
+      ),
+
+      rBox(
+          context,
+          colorOk,
+          TextButton(
+            child: Text('Confirm', style: whiteText),
+            onPressed: () async{
+              // if(widget.action == ActionType.addNOF){
+              //   confirmNOF();
+              // }
+              // else{
+              await confirmEdit(index).then((value){
+                refresh(this);
+                var s = filterList[index];
+                mPrint(s[6]);
+              });
+            },
+          )
+      ),
+
+      rBox(
+          context,
+          colorBack,
+          TextButton(
+            child: Text('Cancel', style: whiteText),
+            onPressed: (){
+              Navigator.pop(context);
+            },
+          )
+      ),
+    ];
+  }
+
+  addFields(var item){
+    return <Widget>[
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height/20.0,
+      ),
+
+      titlePadding("Description:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[description], style: rText),
+          )
+      ),
+      titlePadding("Category:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[category] ?? 'MISC', style: rText),
+          )
+      ),
+      titlePadding("UOM:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[uom] ?? "EACH", style: rText),
+          )
+      ),
+
+      titlePadding("Location:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(locationCtrl, locationFocus, '', keyboardHeight)
+      ),
+
+      titlePadding("Count:", TextAlign.left),
+      editCount(),
+
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height / 10.0,
+      ),
+
+      rBox(
+          context,
+          colorOk,
+          TextButton(
+            child: Text('Confirm', style: whiteText),
+            onPressed: (){
+              double count = double.parse(countCtrl.text);
+              if(count <= 0){
+                showAlert(context, "", "Cannot add zero (0) items", colorWarning);
+                // showNotification(context, colorWarning, whiteText, "Cannot add zero (0) items","",);
+                return;
+              }
+
+              var a = rowToItem(item, false);
+              a['count'] = count;
+              a['location'] = locationCtrl.text;
+              job.literals.add(a);
+              job.calcTotal();
+              Navigator.pop(context);
+            },
+          )
+      ),
+
+      rBox(
+          context,
+          colorBack,
+          TextButton(
+            child: Text('Cancel', style: whiteText),
+            onPressed: (){
+              Navigator.pop(context);
+            },
+          )
+      ),
+    ];
+  }
+
+  viewFields(var item){
+    return <Widget>[
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height/20.0,
+      ),
+
+      titlePadding("Description:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[description], style: rText),
+          )
+      ),
+
+      titlePadding("Barcode:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[barcode] ?? '0', style: rText),
+          )
+      ),
+
+      titlePadding("Category:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[category] ?? 'MISC', style: rText),
+          )
+      ),
+
+      titlePadding("UOM:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[uom], style: rText),
+          )
+      ),
+
+      titlePadding("Price:", TextAlign.left),
+      Card(
+          child: ListTile(
+            title: Text(item[price].toString(), style: rText),
+          )
+      ),
+
+      // headerPadding("Location:", TextAlign.left),
+      // GestureDetector(
+      //     onTapDown: (_) => clearFocus(),
+      //     child: editTextField(locationCtrl, locationFocus, '')
+      // ),
+
+      // titlePadding("Count:", TextAlign.left),
+      // editCount(),
+
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height / 20.0,
+      ),
+
+      Padding(
+        padding: const EdgeInsets.only(top: 15),
+        child: SizedBox.expand(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('Confirm'),
+          ),
+        ),
+      ),
+
+      Padding(
+        padding: const EdgeInsets.only(top: 15),
+        child: SizedBox.expand(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+            onPressed: (){
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
+        ),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-        onWillPop: () async => false,
-        child: Scaffold(
-          resizeToAvoidBottomInset: false,
-          appBar: AppBar(
-            centerTitle: true,
-            title: Text("Spreadsheet View: ${job.id}", textAlign: TextAlign.center),
-            automaticallyImplyLeading: false,
-          ),
+    //keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
+    var size = MediaQuery.of(context).size; /*24 is for notification bar on Android*/
+    final double itemHeight = (size.height - kToolbarHeight - 24) / 2;
+    final double itemWidth = size.width / 2;
 
-          body: GestureDetector(
-              onTapDown: (_) => textFocus.unfocus(),
-              child: Center(
-                  child: Column(
-                      children: [
-                        widget.tableType == TableType.search ? _searchList() : Container(),
-                        dataList.isNotEmpty ? Expanded(
-                            child: SingleChildScrollView(
-                              child: PaginatedDataTable(
-                                sortColumnIndex: 0,
-                                key: widget.tableKey,
-                                sortAscending: true,
-                                showCheckboxColumn: false,
-                                showFirstLastButtons: true,
-                                rowsPerPage: sFile["pageCount"],
-                                controller: ScrollController(),
-                                columns: getColumns(widget.tableType, MediaQuery.of(context).size.width),
-                                source: RowSource(parent: this, dataList: filterList, select: true, type: widget.tableType),
-                              ),
-                            )
-                        ) : const Text("EMPTY LIST!\n GO BACK!", textAlign: TextAlign.center),
+    return Scaffold(
+      //resizeToAvoidBottomInset: false,
+        floatingActionButton: _searchList(),
+        body: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: <Widget>[
+            SliverAppBar(
+              backgroundColor: Colors.white,
+              floating: false,
+              pinned: true,
+              expandedHeight: 15.0,
+              flexibleSpace: FlexibleSpaceBar(
+                centerTitle: true,
+                title: Text(
+                    "Item Viewer: ${jobTable.length}",
+                    style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                background: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: Colors.black,
+                        width: 4.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
-                        GestureDetector(
-                            onTapDown: (_) => textFocus.unfocus(),
-                            child: SingleChildScrollView(
-                                child: Center(
-                                  child: Column(
-                                      children: [
-                                        widget.action == ActionType.edit || widget.action == ActionType.add ?
-                                        rBox(
-                                          context,
-                                          selectIndex > -1 ? colorOk : colorDisable,
-                                          TextButton(
-                                              child: Text(widget.action == ActionType.edit ? 'EDIT ITEM' : 'ADD ITEM', style: whiteText),
-                                              onPressed: () {
-                                                goToPage(
-                                                    context,
-                                                    StockItem(
-                                                        item: rowToItem(filterList[selectIndex], widget.tableType == TableType.literal),
-                                                        action: widget.action,
-                                                        index: widget.action == ActionType.add ? filterList[selectIndex][0] : selectIndex
-                                                    ),
-                                                    false);
-                                              }
-                                          ),
-                                        ) : Container(),
-                                        rBox(context, colorBack, TextButton(
-                                          child: Text("Back", style: whiteText),
-                                          onPressed: () {
-                                            goToPage(context, const Stocktake(), false);
-                                          },
-                                        )),
-                                      ]
-                                  ),
-                                )
+            SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 1,
+                childAspectRatio: (itemWidth / itemHeight) * 6.0,
+              ),
+
+              delegate: SliverChildBuilderDelegate(
+                    (BuildContext context, int index) {
+                  if (index >= filterList.length) return null; //index >= pageLength
+                  var row = filterList[index];
+                  return Container(
+                    height: 25.0,
+                    color: Colors.white.withOpacity(0.01),
+                    child: Center(
+                      child: TextButton(
+                        child: widget.action == ActionType.edit ? Card(
+                            child: ListTile(
+                                title: Text(row[3]),
+                                subtitle: Text( (job.literals[index])["count"].toString(),)
                             )
-                        ),
-                      ]
-                  )
-              )
-          ),
+                        ) : Text(row[3]),
+                        onPressed: () async {
+                          if(widget.action == ActionType.edit || widget.action == ActionType.add || widget.action == ActionType.addNOF){
+                            //itemViewer(context, filterList[index], widget.action, index);
+                            setText(filterList[index]);
+
+                            await showGeneralDialog(
+                              context: context,
+                              barrierColor: Colors.black12.withOpacity(0.8), // Background color
+                              barrierDismissible: false,
+                              barrierLabel: 'Dialog',
+                              transitionDuration: const Duration(milliseconds: 400),
+                              pageBuilder: (_, __, ___) {
+                                keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
+                                return GestureDetector(
+                                    onTapDown: (_) => clearFocus(),
+                                    child: SingleChildScrollView(
+                                        child: Column(
+                                            children: widget.action == ActionType.add ? addFields(filterList[index]) :
+                                            widget.action == ActionType.view ? viewFields(filterList[index]) : editFields(index)
+                                        )
+                                    )
+                                );
+                              },
+                            ).then((value) {
+                              refresh(this);
+                              // if(widget.action == ActionType.edit){
+                              //   goToPage(context, TableView2(action: widget.action), false);
+                              // }
+                              // else{
+                              //   Navigator.pop(context);
+                              // }
+                            }
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            )
+          ],
+        ),
+
+        bottomNavigationBar: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: rBox(context, colorBack,
+              TextButton(
+                child: Text('Back', style: whiteText),
+                onPressed: () {
+                  switch (widget.action) {
+                    case ActionType.addNOF:
+                      goToPage(context, const Stocktake(), false);
+                      break;
+                    case ActionType.add:
+                      goToPage(context, const Stocktake(), false);
+                      break;
+                    case ActionType.edit:
+                      goToPage(context, const Stocktake() , false);
+                      break;
+                    default:
+                      Navigator.pop(context);
+                      break;
+                  }
+                },
+              ),
+            )
         )
     );
   }
 }
 
-// Get Table Columns
-List<DataColumn> getColumns(TableType t, double width) {
-  List<int>? showColumn;
-  List<DataColumn> dataColumns;
+void addNOF(BuildContext context){
+  TextEditingController barcodeCtrl = TextEditingController();
+  var barcodeFocus = FocusNode();
+  TextEditingController priceCtrl = TextEditingController();
+  var priceFocus = FocusNode();
+  TextEditingController descriptionCtrl = TextEditingController();
+  var descriptionFocus = FocusNode();
+  TextEditingController uomCtrl = TextEditingController();
+  var uomFocus = FocusNode();
+  TextEditingController countCtrl = TextEditingController();
+  var countFocus = FocusNode();
+  TextEditingController locationCtrl = TextEditingController();
+  var locationFocus = FocusNode();
+  String categoryValue = "MISC";
 
-  switch (t){
-    case TableType.literal:
-      dataColumns = <DataColumn>[
-        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
-        const DataColumn(label: Text("Count")),
-        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
-        const DataColumn(label: Text("Location")),
-        const DataColumn(label: Text("Barcode"))
-      ];
-      break;
+  double keyboardHeight = 20.0;
 
-    case TableType.export:
-      dataColumns = <DataColumn>[
-        const DataColumn(label: Text('Index')),
-        const DataColumn(label: Text('Category')),
-        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
-        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
-        const DataColumn(label: Text('QTY')),
-        const DataColumn(label: Text('Cost Ex GST')),
-        const DataColumn(label: Text('Barcode')),
-        const DataColumn(label: Text('NOF'))
-      ];
-      break;
-
-    case TableType.linear:
-      dataColumns = <DataColumn>[
-        const DataColumn(label: Text('Index')),
-        const DataColumn(label: Text('Barcode')),
-        const DataColumn(label: Text('Category')),
-        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
-        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
-        const DataColumn(label: Text('Count')),
-      ];
-      break;
-
-    case TableType.search:
-      dataColumns = <DataColumn>[
-        const DataColumn(label: Text('Index')),
-        const DataColumn(label: Text('Barcode')),
-        const DataColumn(label: Text('Category')),
-        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
-        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
-        const DataColumn(label: Text('Price')),
-      ];
-      showColumn = [3,4];
-      break;
-
-    default:
-      dataColumns = <DataColumn>[
-        const DataColumn(label: Text('Index')),
-        const DataColumn(label: Text('Barcode')),
-        const DataColumn(label: Text('Category')),
-        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
-        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
-        const DataColumn(label: Text('Price')),
-      ];
-      break;
+  void clearFocus(){
+    uomFocus.unfocus();
+    barcodeFocus.unfocus();
+    descriptionFocus.unfocus();
+    priceFocus.unfocus();
+    countFocus.unfocus();
+    locationFocus.unfocus();
   }
 
-  // Not hiding anything
-  if (showColumn == null || showColumn.isEmpty) {
-    return dataColumns;
+  setText(){
+    clearFocus();
+    barcodeCtrl.text = "0000";
+    categoryValue = "MISC";
+    descriptionCtrl.text = "";
+    uomCtrl.text = "EACH";
+    priceCtrl.text = "0.0";
+    countCtrl.text = "0.0";
+    locationCtrl.text = job.location;
   }
 
-  // Create list of columns in order of [showColumn]
-  List<DataColumn> dc = [];
-  for (int i = 0; i < showColumn.length; i++) {
-    int col = showColumn[i];
-    if (col < dataColumns.length) {
-      dc.add(dataColumns[col]);
-    }
-  }
-
-  return dc;
-}
-
-// Get Table Rows
-class RowSource extends DataTableSource {
-  List dataList;
-  TableType type;
-  bool? select = false;
-  dynamic parent;
-
-  RowSource({
-    required this.parent,
-    required this.dataList,
-    required this.type,
-    this.select,
-  });
-
-  @override
-  bool get isRowCountApproximate => false;
-  @override
-  int get rowCount => dataList.length;
-  @override
-  int get selectedRowCount => (select == true && parent.selectIndex > -1) ? 1 : 0;
-
-  @override
-  DataRow? getRow(int index) {
-    assert(index >= 0);
-
-    if (index >= rowCount) {
-      return null;
-    }
-
-    List<DataCell> dataCells = [];
-    if (type == TableType.export) {
-      dataCells = <DataCell>[
-        DataCell(Text(dataList[index][0].toString())),
-        DataCell(Text(dataList[index][1].toString())),
-        DataCell(Text(dataList[index][2].toString())),
-        DataCell(Text(dataList[index][3].toString())),
-        DataCell(Text(dataList[index][4].toString())),
-        DataCell(Text(dataList[index][5].toString())),
-        DataCell(Text(dataList[index][6].toString())),
-        DataCell(Text(dataList[index][7].toString())),
-        //const DataCell(Text("10.0")),
-      ];
-    }
-    else if(type == TableType.literal) {
-      dataCells = <DataCell>[
-        DataCell(Text(dataList[index][3].toString())),
-        DataCell(Text(dataList[index][6].toString())),
-        DataCell(Text(dataList[index][4].toString())),
-        DataCell(Text(dataList[index][7].toString())),
-        DataCell(Text(dataList[index][1].toString())),
-      ];
-    }
-    else {
-      dataCells = <DataCell>[
-        DataCell(Text((dataList[index][0]).toString())),
-        DataCell(Text(dataList[index][1].toString())),
-        DataCell(Text(dataList[index][2].toString())),
-        DataCell(Text(dataList[index][3].toString())),
-        DataCell(Text(dataList[index][4].toString())),
-        DataCell(Text(dataList[index][5].toString())),
-      ];
-    }
-
-    List<int> showCells = [];
-
-    if(type == TableType.search){
-      showCells = [3, 4];
-    }
-
-    // Sort cells in order of [showCells]
-    if (showCells.isNotEmpty) {
-      List<DataCell> dc = [];
-      for (int i = 0; i < showCells.length; i++) {
-        int cell = showCells[i];
-        if (cell < dataCells.length) {
-          dc.add(dataCells[cell]);
-        }
-      }
-      dataCells = dc;
-    }
-
-    // Select and highlight rows
-    return DataRow.byIndex(
-      index: index,
-      selected: (select == true) ? index == parent.selectIndex : false,
-      onSelectChanged: (value) {
-        if (select == true) {
-          int selectIndex = parent.selectIndex != index ? index : -1;
-          parent.setIndex(selectIndex);
-          notifyListeners();
-        }
-      },
-
-      cells: dataCells,
+  Widget editCount() {
+    return Padding(
+        padding: const EdgeInsets.only(
+            left: 15.0, right: 15.0, top: 0, bottom: 5),
+        child: Card(
+            child: ListTile(
+              trailing: IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () {
+                  clearFocus();
+                  double count = double.parse(countCtrl.text) + 1;
+                  countCtrl.text = count.toString();
+                  // refresh(this);
+                },
+              ),
+              title: TextField(
+                //scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight * 0.5),
+                controller: countCtrl,
+                focusNode: countFocus,
+                textAlign: TextAlign.center,
+                keyboardType: const TextInputType.numberWithOptions(
+                    signed: false, decimal: true),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: () {
+                  clearFocus();
+                  double count = double.parse(countCtrl.text) - 1.0;
+                  countCtrl.text = max(count, 0.0).toString();
+                  // refresh(this);
+                },
+              ),
+            )
+        )
     );
   }
+
+  Widget editCategory() {
+    return GestureDetector(
+        onTapDown: (_) => clearFocus(),
+        child: Padding(
+          padding: const EdgeInsets.only(
+              left: 15.0, right: 15.0, top: 0, bottom: 5),
+          child: Card(
+            child: DropdownButton(
+              value: categoryValue,
+              isExpanded: true,
+              menuMaxHeight: MediaQuery.of(context).size.height / 2.0,
+              icon: const Icon(Icons.keyboard_arrow_down),
+              items: masterCategory.map((String items) {
+                return DropdownMenuItem(
+                  value: items,
+                  child: Center(
+                      child: Text(items, textAlign: TextAlign.center,)
+                  ),
+                );
+              }).toList(),
+
+              onChanged: (String? newValue) {
+                categoryValue = newValue!;
+                // setState(() {
+                //   categoryValue = newValue!;
+                // });
+              },
+            ),
+          ),
+        )
+    );
+  }
+
+  Widget titlePadding(String title, TextAlign l){
+    return Padding(
+        padding: const EdgeInsets.only(top: 15.0),
+        child: DefaultTextStyle(
+          style: blueText,
+          child: Text(title, textAlign: l),
+        )
+    );
+  }
+
+  confirmNOF(){
+    if(descriptionCtrl.text.isNotEmpty) {
+      int newIndex = jobTable.length;
+      var nofItem = {
+        "index": newIndex,
+        "barcode": barcodeCtrl.text,
+        "category": categoryValue,
+        "description": descriptionCtrl.text,
+        "uom": uomCtrl.text,
+        "unit": 1.0,
+        "price": double.parse(priceCtrl.text),
+        "nof": true,
+      };
+
+      if (job.newNOF(nofItem)) {
+        job.nof.add(nofItem);
+
+      }
+
+      if (double.parse(countCtrl.text) > 0) {
+        var item = {
+          "index": newIndex,
+          "barcode": barcodeCtrl.text,
+          "category": categoryValue,
+          "description": descriptionCtrl.text,
+          "uom": uomCtrl.text,
+          "price": double.parse(priceCtrl.text),
+          "count": double.parse(countCtrl.text),
+          "location": locationCtrl.text,
+          "nof": true,
+        };
+
+        job.literals.add(item);
+        job.calcTotal();
+      }
+
+      jobTable = mainTable!.rows + job.nofList();
+      Navigator.pop(context);
+    }
+    else{
+      showAlert(context, "", "Description text must not be empty!", colorWarning);
+    }
+  }
+
+  nofFields() {
+    return <Widget>[
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height/20.0,
+      ),
+
+      titlePadding("Barcode:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(barcodeCtrl, barcodeFocus, '00000',keyboardHeight)
+      ),
+
+      titlePadding("Category:", TextAlign.left),
+      editCategory(),
+
+      titlePadding("Description:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(descriptionCtrl, descriptionFocus, 'E.G. PETERS I/CREAM VAN 1L',keyboardHeight)
+      ),
+
+      titlePadding("UOM:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(uomCtrl, uomFocus, 'EACH',keyboardHeight)
+      ),
+
+      titlePadding("Price:", TextAlign.left),
+      Padding(
+        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+        child: Card(
+            child: ListTile(
+              title: TextField(
+                controller: priceCtrl,
+                focusNode: priceFocus,
+                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+              ),
+            )
+        ),
+      ),
+
+      titlePadding("Location:", TextAlign.left),
+      GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: editTextField(locationCtrl, locationFocus, '', keyboardHeight)
+      ),
+
+      titlePadding("Count:", TextAlign.left),
+      editCount(),
+
+      SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height / 10.0,
+      ),
+
+      rBox(
+          context,
+          colorOk,
+          TextButton(
+            child: Text('Confirm', style: whiteText),
+            onPressed: () {
+
+              confirmNOF();
+            },
+          )
+      ),
+
+      rBox(
+          context,
+          colorBack,
+          TextButton(
+            child: Text('Cancel', style: whiteText),
+            onPressed: (){
+              Navigator.pop(context);
+            },
+          )
+      ),
+    ];
+  }
+
+  showGeneralDialog(
+    context: context,
+    barrierColor: Colors.black12.withOpacity(0.8),
+    barrierDismissible: false,
+    barrierLabel: 'Dialog',
+    transitionDuration: const Duration(milliseconds: 400),
+    pageBuilder: (_, __, ___) {
+      keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
+      setText();
+      return GestureDetector(
+          onTapDown: (_) => clearFocus(),
+          child: SingleChildScrollView(
+              child: Column(
+                  children: nofFields()
+              )
+          )
+      );
+      },
+  ).then((value) {
+    goToPage(context, const Stocktake(), false);
+  });
 }
 
-// RE-USABLE WIDGETS
-// mPrint(var s) {
-//   // "Safely" prints something to terminal, otherwise IDE notifications chucks a sissy fit
-//   if (s == null) {
-//     return;
-//   }
-//   if (!kReleaseMode) {
-//     if (kDebugMode) {
-//       print(s.toString());
-//     }
-//   }
-// }
+mPrint(var s) {
+  // "Safely" prints something to terminal, otherwise IDE notifications chucks a sissy fit
+  if (s == null) {
+    return;
+  }
+  if (!kReleaseMode) {
+    if (kDebugMode) {
+      print(s.toString());
+    }
+  }
+}
 
 refresh(var widget) {
   widget.setState(() {});
@@ -2690,10 +2693,10 @@ Map<String, dynamic> rowToItem(List<dynamic> row, bool literal){
   return
     {
       "index" : row[0],
-      "barcode" : row[1],
-      "category" : row[2],
-      "description" : row[3],
-      "uom" : row[4],
+      "barcode" : row[1].toString(),
+      "category" : row[2].toString(),
+      "description" : row[3].toString(),
+      "uom" : row[4].toString(),
       "price" : row[5],
       "count" : literal ? row[6] : 0.0,
       "location" : literal ? row[7] : job.location,
@@ -2750,7 +2753,7 @@ goToPage(BuildContext context, Widget page, bool animate) {
   );
 }
 
-rBox(BuildContext context, Color c, Widget w){
+rBox(BuildContext context, Color c, Widget w) {
   return Padding(
     padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
     child: Container(
@@ -2803,7 +2806,7 @@ showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   );
 }
 
-loadingAlert(BuildContext context){
+loadingAlert(BuildContext context) {
   showDialog(
       barrierDismissible: false,
       context: context,
@@ -2855,6 +2858,27 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   return confirmation;
 }
 
+Widget editTextField(TextEditingController txtCtrl, FocusNode focus, String hint, double keyHeight){
+  return Padding(
+      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+      child: Card(
+        child: ListTile(
+          title: TextField(
+            decoration: hint.isNotEmpty ? const InputDecoration(hintText: 'E.g. PETERS I/CREAM VAN 1L', border: InputBorder.none) : null,
+            controller: txtCtrl,
+            scrollPadding: EdgeInsets.symmetric(vertical: keyHeight),
+            focusNode: focus,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.name,
+            onChanged: (value) {
+              txtCtrl.value = TextEditingValue(text: value.toUpperCase(), selection: txtCtrl.selection);
+            },
+          ),
+        ),
+      )
+  );
+}
+
 // READ/WRITE OPERATIONS
 Future<String> get _localPath async {
   final directory = await getApplicationDocumentsDirectory();
@@ -2862,14 +2886,15 @@ Future<String> get _localPath async {
 }
 
 Future<void> _prepareStorage() async {
-  var path = 'storage/emulated/0';//!isEmulating ? 'storage/emulated/0' : 'sdcard';
+  var path = '/storage/emulated/0';//!isEmulating ? '/storage/emulated/0' : 'sdcard';
   rootDir = Directory(path);
   var storage = await storageType.status;
   if (storage != PermissionStatus.granted) {
     await storageType.request();
   }
-  //bool b = storage == PermissionStatus.granted;
-  //mPrint("STORAGE ACCESS IS : $b");
+
+  bool b = storage == PermissionStatus.granted;
+  mPrint("STORAGE ACCESS IS : $b");
 }
 
 Future<String> pickFile(BuildContext context) async {
@@ -2884,7 +2909,7 @@ Future<String> pickFile(BuildContext context) async {
     fileTileSelectMode: FileTileSelectMode.wholeTile,
     requestPermission: () async => await storageType.request().isGranted,
   ).then((value){
-    //mPrint(value.toString());
+    mPrint(value.toString());
     val = value.toString();
   });
   return val;
@@ -2908,19 +2933,19 @@ Future<String> pickSpreadsheet(BuildContext context) async {
   return val;
 }
 
-Future<void> loadMasterSheet() async{
+Future<void> loadMasterSheet() async {
   Uint8List bytes;
   final path = await _localPath;
   String filePath = "$path/FD_TEMPLATE.xlsx";
   await Future.delayed(const Duration(microseconds: 0));
   if(!File(filePath).existsSync()){
-    //mPrint("No master sheet in app dir, copying asset file to app dir...");
+    mPrint("No master sheet in app dir, copying asset file to app dir...");
     ByteData data = await rootBundle.load("assets/FD_TEMPLATE.xlsx");
     bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     await File(filePath).writeAsBytes(bytes);
   }
   else{
-    //mPrint("Master sheet exists! Grabbing the file...");
+    mPrint("Master sheet exists! Grabbing the file...");
     File file = File(filePath);
     bytes = file.readAsBytesSync();
   }
@@ -2948,10 +2973,10 @@ Future<void> loadMasterSheet() async{
   }
   else{
     masterCategory = defCategory();
-    //mPrint("using def categories");
+    mPrint("using def categories");
   }
 
-  //mPrint(masterCategory);
+  mPrint(masterCategory);
 
   // Remove header row
   mainTable!.rows.removeRange(0, 1);
@@ -2959,8 +2984,8 @@ Future<void> loadMasterSheet() async{
   dbPath = filePath;
 }
 
-exportJobToXLSX( List<dynamic> fSheet) async{
-  var path = 'storage/emulated/0/Documents';
+exportJobToXLSX( List<dynamic> fSheet) async {
+  // var path = '/storage/emulated/0/Documents/';
   var excel = Excel.createExcel();
   var sheetObject = excel['Sheet1'];
   sheetObject.isRTL = false;
@@ -2971,37 +2996,74 @@ exportJobToXLSX( List<dynamic> fSheet) async{
     for(int j = 0; j < fSheet[i].length; j++){
       dataList.add(fSheet[i][j].toString());
     }
-
     sheetObject.insertRowIterables(dataList, i+1);
   }
+
+  String filePath = "/storage/emulated/0/Documents/stocktake_${job.id}_0.xlsx";
+  int num = 0;
+
+  bool readyWrite = false;
+  while(!readyWrite){
+    await File(filePath).exists().then((value){
+      if(value){
+        num += 1;
+        filePath = '/storage/emulated/0/Documents/$jobStartStr${job.id}_$num';
+      }
+      else{
+        readyWrite = true;
+      }
+    });
+  }
+
   var fileBytes = excel.save();
-  File("$path/stocktake_${job.id}.xlsx")
+  File(filePath)
     ..createSync(recursive: true)
     ..writeAsBytesSync(fileBytes!);
 }
 
-writeJob(StockJob job) async {
-
-  var filePath = 'storage/emulated/0/Documents/';
+writeJob(StockJob job, bool overwrite) async {
+  var filePath = '/storage/emulated/0/Documents/';
 
   // If "/Documents" folder does not exist, create it.
   await Directory(filePath).exists().then((value){
     if(!value){
-      Directory('storage/emulated/0/Documents/').create().then((Directory directory) {
-        //mPrint("Documents dir was created: ${directory.path}");
+      Directory('/storage/emulated/0/Documents/').create().then((Directory directory) {
+        mPrint("Documents dir was created: ${directory.path}");
       });
     }
   });
 
-  String date = job.date.replaceAll("_", "");
-  filePath += 'job_${job.id}_${job.name}_$date';
+  //String date = job.date.replaceAll("_", "");
+  //filePath += 'job_${job.id}_${job.name}_$date';
 
-  //mPrint(filePath);
+  filePath = '/storage/emulated/0/Documents/$jobStartStr${job.id}_0';
+  mPrint(filePath);
+
+  if(!overwrite){
+    String num = '0';
+    bool readyWrite = false;
+
+    while(!readyWrite){
+      await File(filePath).exists().then((value){
+        if(value){
+          num = (int.parse(num) + 1).toString();
+          filePath = '/storage/emulated/0/Documents/$jobStartStr${job.id}_$num';
+        }
+        else{
+          readyWrite = true;
+        }
+      });
+    }
+  }
 
   var jobFile = File(filePath);
   Map<String, dynamic> jMap = job.toJson();
   var jString = jsonEncode(jMap);
   jobFile.writeAsString(jString);
+
+  // if(!jobList.contains(filePath)){
+  //   jobList.add(filePath);
+  // }
 }
 
 writeSession() async {
@@ -3048,5 +3110,160 @@ getSession() async {
   }
 }
 
-/*
-*/
+// Static Table
+class StaticTable extends StatelessWidget {
+  final TableType tableType;
+
+  const StaticTable({
+    super.key,
+    required this.tableType,
+  });
+
+  _exportColumns(BuildContext context, double width){
+    return <DataColumn>[
+        const DataColumn(label: Text('Index')),
+        const DataColumn(label: Text('Category')),
+        DataColumn(label: SizedBox(width: width * 0.5, child: const Text("Description"))),
+        DataColumn(label: SizedBox(width: width * 0.3, child: const Text("UOM"))),
+        const DataColumn(label: Text('QTY')),
+        const DataColumn(label: Text('Cost Ex GST')),
+        const DataColumn(label: Text('Barcode')),
+        const DataColumn(label: Text('NOF'))
+      ];
+  }
+
+  getIndex() {
+    return -1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+        onWillPop: () async => false,
+        child: Scaffold(
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text("Spreadsheet View: ${job.id}", textAlign: TextAlign.center),
+              automaticallyImplyLeading: false,
+            ),
+            body: Center(
+                child: Column(
+                    children: [
+                      Expanded(
+                          child: SingleChildScrollView(
+                            child: PaginatedDataTable(
+                              sortColumnIndex: 0,
+                              sortAscending: true,
+                              showCheckboxColumn: false,
+                              showFirstLastButtons: true,
+                              rowsPerPage: sFile["pageCount"],
+                              controller: ScrollController(),
+                              columns: _exportColumns(context, MediaQuery.of(context).size.width),
+                              source: RowSource(),
+                            ),
+                          )
+                      ),
+                      Center(
+                          child: Column(
+                              children: [
+                                tableType == TableType.export ?
+                                rBox(
+                                    context,
+                                    Colors.blue,
+                                    TextButton(
+                                      child: Text('Export Spreadsheet', style: whiteText),
+                                      onPressed: () async {
+                                        exportJobToXLSX(job.getFinalSheet());
+                                        showAlert(context, "Job Export", "Stocktake exported to: /Documents/stocktake_${job.id}.xlsx", Colors.orange);
+                                        //showNotification(context, Colors.orange, whiteText, 'Exported Spreadsheet', '* Save Path: stocktake_${job.id}');
+                                      },
+                                    )
+                                ) :  Container(),
+                                rBox(
+                                    context,
+                                    colorBack,
+                                    TextButton(
+                                      child: Text("Back", style: whiteText),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    )
+                                )
+                              ]
+                          )
+                      )
+                    ]
+                )
+            )
+        )
+    );
+  }
+}
+
+// Get Table Rows
+class RowSource extends DataTableSource {
+  var dataList = job.literalList();
+
+  @override
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => dataList.length;
+
+  @override
+  int get selectedRowCount => 0; //(select == true && parent.selectIndex > -1) ? 1 :
+
+  _exportCells(int index){
+    return <DataCell>[
+      DataCell(Text(dataList[index][0].toString())),
+      DataCell(Text(dataList[index][1].toString())),
+      DataCell(Text(dataList[index][2].toString())),
+      DataCell(Text(dataList[index][3].toString())),
+      DataCell(Text(dataList[index][4].toString())),
+      DataCell(Text(dataList[index][5].toString())),
+      DataCell(Text(dataList[index][6].toString())),
+      DataCell(Text(dataList[index][7].toString())),
+    ];
+  }
+
+  @override
+  DataRow? getRow(int index) {
+    assert(index >= 0);
+    if (index >= rowCount) {
+      return null;
+    }
+
+    List<DataCell> dataCells = _exportCells(index);
+
+    // if(type == TableType.search){
+    //   List<int> showCells = [];
+    //   showCells = [3, 4];
+    //
+    //   // Sort cells in order of [showCells]
+    //   if (showCells.isNotEmpty) {
+    //     List<DataCell> dc = [];
+    //     for (int i = 0; i < showCells.length; i++) {
+    //       int cell = showCells[i];
+    //       if (cell < dataCells.length) {
+    //         dc.add(dataCells[cell]);
+    //       }
+    //     }
+    //     dataCells = dc;
+    //   }
+    // }
+
+    // Select and highlight rows
+    return DataRow.byIndex(
+      index: index,
+      selected: false, // (select == true) ? index == parent.selectIndex : false,
+      cells: dataCells,
+
+      // onSelectChanged: (value) {
+      //   if (select == true) {
+      //     int selectIndex = parent.selectIndex != index ? index : -1;
+      //     parent.setIndex(selectIndex);
+      //     notifyListeners();
+      //   }
+      // },
+    );
+  }
+}
