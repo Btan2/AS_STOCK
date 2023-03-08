@@ -2522,7 +2522,7 @@ void addNOF(BuildContext context){
           "nof": true,
         };
 
-        print(priceCtrl.text);
+        // print(priceCtrl.text);
 
 
         job.literals.add(item);
