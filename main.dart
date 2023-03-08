@@ -1508,7 +1508,21 @@ class _ScanItem extends State<ScanItem> {
                                   return;
                                 }
                                 countCtrl.text = "0.0";
-                                job.literals.add( rowToItem(filterList[itemIndex], count));
+                                var row = filterList[itemIndex];
+                                job.literals.add(
+                                    {
+                                      "index" : row[0],
+                                      "barcode" : row[1].toString(),
+                                      "category" : row[2].toString(),
+                                      "description" : row[3].toString(),
+                                      "uom" : row[4].toString(),
+                                      "price" : row[6],
+                                      "count" : count,
+                                      "location" : job.location,
+                                      "nof" : row[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
+                                    }
+                                );
+
                                 job.calcTotal();
                                 refresh(this);
                               }
@@ -1994,7 +2008,7 @@ class _TableView2 extends State<TableView2> {
             "price": double.parse(priceCtrl.text),
             "count": double.parse(countCtrl.text),
             "location": locationCtrl.text,
-            "nof": item[7], //nof
+            "nof": item[8], //nof
           };
 
           job.calcTotal();
@@ -2175,8 +2189,20 @@ class _TableView2 extends State<TableView2> {
               }
 
               //print(item[0] >= mainTable!.rows.length);
-              job.literals.add(rowToItem(item, count));
-
+              //job.literals.add(rowToItem(item, count));
+              job.literals.add(
+                  {
+                    "index" : item[0],
+                    "barcode" : item[1].toString(),
+                    "category" : item[2].toString(),
+                    "description" : item[3].toString(),
+                    "uom" : item[4].toString(),
+                    "price" : item[5],
+                    "count" : count,
+                    "location" : job.location,
+                    "nof" : item[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
+                  }
+              );
               job.calcTotal();
               Navigator.pop(context);
             },
@@ -2495,6 +2521,8 @@ void addNOF(BuildContext context){
           "location": locationCtrl.text,
           "nof": true,
         };
+
+        print(priceCtrl.text);
 
 
         job.literals.add(item);
@@ -2840,20 +2868,20 @@ shortFilePath(String s) {
   return sp[sp.length - 1];
 }
 
-Map<String, dynamic> rowToItem(List<dynamic> row, double count){
-  return
-    {
-      "index" : row[0],
-      "barcode" : row[1].toString(),
-      "category" : row[2].toString(),
-      "description" : row[3].toString(),
-      "uom" : row[4].toString(),
-      "price" : row[5],
-      "count" : count,
-      "location" : job.location,
-      "nof" : row[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
-    };
-}
+// Map<String, dynamic> rowToItem(List<dynamic> row, double count){
+//   return
+//     {
+//       "index" : row[0],
+//       "barcode" : row[1].toString(),
+//       "category" : row[2].toString(),
+//       "description" : row[3].toString(),
+//       "uom" : row[4].toString(),
+//       "price" : row[5],
+//       "count" : count,
+//       "location" : job.location,
+//       "nof" : row[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
+//     };
+// }
 
 defCategory(){
   return <String> [
