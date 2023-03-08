@@ -1,5 +1,7 @@
 /*
 LEGAL:
+   This was programmed by Callum Jack Buchanan.
+   Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
@@ -1507,14 +1509,9 @@ class _ScanItem extends State<ScanItem> {
                                   showNotification(context, colorWarning, whiteText, "Count is zero (0), can't add zero items", "");
                                   return;
                                 }
-
                                 countCtrl.text = "0.0";
-                                // var item =;
-                                // item['count'] = count;
-                                // item['location'] = job.location;
                                 job.literals.add( rowToItem(filterList[itemIndex], count));
                                 job.calcTotal();
-                                //showNotification(context, colorOk, whiteText, "Item Added:\n${item['description']} \nCount: $count","");
                                 refresh(this);
                               }
                             }
@@ -2179,10 +2176,9 @@ class _TableView2 extends State<TableView2> {
                 return;
               }
 
-              // var a =
-              // a['count'] = count;
-              // a['location'] = locationCtrl.text;
+              //print(item[0] >= mainTable!.rows.length);
               job.literals.add(rowToItem(item, count));
+
               job.calcTotal();
               Navigator.pop(context);
             },
@@ -2857,7 +2853,7 @@ Map<String, dynamic> rowToItem(List<dynamic> row, double count){
       "price" : row[5],
       "count" : count,
       "location" : job.location,
-      "nof" : row[0] >= mainTable!.maxRows, // if index is greater than master list it must be a NOF
+      "nof" : row[0] > mainTable!.rows.length, // if index is greater than master list it must be a NOF
     };
 }
 
