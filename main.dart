@@ -2851,7 +2851,7 @@ Map<String, dynamic> rowToItem(List<dynamic> row, double count){
       "price" : row[5],
       "count" : count,
       "location" : job.location,
-      "nof" : row[0] > mainTable!.rows.length, // if index is greater than master list it must be a NOF
+      "nof" : row[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
     };
 }
 
