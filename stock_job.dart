@@ -235,7 +235,6 @@ Map<String, dynamic> itemFromJson(Map<String, dynamic> json) {
     "category" : json['category'] as String,
     "description" : json['description'] as String,
     "uom" : json['uom'] as String,
-    "unit" : json['unit'] as double,
     "price" : json['price'] as double,
     "nof" : json['nof'] as bool,
   };
