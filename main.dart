@@ -1,6 +1,5 @@
 /*
 LEGAL:
-   Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
@@ -168,19 +167,19 @@ class _HomePage extends State<HomePage> {
                               },
                             )
                         ),
-                        rBox(
-                          context,
-                          Colors.black,
-                          TextButton(
-                              child: const Text("TEST TABLE"),
-                              onPressed: (){
-                                if(mainTable != null || mainTable!.rows.isNotEmpty) {
-                                    jobTable = mainTable!.rows;
-                                    goToPage(context, const TableView2(action: ActionType.view), false);
-                                  }
-                                },
-                          ),
-                        ),
+                        // rBox(
+                        //   context,
+                        //   Colors.black,
+                        //   TextButton(
+                        //       child: const Text("TEST TABLE"),
+                        //       onPressed: (){
+                        //         if(mainTable != null || mainTable!.rows.isNotEmpty) {
+                        //             jobTable = mainTable!.rows;
+                        //             goToPage(context, const TableView2(action: ActionType.view), false);
+                        //           }
+                        //         },
+                        //   ),
+                        // ),
 
                         SizedBox(
                           height: MediaQuery.of(context).size.height/40.0,
@@ -315,18 +314,18 @@ class _AppSettings extends State<AppSettings> {
                         )
                     ),
 
-                    SizedBox(height: MediaQuery.of(context).size.height/10.0),
-                    headerPadding("Load MASTER_SHEET from Phone Storage", TextAlign.left),
-                    Card(
-                      child: ListTile(
-                        title: mainTable == null ? Text( "NO SPREADSHEET DATA", style: warningText) : Text(shortFilePath(dbPath)),
-                        subtitle: mainTable == null ? Text("Tap here to load a spreadsheet...", style: warningText) : Text("Count: ${mainTable?.maxRows}"),
-                        leading: mainTable == null ? const Icon(Icons.warning_amber, color: Colors.red) : const Icon(Icons.list_alt, color: Colors.green),
-                        onTap: (){
-                          goToPage(context, const LoadSpreadsheet(), false);
-                        },
-                      ),
-                    ),
+                    // SizedBox(height: MediaQuery.of(context).size.height/10.0),
+                    // headerPadding("Load MASTER_SHEET from Phone Storage", TextAlign.left),
+                    // Card(
+                    //   child: ListTile(
+                    //     title: mainTable == null ? Text( "NO SPREADSHEET DATA", style: warningText) : Text(shortFilePath(dbPath)),
+                    //     subtitle: mainTable == null ? Text("Tap here to load a spreadsheet...", style: warningText) : Text("Count: ${mainTable?.maxRows}"),
+                    //     leading: mainTable == null ? const Icon(Icons.warning_amber, color: Colors.red) : const Icon(Icons.list_alt, color: Colors.green),
+                    //     onTap: (){
+                    //       goToPage(context, const LoadSpreadsheet(), false);
+                    //     },
+                    //   ),
+                    // ),
 
                     headerPadding('Storage Permission Type', TextAlign.left),
                     Padding(
@@ -1510,12 +1509,12 @@ class _ScanItem extends State<ScanItem> {
                                 }
 
                                 countCtrl.text = "0.0";
-                                var item = rowToItem(filterList[itemIndex], false);
-                                item['count'] = count;
-                                item['location'] = job.location;
-                                job.literals.add(item);
+                                // var item =;
+                                // item['count'] = count;
+                                // item['location'] = job.location;
+                                job.literals.add( rowToItem(filterList[itemIndex], count));
                                 job.calcTotal();
-                                showNotification(context, colorOk, whiteText, "Item Added:\n${item['description']} \nCount: $count","");
+                                //showNotification(context, colorOk, whiteText, "Item Added:\n${item['description']} \nCount: $count","");
                                 refresh(this);
                               }
                             }
@@ -2180,10 +2179,10 @@ class _TableView2 extends State<TableView2> {
                 return;
               }
 
-              var a = rowToItem(item, false);
-              a['count'] = count;
-              a['location'] = locationCtrl.text;
-              job.literals.add(a);
+              // var a =
+              // a['count'] = count;
+              // a['location'] = locationCtrl.text;
+              job.literals.add(rowToItem(item, count));
               job.calcTotal();
               Navigator.pop(context);
             },
@@ -2502,6 +2501,7 @@ void addNOF(BuildContext context){
           "location": locationCtrl.text,
           "nof": true,
         };
+
 
         job.literals.add(item);
         job.calcTotal();
@@ -2846,7 +2846,7 @@ shortFilePath(String s) {
   return sp[sp.length - 1];
 }
 
-Map<String, dynamic> rowToItem(List<dynamic> row, bool literal){
+Map<String, dynamic> rowToItem(List<dynamic> row, double count){
   return
     {
       "index" : row[0],
@@ -2855,8 +2855,8 @@ Map<String, dynamic> rowToItem(List<dynamic> row, bool literal){
       "description" : row[3].toString(),
       "uom" : row[4].toString(),
       "price" : row[5],
-      "count" : literal ? row[6] : 0.0,
-      "location" : literal ? row[7] : job.location,
+      "count" : count,
+      "location" : job.location,
       "nof" : row[0] >= mainTable!.maxRows, // if index is greater than master list it must be a NOF
     };
 }
