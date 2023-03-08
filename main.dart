@@ -14,7 +14,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
-//import 'package:flutter/foundation.dart'; // REQUIRED FOR DEBUG PRINTING
 import 'package:flutter/services.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -1516,7 +1515,7 @@ class _ScanItem extends State<ScanItem> {
                                       "category" : row[2].toString(),
                                       "description" : row[3].toString(),
                                       "uom" : row[4].toString(),
-                                      "price" : row[6],
+                                      "price" : row[5],
                                       "count" : count,
                                       "location" : job.location,
                                       "nof" : row[0] >= mainTable!.rows.length, // if index is greater than master list it must be a NOF
@@ -2500,7 +2499,6 @@ void addNOF(BuildContext context){
         "category": categoryValue,
         "description": descriptionCtrl.text,
         "uom": uomCtrl.text,
-        "unit": 1.0,
         "price": double.parse(priceCtrl.text),
         "nof": true,
       };
@@ -2522,7 +2520,7 @@ void addNOF(BuildContext context){
           "nof": true,
         };
 
-        // print(priceCtrl.text);
+        //print(priceCtrl.text);
 
 
         job.literals.add(item);
