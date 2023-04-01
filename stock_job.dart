@@ -134,6 +134,8 @@ class StockJob {
               1.0, // Always 1 unit
               literals[i]["price"],
               literals[i]["nof"],
+              literals[i]["datetime"],
+              literals[i]["ordercode"],
             ]
         );
         count--;
@@ -151,6 +153,8 @@ class StockJob {
           d, // Remainder from whole count
           literals[i]["price"],
           literals[i]["nof"],
+          literals[i]["datetime"],
+          literals[i]["ordercode"],
         ]);
       }
     }
@@ -167,48 +171,15 @@ class StockJob {
     }
   }
 
-  getFinalSheet(){
-    List<List<dynamic>> finalSheet = [];
-    for(int i =0; i < literals.length; i++){
-      bool skip = false;
-      for(int j = 0; j < finalSheet.length; j++) {
-        // Check if item already exists
-        skip = finalSheet[j][0] == literals[i]["index"] &&
-            finalSheet[j][1] == literals[i]["category"] &&
-            finalSheet[j][2] == literals[i]["description"] &&
-            finalSheet[j][3] == literals[i]["uom"] &&
-            finalSheet[j][6] == literals[i]["barcode"] &&
-            finalSheet[j][7] == literals[i]["nof"].toString().toUpperCase();
-
-        if(skip){
-          // Add price and count to existing item
-          finalSheet[j][4] += literals[i]["count"];
-          finalSheet[j][5] += literals[i]["price"] * literals[i]["count"];
-          break;
-        }
-      }
-      // Item doesn't exist, so add new item to list
-      if(!skip){
-        finalSheet.add([
-          literals[i]['index'],
-          literals[i]['category'],
-          literals[i]["description"],
-          literals[i]["uom"],
-          literals[i]["count"],
-          literals[i]["price"] * literals[i]['count'],
-          literals[i]["barcode"],
-          literals[i]["nof"].toString().toUpperCase()
-        ]);
-      }
-    }
-    return finalSheet;
-  }
-
-  bool newNOF(Map<String, dynamic> item){
+  bool nofExists(Map<String, dynamic> item){
     for(int n = 0; n < nof.length; n++) {
-      if(nof[n]['barcode'] == item['barcode'] && nof[n]['description'] == item['description'] && nof[n]['price'] == item['price'] && nof[n]['uom'] == item['uom']){
+      var barcodeList = nof[n]['barcode'].split(",").toList();
+      if(barcodeList.contains(item['barcode'])){
         return false;
       }
+      // if(nof[n]['ordercode'] == item["ordercode"]){
+      //   return false;
+      // }
     }
     return true;
   }
@@ -217,14 +188,8 @@ class StockJob {
 Map<String, dynamic> literalFromJson(Map<String, dynamic> json){
   return{
     "index" : int.parse(json['index'].toString()),
-    "barcode" : json['barcode'].toString(),
-    "category" : json['category'].toString(),
-    "description" : json['description'].toString(),
-    "uom" : json['uom'].toString(),
-    "price" : double.parse(json['price'].toString()),
     "count" : double.parse(json['count'].toString()),
     "location" : json['location'].toString(),
-    "nof" : json['nof'].toString().isEmpty ? false : json['nof'],
   };
 }
 
@@ -237,5 +202,7 @@ Map<String, dynamic> itemFromJson(Map<String, dynamic> json) {
     "uom" : json['uom'] as String,
     "price" : json['price'] as double,
     "nof" : json['nof'] as bool,
+    "datetime" : json['datetime'] as String,
+    "ordercode" : json['ordercode'] as String,
   };
 }
