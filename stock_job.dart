@@ -29,10 +29,7 @@ class StockJob {
               filePath == other.filePath;
 
   @override
-  int get hashCode =>
-      id.hashCode ^ name.hashCode ^ date.hashCode ^ literals.hashCode ^ nof
-          .hashCode ^ allLocations.hashCode ^ location.hashCode ^ filePath
-          .hashCode; // ^ dbPath.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literals.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode ^ filePath.hashCode; // ^ dbPath.hashCode;
 
   StockJob({
     required this.id,
@@ -65,10 +62,7 @@ class StockJob {
 
   // Import job file from json
   factory StockJob.fromJson(dynamic json) {
-    StockJob job = StockJob(
-        id: json['id'] as String,
-        name: json['name'] as String
-    );
+    StockJob job = StockJob(id: json['id'] as String, name: json['name'] as String);
 
     job.date = json.containsKey("date") ? json['date'] as String : "";
 
@@ -111,13 +105,7 @@ class StockJob {
 
   Map<String, dynamic> toJson() {
     return {
-      'date': date.isEmpty ? "${DateTime
-          .now()
-          .day}_${DateTime
-          .now()
-          .month}_${DateTime
-          .now()
-          .year}" : date,
+      'date': date.isEmpty ? "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}" : date,
       'id': id,
       'name': name,
       'literals': jsonEncode(literals),
