@@ -12,24 +12,20 @@ class StockJob {
   List<Map<String, dynamic>> nof = List.empty(growable: true);
   List<String> allLocations = List.empty(growable: true);
   String location = "";
-  String filePath = "";
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-          other is StockJob &&
-              runtimeType == other.runtimeType &&
-              date == other.date &&
-              id == other.id &&
-              name == other.name &&
-              literals == other.literals &&
-              nof == other.nof &&
-              allLocations == other.allLocations &&
-              location == other.location &&
-              filePath == other.filePath;
+  bool operator ==(Object other) => identical(this, other) || other is StockJob &&
+      runtimeType == other.runtimeType &&
+      date == other.date &&
+      id == other.id &&
+      name == other.name &&
+      literals == other.literals &&
+      nof == other.nof &&
+      allLocations == other.allLocations &&
+      location == other.location;
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literals.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode ^ filePath.hashCode; // ^ dbPath.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ literals.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode; // ^ dbPath.hashCode;
 
   StockJob({
     required this.id,
@@ -66,8 +62,7 @@ class StockJob {
 
     job.date = json.containsKey("date") ? json['date'] as String : "";
 
-    job.literals = !json.containsKey("literals") || json['literals'] == null ?
-    List.empty(growable: true) : [
+    job.literals = !json.containsKey("literals") || json['literals'] == null ? List.empty(growable: true) : [
       for (final map in jsonDecode(json['literals'])){
         // literal from json
         "index": int.parse(map['index'].toString()),
@@ -76,8 +71,7 @@ class StockJob {
       },
     ];
 
-    job.nof = !json.containsKey("nof") || json['nof'] == null ?
-    List.empty(growable: true) : [
+    job.nof = !json.containsKey("nof") || json['nof'] == null ? List.empty(growable: true) : [
       for (final map in jsonDecode(json['nof'])){
         // item from json
         "index": map['index'] as int,
@@ -92,9 +86,7 @@ class StockJob {
       }
     ];
 
-    job.allLocations =
-    !json.containsKey("allLocations") || json['allLocations'] == null ?
-    List.empty(growable: true) : [
+    job.allLocations = !json.containsKey("allLocations") || json['allLocations'] == null ? List.empty(growable: true) : [
       for(final l in jsonDecode(json['allLocations']))
         l as String,
     ];
@@ -111,7 +103,7 @@ class StockJob {
       'literals': jsonEncode(literals),
       'nof': jsonEncode(nof),
       'allLocations': jsonEncode(allLocations),
-      'location': '',
+      'location': location,
     };
   }
 
@@ -131,6 +123,16 @@ class StockJob {
     return l;
   }
 
+  calcTotal() {
+    total = 0.0;
+    for (int i = 0; i < literals.length; i++) {
+      total += literals[i]["count"];
+    }
+  }
+}
+
+
+/*
   linearList() {
     List<List<dynamic>> l = List.empty(growable: true);
     for (int i = 0; i < literals.length; i++) {
@@ -174,11 +176,4 @@ class StockJob {
     l = l..sort((x, y) => (x[0] as dynamic).compareTo((y[0] as dynamic)));
     return l;
   }
-
-  calcTotal() {
-    total = 0.0;
-    for (int i = 0; i < literals.length; i++) {
-      total += literals[i]["count"];
-    }
-  }
-}
+*/
