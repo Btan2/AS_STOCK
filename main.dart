@@ -189,24 +189,24 @@ class _HomePage extends State<HomePage> {
                             )
                         ),
 
-                        // //
-                        // // TEST TABLE
-                        // //
                         //
-                        // rBox(
-                        //   context,
-                        //   Colors.black,
-                        //   TextButton(
-                        //       child: const Text("TEST TABLE"),
-                        //       onPressed: (){
-                        //         if(mainTable!.rows.isNotEmpty) {
-                        //             jobTable = mainTable!.rows;
-                        //             goToPage(context, const GridView(action: ActionType.view), false);
-                        //             //goToPage(context, const StaticTable(tableType: TableType.export), false);
-                        //           }
-                        //         },
-                        //   ),
-                        // ),
+                        // TEST TABLE
+                        //
+
+                        rBox(
+                          context,
+                          Colors.black,
+                          TextButton(
+                              child: const Text("TEST TABLE"),
+                              onPressed: (){
+                                if(mainTable!.rows.isNotEmpty) {
+                                    jobTable = mainTable!.rows;
+                                    goToPage(context, const GridView(action: ActionType.view), false);
+                                    //goToPage(context, const StaticTable(tableType: TableType.export), false);
+                                  }
+                                },
+                          ),
+                        ),
 
                         rBox(
                           context,
@@ -288,54 +288,6 @@ class _AppSettings extends State<AppSettings> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    headerPadding('Rows per Page', TextAlign.left),
-                    Padding(
-                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
-                        child: Card(
-                            child: ListTile(
-                              title: Text(sFile["pageCount"].toString(), textAlign: TextAlign.center,),
-                              leading: IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
-                                onPressed: () {
-                                  sFile["pageCount"] -= sFile["pageCount"] - 1 > 0 ? 1 : 0;
-                                  refresh(this);
-                                },
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.add_circle_outline),
-                                onPressed: () {
-                                  sFile["pageCount"] += sFile["pageCount"] + 1 < 31 ? 1 : 0;
-                                  refresh(this);
-                                },
-                              ),
-                            )
-                        )
-                    ),
-
-                    // headerPadding('Autosave Time', TextAlign.left),
-                    // Padding(
-                    //     padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                    //     child: Card(
-                    //         child: ListTile(
-                    //           title: Text(sFile["saveTimer"].toString(), textAlign: TextAlign.center),
-                    //           leading: IconButton(
-                    //             icon: const Icon(Icons.remove_circle_outline),
-                    //             onPressed: () {
-                    //               sFile["fontScale"] -= sFile["saveTimer"] - 1 > 5 ? 1 : 0;
-                    //               refresh(this);
-                    //             },
-                    //           ),
-                    //           trailing: IconButton(
-                    //             icon: const Icon(Icons.add_circle_outline),
-                    //             onPressed: () {
-                    //               sFile["fontScale"] += sFile["saveTimer"] + 1 < 20 ? 1 : 0;
-                    //               refresh(this);
-                    //             },
-                    //           ),
-                    //         )
-                    //     )
-                    // ),
-
                     headerPadding('Font Size', TextAlign.left),
                     Padding(
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
@@ -704,7 +656,7 @@ class _NewJob extends State<NewJob> {
 
                                 newJob.id = s;
                                 newJob.name = nameCtrl.text;
-                                newJob.date = "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}";
+                                newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
 
                                 String path = "/storage/emulated/0/Documents/$jobStartStr${newJob.id}_0";
 
@@ -815,9 +767,8 @@ class Stocktake extends StatelessWidget {
                           TextButton(
                             child: Text('EDIT STOCKTAKE', style: whiteText),
                             onPressed: () {
-                              job.literals.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit), false)
-                                  : showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
-                              // goToPage(context, DynamicTable(tableType: TableType.literal, action: ActionType.edit), true)
+                              job.literals.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit), false) :
+                                showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
                             },
                           )
                       ),
@@ -827,48 +778,36 @@ class Stocktake extends StatelessWidget {
             ),
 
             bottomNavigationBar: SingleChildScrollView(
-                      child: Column(
-                          children: [
-                            rBox(
-                                context,
-                                Colors.orange,
-                                TextButton(
-                                  child: Text('Export Job', style: whiteText),
-                                  onPressed: () {
-                                    exportJobToXLSX();
-                                    gunDataTXT();
-                                    showAlert(context, "Job Exported!", "/storage/emulated/0/Documents/stocktake_${job.id}_[num].xlsx\n", Colors.orange);
-                                  },
-                                )
-                            ),
-                            // rBox(
-                            //     context,
-                            //     Colors.green,
-                            //     TextButton(
-                            //       child: Text('Save Job', style: whiteText),
-                            //       onPressed: () async {
-                            //         await writeJob(job, true).then((value){
-                            //           showAlert(context, "Job Saved", "Save path: \n /Documents/$jobStartStr${job.id}...", Colors.orange);
-                            //         });
-                            //       },
-                            //     )
-                            // ),
-                            rBox(
-                                context,
-                                colorBack,
-                                TextButton(
-                                  child: Text('Back', style: whiteText),
-                                  onPressed: () async {
-                                    await writeJob(job, true).then((value) {
-                                      goToPage(context, const JobsPage(), false);
-                                    });
-                                  },
-                                )
-                            ),
-                          ]
-                      )
+                child: Column(
+                    children: [
+                      bottomBtn(
+                          context,
+                          Colors.orange,
+                          TextButton(
+                            child: Text('Export Job', style: whiteText),
+                            onPressed: () {
+                              exportJobToXLSX();
+                              gunDataTXT();
+                              showAlert(context, "Job Exported!", "/storage/emulated/0/Documents/stocktake_${job.id}_[num].xlsx\n", Colors.orange);
+                            },
+                          )
+                      ),
+                      bottomBtn(
+                          context,
+                          colorBack,
+                          TextButton(
+                            child: Text('Back', style: whiteText),
+                            onPressed: () async {
+                              await writeJob(job, true).then((value) {
+                                goToPage(context, const JobsPage(), false);
+                              });
+                            },
+                          )
+                      ),
+                    ]
                 )
             )
+        )
     );
   }
 }
@@ -1123,7 +1062,6 @@ class _GridView extends State<GridView> {
   FocusNode locationFocus = FocusNode();
   FocusNode searchFocus = FocusNode();
   // FocusNode uomFocus = FocusNode();
-  // TextEditingController uomCtrl = TextEditingController();
   TextEditingController barcodeCtrl = TextEditingController();
   TextEditingController ordercodeCtrl = TextEditingController();
   TextEditingController priceCtrl = TextEditingController();
@@ -1132,10 +1070,10 @@ class _GridView extends State<GridView> {
   TextEditingController locationCtrl = TextEditingController();
   TextEditingController categoryCtrl = TextEditingController();
   TextEditingController searchCtrl = TextEditingController();
+  // TextEditingController uomCtrl = TextEditingController();
   List<List<dynamic>> filterList = List.empty();
   List<String> barcodeList = List.empty();
   List<String> ordercodeList = List.empty();
-
   String categoryValue = "MISC";
   double keyboardHeight = 20.0;
   int barcodeIndex = 0;
@@ -1155,7 +1093,6 @@ class _GridView extends State<GridView> {
     countCtrl.dispose();
     locationCtrl.dispose();
     categoryCtrl.dispose();
-
     barcodeFocus.dispose();
     ordercodeFocus.dispose();
     priceFocus.dispose();
@@ -1315,7 +1252,28 @@ class _GridView extends State<GridView> {
     // }
   }
 
-  _editCount() {
+  _checkFields(){
+    if(barcodeCtrl.text.isEmpty){
+      barcodeCtrl.text = '0';
+    }
+    if(ordercodeCtrl.text.isEmpty){
+      ordercodeCtrl.text = '';
+    }
+    // if(uomCtrl.text.isEmpty){
+    //   uomCtrl.text = "EACH";
+    // }
+    if(priceCtrl.text.isEmpty){
+      priceCtrl.text = '0.0';
+    }
+    if(countCtrl.text.isEmpty){
+      countCtrl.text = '0.0';
+    }
+    if(locationCtrl.text.isEmpty){
+      locationCtrl.text = job.location;
+    }
+  }
+
+  Widget _editCount() {
     return GestureDetector(
         onTapDown: (_) => _clearFocus(),
         child: Padding(
@@ -1354,28 +1312,7 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _checkFields(){
-    if(barcodeCtrl.text.isEmpty){
-      barcodeCtrl.text = '0';
-    }
-    if(ordercodeCtrl.text.isEmpty){
-      ordercodeCtrl.text = '';
-    }
-    // if(uomCtrl.text.isEmpty){
-    //   uomCtrl.text = "EACH";
-    // }
-    if(priceCtrl.text.isEmpty){
-      priceCtrl.text = '0.0';
-    }
-    if(countCtrl.text.isEmpty){
-      countCtrl.text = '0.0';
-    }
-    if(locationCtrl.text.isEmpty){
-      locationCtrl.text = job.location;
-    }
-  }
-
-  _editStock(int index) {
+  Widget _editStock(int index) {
     return StatefulBuilder(builder: (context, setState){
       return Scaffold(
         backgroundColor: Colors.black,
@@ -1494,7 +1431,7 @@ class _GridView extends State<GridView> {
     });
   }
 
-  _editNOF(int index) {
+  Widget _editNOF(int index) {
     return StatefulBuilder(
       builder: (context, setState){
         return Scaffold(
@@ -1755,7 +1692,7 @@ class _GridView extends State<GridView> {
                                       job.nof[nofIndex]["description"] = descriptionCtrl.text.toUpperCase();
                                       job.nof[nofIndex]["uom"] = "EACH";//uomCtrl.text;
                                       job.nof[nofIndex]["price"] = double.tryParse(priceCtrl.text) ?? 0.0;
-                                      job.nof[nofIndex]["datetime"] = "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}";
+                                      job.nof[nofIndex]["datetime"] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
                                       job.nof[nofIndex]["ordercode"] = finalOrdercode;
                                       job.nof[nofIndex]["nof"] = true;
 
@@ -1794,7 +1731,7 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _addStock(int index){
+  Widget _addStock(int index){
     return Scaffold(
       backgroundColor: Colors.black,
       resizeToAvoidBottomInset: false,
@@ -1807,28 +1744,36 @@ class _GridView extends State<GridView> {
                     width: MediaQuery.of(context).size.width,
                     height: MediaQuery.of(context).size.height/20.0,
                   ),
-
                   titlePadding("Description:", TextAlign.left),
                   Card(
                       child: ListTile(
                         title: Text(filterList[index][tDescription], style: greyText),
                       )
                   ),
-
                   titlePadding("Category:", TextAlign.left),
                   Card(
                       child: ListTile(
                         title: Text(filterList[index][tCategory] ?? 'MISC', style: greyText),
                       )
                   ),
-
+                  // titlePadding("Ordercodes:", TextAlign.left),
+                  // Card(
+                  //     child: ListTile(
+                  //       title: Text(filterList[index][tBarcode] ?? 'MISC', style: greyText),
+                  //     )
+                  // ),
+                  // titlePadding("Barcodes:", TextAlign.left),
+                  // Card(
+                  //     child: ListTile(
+                  //       title: Text(filterList[index][tOrdercode] ?? 'MISC', style: greyText),
+                  //     )
+                  // ),
                   // titlePadding("Current Location:", TextAlign.left),
                   // Card(
                   //     child: ListTile(
                   //       title: Text(job.location, style: greyText),
                   //     )
                   // ),
-
                   titlePadding("Add Count:", TextAlign.left),
                   _editCount(),
                 ],
@@ -1878,107 +1823,110 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _viewFields(int index){
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return Scaffold(
-          backgroundColor: Colors.black,
-          resizeToAvoidBottomInset: false,
-          body: SingleChildScrollView(
-              child: Column(
-                children: <Widget>[
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width,
-                    height: MediaQuery.of(context).size.height/20.0,
-                  ),
+  Widget _gridItemADD(int pIndex){
+    return Card(
+        child: ListTile(
+          trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : IconButton(
+            onPressed: () async {
+              refresh(this);
+              _clearFocus();
+              _setTextFields(pIndex);
+              await showGeneralDialog(
+                context: context,
+                barrierColor: Colors.black12, // Background color
+                barrierDismissible: false,
+                transitionDuration: const Duration(milliseconds: 100),
+                pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                  return _editNOF(pIndex);
+                },
+              ).then((value){refresh(this);});
+            },
+            icon: const Icon(Icons.edit_note, color: Colors.black,),
+          ),
+          title: Text(jobTable[(filterList[pIndex][iIndex])][tDescription], style: blackText, textAlign: TextAlign.center, softWrap: true),
+          subtitle: Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center, softWrap: true),
+          onTap: () async {
+            _clearFocus();
+            _setTextFields(pIndex);
+            await showGeneralDialog(
+              context: context,
+              barrierColor: Colors.black12, // Background color
+              barrierDismissible: false,
+              barrierLabel: 'Dialog',
+              transitionDuration: const Duration(milliseconds: 100),
+              pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                return _addStock(pIndex);
+              },
+            ).then((value){refresh(this);});
+          },
+          onLongPress: (){
+            itemCopy = filterList[pIndex];
+            showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
+            //debugPrint(filterList[pIndex].toString());
+          },
+        )
+    );
+  }
 
-                  titlePadding("Description:", TextAlign.left),
-                  Card(
-                      child: ListTile(
-                        title: Text(filterList[index][tDescription], style: greyText),
-                      )
+  Widget _gridItemEDIT(int pIndex){
+    int tableIndex = filterList[pIndex][iIndex];
+    return Row(
+        children: [
+          Card(
+              child: SizedBox(height: 150.0, width: MediaQuery.of(context).size.width * 0.75,
+                child: ListTile(
+                  title: Text(jobTable[tableIndex][tDescription], softWrap: true,),
+                  subtitle: Text("Loc: ${filterList[pIndex][iLocation]}"),
+                  trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : IconButton(
+                    onPressed: () async {
+                      refresh(this);
+                      _clearFocus();
+                      _setTextFields(pIndex);
+                      await showGeneralDialog(
+                        context: context,
+                        barrierColor: Colors.black12, // Background color
+                        barrierDismissible: false,
+                        barrierLabel: 'Dialog',
+                        transitionDuration: const Duration(milliseconds: 100),
+                        pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                          return _editNOF(pIndex);
+                        },
+                      ).then((value){refresh(this);});
+                    },
+                    icon: const Icon(Icons.edit_note, color: Colors.black,),
                   ),
-
-                  titlePadding("Barcode(s):", TextAlign.left),
-                  Padding(
-                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                      child: Card(
-                          child: ListTile(
-                            trailing: IconButton(
-                              icon: const Icon(Icons.add_circle_outline),
-                              onPressed: () {
-                                setState(() {
-                                  var spl = (filterList[index][tBarcode].toString().toUpperCase()).split(",").toList();
-                                  barcodeIndex = min(barcodeIndex + 1, spl.length-1);
-                                  barcodeCtrl.text = spl[barcodeIndex];
-                                });
-                              },
-                            ),
-                            title: Text(barcodeCtrl.text, textAlign: TextAlign.center),
-                            leading: IconButton(
-                              icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: () {
-                                setState(() {
-                                  var spl = filterList[index][tBarcode].toString().toUpperCase().split(",").toList();
-                                  barcodeIndex = max(barcodeIndex - 1, 0);
-                                  barcodeCtrl.text = spl[barcodeIndex];
-                                });
-                              },
-                            ),
-                          )
-                      )
-                  ),
-
-                  titlePadding("Order Code: ", TextAlign.left),
-                  Card(
-                    child: ListTile(
-                      title: Text(filterList[index][tOrdercode] ?? "", style: greyText),
-                    )
-                  ),
-
-                  titlePadding("Category:", TextAlign.left),
-                  Card(
-                      child: ListTile(
-                        title: Text(filterList[index][tCategory] ?? 'MISC', style: greyText),
-                      )
-                  ),
-
-                  titlePadding("UOM:", TextAlign.left),
-                  Card(
-                      child: ListTile(
-                        title: Text(filterList[index][tUom], style: greyText),
-                      )
-                  ),
-
-                  titlePadding("Price:", TextAlign.left),
-                  Card(
-                      child: ListTile(
-                        title: Text(filterList[index][tPrice].toString(), style: greyText),
-                      )
-                  ),
-                ],
+                  onTap: () async {
+                    _clearFocus();
+                    _setTextFields(pIndex);
+                    await showGeneralDialog(
+                      context: context,
+                      barrierColor: Colors.black12, // Background color
+                      barrierDismissible: false,
+                      barrierLabel: 'Dialog',
+                      transitionDuration: const Duration(milliseconds: 100),
+                      pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                        return _editStock(pIndex);
+                      },
+                    ).then((value){refresh(this);});
+                  },
+                  onLongPress: (){
+                    itemCopy = filterList[pIndex];
+                    showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
+                    //debugPrint(filterList[pIndex].toString());
+                  },
+                ),
               )
           ),
-          bottomSheet: SingleChildScrollView(
-              child: Center(
-                  child: Column(
-                      children: [
-                        rBox(
-                            context,
-                            colorBack,
-                            TextButton(
-                              child: Text('Back', style: whiteText),
-                              onPressed: (){
-                                Navigator.pop(context);
-                              },
-                            )
-                        ),
-                      ]
+          Card(
+              child: SizedBox(
+                  height: 150.0,
+                  width: MediaQuery.of(context).size.width * 0.195,
+                  child: Center(
+                    child: Text("${filterList[pIndex][iCount]}"),
                   )
               )
-          ),
-        );
-      },
+          )
+        ]
     );
   }
 
@@ -2071,60 +2019,14 @@ class _GridView extends State<GridView> {
                       onTapDown: (_) => _clearFocus(),
                       child: Container(
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors.black38.withOpacity(0.8),
-                              style: BorderStyle.solid,
-                              width: 2.0,
-                            ),
                             color: Colors.black,
+                            border: Border.all(
+                              color: Colors.black38.withOpacity(1.0),
+                              style: BorderStyle.solid,
+                              width: 3.0,
+                            ),
                           ),
-                          child: Card(
-                              child: ListTile(
-                                trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : IconButton(
-                                  onPressed: () async {
-                                    refresh(this);
-                                    _clearFocus();
-                                    _setTextFields(pIndex);
-                                    await showGeneralDialog(
-                                      context: context,
-                                      barrierColor: Colors.black12, // Background color
-                                      barrierDismissible: false,
-                                      barrierLabel: 'Dialog',
-                                      transitionDuration: const Duration(milliseconds: 100),
-                                      pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
-                                        return _editNOF(pIndex);
-                                        },
-                                    ).then((value){refresh(this);});
-                                    },
-                                  icon: const Icon(Icons.edit_note, color: Colors.black,),
-                                ),
-                                title: Text(jobTable[(filterList[pIndex][iIndex])][tDescription], style: blackText, textAlign: TextAlign.center, softWrap: true),
-                                subtitle: widget.action == ActionType.edit ?
-                                    Text("\nCount: ${filterList[pIndex][iCount]}       Loc: ${filterList[pIndex][iLocation]}", textAlign: TextAlign.center, softWrap: true,) :
-                                    Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center),
-                                onTap: () async {
-                                    _clearFocus();
-                                    _setTextFields(pIndex);
-                                    await showGeneralDialog(
-                                      context: context,
-                                      barrierColor: Colors.black12, // Background color
-                                      barrierDismissible: false,
-                                      barrierLabel: 'Dialog',
-                                      transitionDuration: const Duration(milliseconds: 100),
-                                      pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
-                                        return widget.action == ActionType.add ? _addStock(pIndex) :
-                                        widget.action == ActionType.edit ? _editStock(pIndex) :
-                                        _viewFields(pIndex);
-                                      },
-                                    ).then((value){refresh(this);});
-                                },
-                                onLongPress: (){
-                                  itemCopy = filterList[pIndex];
-                                  showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
-                                  //debugPrint(filterList[pIndex].toString());
-                                },
-                              )
-                          )
+                          child: widget.action == ActionType.edit ? _gridItemEDIT(pIndex) : _gridItemADD(pIndex),
                       )
                     );
                     },
@@ -2132,17 +2034,15 @@ class _GridView extends State<GridView> {
                 )
               ],
             ),
-
             bottomSheet: SingleChildScrollView(
-                 child: Center(
-                     child: Column(
-                         children: [
-                           _searchList(),
-                         ]
-                     )
-                 )
-             ),
-
+                child: Center(
+                    child: Column(
+                        children: [
+                          _searchList(),
+                        ]
+                    )
+                )
+            ),
             bottomNavigationBar: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: rBox(
@@ -2429,7 +2329,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onPressed: () {
                                               barcodeIndex = min(barcodeIndex + 1, max(barcodeList.length-1 , 0));
                                               barcodeCtrl.text = barcodeList[barcodeIndex];
-                                              //setState(() {});
+                                              setState(() {});
                                             },
                                           ),
                                           title: TextField(
@@ -2439,13 +2339,13 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onSubmitted: (value) {
                                               if(barcodeCtrl.text != "###" && barcodeCtrl.text != ""){
                                                 // MUST REMOVE COMMAS OR LIST WILL BE MESSED UP
-                                                barcodeList[barcodeIndex] =  barcodeCtrl.text.replaceAll(",", "");
+                                                barcodeList[barcodeIndex] = barcodeCtrl.text.replaceAll(",", "");
                                               }
                                               else{
                                                 showAlert(context, "", "Barcode format is not correct", colorWarning);
                                                 barcodeCtrl.text = barcodeList[barcodeIndex];
                                               }
-                                              //setState((){});
+                                              setState((){});
                                             },
                                           ),
                                           subtitle: Center(
@@ -2461,7 +2361,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                                           barcodeIndex = barcodeList.length-1;
                                                         }
                                                       }
-                                                      //setState(() {});
+                                                      setState(() {});
                                                     },
                                                   ),
                                                   IconButton(
@@ -2470,7 +2370,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                                       barcodeList.add("");
                                                       barcodeIndex = barcodeList.length - 1;
                                                       barcodeCtrl.text = barcodeList[barcodeIndex];
-                                                      //setState(() {});
+                                                      setState(() {});
                                                     },
                                                   ),
                                                 ],
@@ -2482,7 +2382,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onPressed: () {
                                               barcodeIndex = max(barcodeIndex - 1, 0);
                                                 barcodeCtrl.text = barcodeList[barcodeIndex];
-                                                //setState(() {});
+                                                setState(() {});
                                               },
                                           ),
                                         )
@@ -2502,7 +2402,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onPressed: () {
                                               ordercodeIndex = min(ordercodeIndex + 1, max(ordercodeList.length-1 , 0));
                                               ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                              //setState(() {});
+                                              setState(() {});
                                             },
                                           ),
                                           title: TextField(
@@ -2518,7 +2418,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                                 showAlert(context, "", "Barcode format is not correct", colorWarning);
                                                 ordercodeCtrl.text = ordercodeList[ordercodeIndex];
                                               }
-                                              //setState((){});
+                                              setState((){});
                                             },
                                           ),
                                           subtitle: Center(
@@ -2534,7 +2434,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                                           ordercodeIndex = ordercodeList.length-1;
                                                         }
                                                       }
-                                                      //setState(() {});
+                                                      setState(() {});
                                                     },
                                                   ),
                                                   IconButton(
@@ -2543,7 +2443,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                                       ordercodeList.add("");
                                                       ordercodeIndex = ordercodeList.length - 1;
                                                       ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                                      //setState(() {});
+                                                      setState(() {});
                                                     },
                                                   ),
                                                 ],
@@ -2555,7 +2455,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onPressed: () {
                                               ordercodeIndex = max(ordercodeIndex - 1, 0);
                                               ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                              //setState(() {});
+                                              setState(() {});
                                             },
                                           ),
                                         )
@@ -2642,7 +2542,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                           clearFocus();
                                           double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
                                           countCtrl.text = count.toString();
-                                          // refresh(this);
+                                          //refresh(this);
                                         },
                                       ),
                                       title: TextField(
@@ -2658,7 +2558,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                           clearFocus();
                                           double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
                                           countCtrl.text = max(count, 0.0).toString();
-                                          // refresh(this);
+                                          //refresh(this);
                                         },
                                       ),
                                     )
@@ -2716,7 +2616,9 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     }
 
                                     if(i > 0){
-                                      finalBarcode += ",${barcodeList[i]}";
+                                      if(barcodeList[i].isNotEmpty){
+                                        finalBarcode += ",${barcodeList[i]}";
+                                      }
                                     }
                                     else{
                                       finalBarcode += barcodeList[i];
@@ -2758,7 +2660,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                       "description": descriptionCtrl.text.toUpperCase(),
                                       "uom": "EACH",//uomCtrl.text,
                                       "price": double.tryParse(priceCtrl.text) ?? 0.0,
-                                      "datetime" : "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}",
+                                      "datetime" : "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
                                       "ordercode" : ordercodeCtrl.text,
                                       "nof": true,
                                     });
@@ -2815,20 +2717,14 @@ refresh(var widget) {
 Widget headerPadding(String title, TextAlign l){
   return Padding(
     padding: const EdgeInsets.all(15.0),
-    child: Text(
-        title,
-        textAlign: l,
-        style: const TextStyle(color: Colors.blue, fontSize: 20.0)),
+    child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue, fontSize: 20.0)),
   );
 }
 
 Widget titlePadding(String title, TextAlign l){
   return Padding(
       padding: const EdgeInsets.only(top: 15.0),
-      child: DefaultTextStyle(
-        style: blueText,
-        child: Text(title, textAlign: l),
-      )
+      child: DefaultTextStyle(style: blueText, child: Text(title, textAlign: l),)
   );
 }
 
@@ -2841,6 +2737,18 @@ goToPage(BuildContext context, Widget page, bool animate) {
       pageBuilder: (context, animation1, animation2) => page,
       transitionDuration: Duration.zero,
       reverseTransitionDuration: Duration.zero,
+    ),
+  );
+}
+
+bottomBtn(BuildContext context, Color c, Widget w){
+  return Padding(
+    padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
+    child: Container(
+      height: 50,
+      width: MediaQuery.of(context).size.width * 0.95,
+      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(20)),
+      child: w,
     ),
   );
 }
@@ -2866,10 +2774,7 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
         padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
         behavior: SnackBarBehavior.floating,
         dismissDirection: DismissDirection.horizontal,
-        margin: EdgeInsets.only(
-            bottom: MediaQuery.of(context).size.height * 0.7,
-            right: 20,
-            left: 20),
+        margin: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.97, right: 20, left: 20),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10.0),
         ),
@@ -3064,11 +2969,7 @@ Future<void> loadMasterSheet() async {
 }
 
 exportJobToXLSX() async {
-
-  // CellStyle oldDate = CellStyle(backgroundColorHex: '#FF8980');
-
   List<List<dynamic>> finalSheet = [];
-
   for(int i =0; i < job.literals.length; i++){
     bool skip = false;
     var tableIndex = job.literals[i]["index"];
@@ -3085,17 +2986,24 @@ exportJobToXLSX() async {
 
     // Item doesn't exist, so add new item to list
     if(!skip){
+
+      bool nof = tableIndex >= mainTable!.rows.length;
+      String date = jobTable[tableIndex][tDatetime].toString();
+      if(!nof){
+        date = getDateString(date).toString();
+      }
+
       finalSheet.add([
-        jobTable[tableIndex][tIndex], //INDEX
-        jobTable[tableIndex][tCategory], //CATEGORY
-        jobTable[tableIndex][tDescription], // DESCRIPTION
-        jobTable[tableIndex][tUom], // UOM
-        job.literals[i]['count'], // COUNT
+        jobTable[tableIndex][tIndex].toString(), //INDEX
+        jobTable[tableIndex][tCategory].toString(), //CATEGORY
+        jobTable[tableIndex][tDescription].toString(), // DESCRIPTION
+        jobTable[tableIndex][tUom].toString(), // UOM
+        job.literals[i]['count'].toString(), // COUNT
         jobTable[tableIndex][tPrice] * job.literals[i]['count'], // TOTAL COST
-        jobTable[tableIndex][tBarcode], // BARCODE
-        (tableIndex >= mainTable!.rows.length).toString().toUpperCase(), // NOF
-        jobTable[tableIndex][tDatetime].toString(), // DATETIME
-        jobTable[tableIndex][tOrdercode].toString(), // ORDERCODE
+        jobTable[tableIndex][tBarcode].toString(), // BARCODE
+        nof.toString().toUpperCase(), // NOF
+        date, // DATETIME
+        jobTable[tableIndex][tOrdercode] ?? 0, // ORDERCODE
       ]);
     }
   }
@@ -3105,17 +3013,43 @@ exportJobToXLSX() async {
   sheetObject.isRTL = false;
 
   // Add header row
-  sheetObject.insertRowIterables(["Master Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "Barcode", "NOF", "Datetime", "Ordercode"], 0);
-
+  sheetObject.insertRowIterables(["Master Index", "Category", "Description", "UOM", 'QTY', "Cost Ex GST", "Barcode", "NOF", "Datetime", "Ordercode"], 0,);
   for(int i = 0; i < finalSheet.length; i++){
-    List<String> row = [];
+    sheetObject.insertRowIterables(
+        <String> [
+          finalSheet[i][0],
+          finalSheet[i][1],
+          finalSheet[i][2],
+          finalSheet[i][3],
+          finalSheet[i][4],
+          finalSheet[i][5].toString(),
+          finalSheet[i][6],
+          finalSheet[i][7],
+          finalSheet[i][8],
+          finalSheet[i][9],
+        ],
+        i+1
+    );
 
-    for(int j = 0; j < finalSheet[i].length; j++){
-      // Check date and color cell...somehow...
-      row.add(finalSheet[i][j].toString());
+    if(finalSheet[i][7] == "FALSE"){
+       debugPrint(finalSheet[i][8].toString());
+    }
+    else{
+      debugPrint(finalSheet[i][8].toString());
     }
 
-    sheetObject.insertRowIterables(row, i+1);
+
+
+    if((DateTime.now().year - int.parse(finalSheet[i][8].split("/").first)) > 0){
+      var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
+      cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
+    }
+
+
+    // debugPrint(finalSheet[i][8].toString());
+    // debugPrint(finalSheet[i][8].split("/").last);
+    //
+    // Color code cell if date is older than 1 year
   }
 
   // Set column widths
@@ -3145,9 +3079,7 @@ exportJobToXLSX() async {
   }
 
   var fileBytes = excel.save();
-  File(filePath)
-    ..createSync(recursive: true)
-    ..writeAsBytesSync(fileBytes!);
+  File(filePath)..createSync(recursive: true)..writeAsBytesSync(fileBytes!);
 }
 
 writeJob(StockJob job, bool overwrite) async {
@@ -3229,13 +3161,14 @@ getSession() async {
 }
 
 bool barcodeExists(String barcode, int ignore){
+
   if (barcode.trim().isEmpty){
     return false;
   }
 
   for(int n = 0; n < jobTable.length; n++) {
-    if (n != ignore){
-      if(jobTable[n][tBarcode].split(",").toList().contains(barcode)){
+    if(jobTable[n][tBarcode] != null && jobTable[n][tBarcode].isNotEmpty && n != ignore) {
+      if (jobTable[n][tBarcode].split(",").toList().contains(barcode)) {
         return true;
       }
     }
@@ -3244,7 +3177,7 @@ bool barcodeExists(String barcode, int ignore){
   return false;
 }
 
-void gunDataTXT(){
+gunDataTXT(){
   String finalTxt = "";
 
   for(int i = 0; i < job.literals.length; i++){
@@ -3287,4 +3220,27 @@ void gunDataTXT(){
   var jobFile = File(path);
   jobFile.writeAsString(finalTxt);
 
+}
+
+getDateString(String d){
+  const gsDateBase = 2209161600 / 86400;
+  const gsDateFactor = 86400000;
+
+  final date = double.tryParse(d);
+  if (date == null) return "NO DATE RECORDED";
+  final millis = (date - gsDateBase) * gsDateFactor;
+
+  var fd = (DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
+  fd = fd.substring(0, 10);
+  fd = fd.replaceAll("-", "/");
+
+  var fls = fd.split("/");
+  if(fls[2].length < 2){
+    fls[2] = "0${fls[2]}";
+  }
+
+  fd = "${fls[2]}/${fls[1]}/${fls[0]}";
+
+  return fd;
+  //(DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
 }
