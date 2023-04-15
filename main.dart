@@ -1,7 +1,5 @@
 /*
 LEGAL:
-   This was programmed by Callum Jack Buchanan.
-   Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
@@ -35,8 +33,6 @@ const int tPrice = 5;
 const int tDatetime = 6;
 const int tOrdercode = 7;
 
-//const int tNof = 8;
-
 // STOCK ITEM INDICES
 const int iIndex = 0;
 const int iCount = 1;
@@ -49,8 +45,6 @@ StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
 List<String> jobList = [];
 List<List<dynamic>> jobTable = List.empty();
 List<dynamic> itemCopy = List.empty();
-bool saveable = false;
-
 Directory? rootDir;
 SpreadsheetTable? mainTable;
 List<String> masterCategory = [];
@@ -73,8 +67,6 @@ TextStyle get titleText{ return const TextStyle(color: Colors.black87, fontSize:
 TextStyle get blueText{ return const TextStyle(color: Colors.lightBlue, fontSize: 20.0, fontWeight: FontWeight.bold);}
 
 void main() {
-  Timer.periodic(const Duration(minutes:5), (Timer t) => saveable ? debugPrint("AUTOSAVED") : null);
-
   runApp(
      MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -197,28 +189,25 @@ class _HomePage extends State<HomePage> {
                             )
                         ),
 
+                        // //
+                        // // TEST TABLE
+                        // //
                         //
-                        // TEST TABLE
-                        //
+                        // rBox(
+                        //   context,
+                        //   Colors.black,
+                        //   TextButton(
+                        //       child: const Text("TEST TABLE"),
+                        //       onPressed: (){
+                        //         if(mainTable!.rows.isNotEmpty) {
+                        //             jobTable = mainTable!.rows;
+                        //             goToPage(context, const GridView(action: ActionType.view), false);
+                        //             //goToPage(context, const StaticTable(tableType: TableType.export), false);
+                        //           }
+                        //         },
+                        //   ),
+                        // ),
 
-                        rBox(
-                          context,
-                          Colors.black,
-                          TextButton(
-                              child: const Text("TEST TABLE"),
-                              onPressed: (){
-                                if(mainTable!.rows.isNotEmpty) {
-                                    jobTable = mainTable!.rows;
-                                    goToPage(context, const GridView(action: ActionType.view), false);
-                                    //goToPage(context, const StaticTable(tableType: TableType.export), false);
-                                  }
-                                },
-                          ),
-                        ),
-
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height/40.0,
-                        ),
                         rBox(
                           context,
                           Colors.redAccent.shade200,
@@ -505,7 +494,7 @@ class _JobsPage extends State<JobsPage> {
                       Column(
                           children: List.generate(jobList.length, (index) => Card(
                             child: ListTile(
-                                title: Text(shortFilePath(jobList[index])),
+                                title: Text(jobList[index].split("/").last),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_forever_sharp),
                                   color: Colors.redAccent,
@@ -517,13 +506,12 @@ class _JobsPage extends State<JobsPage> {
                                 onTap: () async {
                                   if(access) {
                                     await _readJob(jobList[index]).then((value) {
-                                      saveable = true;
                                       jobTable = mainTable!.rows + job.nofList();
-                                      goToPage(context, const OpenJob(), true);
+                                      goToPage(context, const Stocktake(), true);
                                     });
                                   }
                                   else{
-                                    //showNotification(context, Colors.redAccent, whiteText, "!! ALERT !!", "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'",);
+                                    showAlert(context, "!! ALERT !!", "* Read/Write permissions were DENIED \n* Try changing storage permissions in App Settings", Colors.red[900]!);
                                   }
                                 }
                             ),
@@ -572,13 +560,12 @@ class _JobsPage extends State<JobsPage> {
                                         // copy job file to documents folder if it is not there
                                         await _copyJobFile(path);
                                         await _readJob(path).then((value) {
-                                          saveable = true; // set autosave flag
                                           jobTable = mainTable!.rows + job.nofList();
-                                          goToPage(context, const OpenJob(), true);
+                                          goToPage(context, const Stocktake(), true);
                                         });
                                       }
                                       else {
-                                        //showNotification(context, Colors.red[900]!, whiteText, "!! ALERT !!", "* Read/Write permissions were DENIED\n * Try changing permissions via -> 'App Settings'");
+                                        showAlert(context, "!! ALERT !!", "* Read/Write permissions were DENIED \n* Try changing storage permissions in App Settings", Colors.red[900]!);
                                       }
                                     },
                                   )
@@ -731,8 +718,7 @@ class _NewJob extends State<NewJob> {
                                 }
 
                                 jobTable = mainTable!.rows + job.nofList();
-                                saveable = true;
-                                goToPage(context, const OpenJob(), false);
+                                goToPage(context, const Stocktake(), false);
                               },
                             )
                         ),
@@ -757,111 +743,8 @@ class _NewJob extends State<NewJob> {
   }
 }
 
-class OpenJob extends StatelessWidget {
-  const OpenJob({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        appBar: AppBar(
-          centerTitle: true,
-          title: Text("Job -> ${job.id.toString()}", textAlign: TextAlign.center),
-          automaticallyImplyLeading: false,
-        ),
-        body: SingleChildScrollView(
-          child: Column(
-              children: [
-                Card(
-                  child: ListTile(
-                    title: Text(job.date.replaceAll("_", "/")),
-                    leading: const Icon(Icons.date_range, color: Colors.blueGrey),
-                  ),
-                ),
-                SizedBox(
-                  width: MediaQuery.of(context).size.width,
-                  height: MediaQuery.of(context).size.height/40.0,
-                ),
-                Center(
-                    child: Column(
-                        children: [
-                          rBox(
-                              context,
-                              Colors.blue,
-                              TextButton(
-                                child: Text('Stocktake', style: whiteText),
-                                onPressed: () {
-                                  if(jobTable.isEmpty){
-                                    showAlert(context, "Alert", "No spreadsheet data!\n* Press 'Sync with Server' to get latest MASTER SHEET.\n*You can also load a spreadsheet file from storage via the Settings page", colorOk);
-                                  }
-                                  else{
-                                    goToPage(context, const Stocktake(), false);
-                                  }
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              Colors.blue,
-                              TextButton(
-                                child: Text('Export Spreadsheet', style: whiteText),
-                                onPressed: () {
-                                  //goToPage(context, const StaticTable(tableType: TableType.export), false);
-                                  exportJobToXLSX();
-                                  showAlert(context, "Job Export", "Stocktake exported: "'/storage/emulated/0/Documents/stocktake_${job.id}_[num].xlsx', Colors.orange);
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              Colors.green,
-                              TextButton(
-                                child: Text('Save Job', style: whiteText),
-                                onPressed: () async {
-                                  await writeJob(job, true).then((value){
-                                    // String date = job.date.replaceAll("_", "");
-                                    showAlert(context, "Job Saved", "Save path: \n /Documents/$jobStartStr${job.id}...", Colors.orange);
-                                  });
-                                },
-                              )
-                          ),
-                        ]
-                    )
-                ),
-                SizedBox(
-                  width: MediaQuery.of(context).size.width,
-                  height: MediaQuery.of(context).size.height/10.0,
-                )
-              ]
-          ),
-        ),
-
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: rBox(
-              context,
-              colorBack,
-              TextButton(
-                child: Text('Back', style: whiteText),
-                onPressed: () {
-                  saveable = false; // Cancel auto-save
-                  goToPage(context, const JobsPage(), false);
-                },
-              )
-          ),
-        )
-      ),
-    );
-  }
-}
-
 class Stocktake extends StatelessWidget {
   const Stocktake({super.key});
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -872,9 +755,16 @@ class Stocktake extends StatelessWidget {
               title: Text("Stocktake - Total: ${job.total}", textAlign: TextAlign.center),
               automaticallyImplyLeading: false,
             ),
-            body:SingleChildScrollView( child: Center(
+            body:SingleChildScrollView(
+              child: Center(
                 child: Column(
                     children: [
+                      Card(
+                        child: ListTile(
+                          title: Text("${job.id}\n${job.date.replaceAll("_", "/")}"),
+                          leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
+                        ),
+                      ),
                       headerPadding("Current Location:", TextAlign.left),
                       Card(
                         child: ListTile(
@@ -889,7 +779,7 @@ class Stocktake extends StatelessWidget {
                       ),
                       SizedBox(
                         width: MediaQuery.of(context).size.width,
-                        height: MediaQuery.of(context).size.height / 10.0,
+                        height: MediaQuery.of(context).size.height / 40.0,
                       ),
                       rBox(
                           context,
@@ -931,24 +821,54 @@ class Stocktake extends StatelessWidget {
                             },
                           )
                       ),
+
                     ]
                 )),
             ),
 
-            bottomNavigationBar: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: rBox(
-                    context,
-                    colorBack,
-                    TextButton(
-                      child: Text('Back', style: whiteText),
-                      onPressed: () {
-                        goToPage(context, const OpenJob(), false);
-                      },
-                    )
-                ),
+            bottomNavigationBar: SingleChildScrollView(
+                      child: Column(
+                          children: [
+                            rBox(
+                                context,
+                                Colors.orange,
+                                TextButton(
+                                  child: Text('Export Job', style: whiteText),
+                                  onPressed: () {
+                                    exportJobToXLSX();
+                                    gunDataTXT();
+                                    showAlert(context, "Job Exported!", "/storage/emulated/0/Documents/stocktake_${job.id}_[num].xlsx\n", Colors.orange);
+                                  },
+                                )
+                            ),
+                            // rBox(
+                            //     context,
+                            //     Colors.green,
+                            //     TextButton(
+                            //       child: Text('Save Job', style: whiteText),
+                            //       onPressed: () async {
+                            //         await writeJob(job, true).then((value){
+                            //           showAlert(context, "Job Saved", "Save path: \n /Documents/$jobStartStr${job.id}...", Colors.orange);
+                            //         });
+                            //       },
+                            //     )
+                            // ),
+                            rBox(
+                                context,
+                                colorBack,
+                                TextButton(
+                                  child: Text('Back', style: whiteText),
+                                  onPressed: () async {
+                                    await writeJob(job, true).then((value) {
+                                      goToPage(context, const JobsPage(), false);
+                                    });
+                                  },
+                                )
+                            ),
+                          ]
+                      )
+                )
             )
-        )
     );
   }
 }
@@ -1434,21 +1354,6 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _deleteItem(int index) {
-    job.literals.removeAt(index);
-    job.calcTotal();
-    filterList = job.literalList();
-    Navigator.pop(context);
-
-    //goToPage(context, const TableView2(action: ActionType.edit), false);
-
-    // job.literals.removeAt(index);
-    // job.calcTotal();
-    // refresh(this);
-    // goToPage(context, const TableView2(action: ActionType.edit), false);
-    // Navigator.pop(context);
-  }
-
   _checkFields(){
     if(barcodeCtrl.text.isEmpty){
       barcodeCtrl.text = '0';
@@ -1496,7 +1401,13 @@ class _GridView extends State<GridView> {
                                       _clearFocus();
                                       await confirmDialog(context, "Remove Item from stock count?").then((bool value2) async{
                                         if(value2){
-                                          _deleteItem(index);
+                                          job.literals.removeAt(index);
+                                          job.calcTotal();
+                                          filterList = job.literalList();
+
+                                          await writeJob(job, true).then((value){
+                                            Navigator.pop(context);
+                                          });
                                         }
                                       });
                                     }
@@ -1529,7 +1440,14 @@ class _GridView extends State<GridView> {
                               if (countNum <= 0) {
                                 await confirmDialog(context, "Item count is 0\nRemove item from stocktake?").then((bool value) async {
                                   if(value){
-                                    _deleteItem(index);
+                                    // DELETE ITEM FROM STOCK
+                                    job.literals.removeAt(index);
+                                    job.calcTotal();
+                                    filterList = job.literalList();
+
+                                    await writeJob(job, true).then((value){
+                                      Navigator.pop(context);
+                                    });
                                   }
                                 });
                               }
@@ -1545,11 +1463,15 @@ class _GridView extends State<GridView> {
                                       job.allLocations.add(locationCtrl.text.toUpperCase());
                                     }
                                     filterList = job.literalList();
-                                    //goToPage(context, const Stocktake(), false);
-                                    Navigator.pop(context);
+
+                                    await writeJob(job, true).then((value){
+                                      Navigator.pop(context);
+                                    });
+                                    //Navigator.pop(context);
                                   }
                                 });
                               }
+
                               refresh(this);
                             },
                           )
@@ -1560,7 +1482,6 @@ class _GridView extends State<GridView> {
                           TextButton(
                             child: Text('Cancel', style: whiteText),
                             onPressed: (){
-                              //goToPage(context, const Stocktake(), false);
                               Navigator.pop(context);
                             },
                           )
@@ -1841,7 +1762,10 @@ class _GridView extends State<GridView> {
                                       // Refresh jobTable
                                       jobTable = mainTable!.rows + job.nofList();
                                       filterList = widget.action == ActionType.edit ? job.literalList() : jobTable;
-                                      Navigator.pop(context);
+
+                                      await writeJob(job, true).then((value){
+                                        Navigator.pop(context);
+                                      });
                                     }
                                   }
                                 });
@@ -1920,16 +1844,20 @@ class _GridView extends State<GridView> {
                         colorOk,
                         TextButton(
                           child: Text('Confirm', style: whiteText),
-                          onPressed: (){
+                          onPressed: () async {
                             double count = double.tryParse(countCtrl.text) ?? 0.0;
                             if(count <= 0){
                               showAlert(context, "", "Cannot add zero (0) items", colorWarning);
                               countCtrl.text = "0";
-                              return;
                             }
-                            job.literals.add({"index" : filterList[index][tIndex], "count" : count, "location" : job.location,});
-                            job.calcTotal();
-                            Navigator.pop(context);
+                            else{
+                              job.literals.add({"index" : filterList[index][tIndex], "count" : count, "location" : job.location,});
+                              job.calcTotal();
+
+                              await writeJob(job, true).then((value){
+                                Navigator.pop(context);
+                              });
+                            }
                           },
                         )
                     ),
@@ -2771,13 +2699,19 @@ addNOF(BuildContext context1, String barcode, double nCount){
                               colorOk,
                               TextButton(
                                 child: Text('Confirm', style: whiteText),
-                                onPressed: () {
+                                onPressed: () async {
                                   int badIndex = -1;
+                                  bool tooLong = false;
 
                                   String finalBarcode = "";
                                   for(int i = 0; i < barcodeList.length; i++){
                                     if(barcodeExists(barcodeList[i], -1)){
                                       badIndex = i;
+                                      break;
+                                    }
+
+                                    if (barcodeList[i].length > 22){
+                                      tooLong = true;
                                       break;
                                     }
 
@@ -2789,8 +2723,12 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     }
                                   }
 
-                                  if(badIndex != -1){
-                                    debugPrint(barcodeList[badIndex]);
+                                  if(tooLong){
+                                    debugPrint(barcodeList[badIndex].toString());
+                                    showAlert(context, "", "Barcode is too long: ${barcodeList[badIndex]}\n Barcode exceeds char limit (22).", colorWarning);
+                                  }
+                                  else if(badIndex != -1){
+                                    debugPrint(barcodeList[badIndex].toString());
                                     showAlert(context, "", "NOF contains duplicate barcode: ${barcodeList[badIndex]}\nRemove this barcode or get a new one (contact Andy).", colorWarning);
                                   }
                                   else if (descriptionCtrl.text.isEmpty){
@@ -2840,8 +2778,10 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                       job.calcTotal();
                                     }
 
-                                    disposeControllers();
-                                    Navigator.pop(context);
+                                    await writeJob(job, true).then((value){
+                                      disposeControllers();
+                                      Navigator.pop(context);
+                                    });
                                   }
                                 },
                               )
@@ -2870,27 +2810,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
 
 refresh(var widget) {
   widget.setState(() {});
-}
-
-shortFilePath(String s) {
-  var sp = s.split("/");
-  return sp[sp.length - 1];
-}
-
-getDateString(String d){
-  const gsDateBase = 2209161600 / 86400;
-  const gsDateFactor = 86400000;
-
-  final date = double.tryParse(d);
-  if (date == null) return "NO DATE RECORDED";
-  final millis = (date - gsDateBase) * gsDateFactor;
-
-  var fd = (DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
-  fd = fd.substring(0, 10);
-  fd = fd.replaceAll("/", "_");
-  return fd;
-
-  //(DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
 }
 
 Widget headerPadding(String title, TextAlign l){
@@ -3146,7 +3065,7 @@ Future<void> loadMasterSheet() async {
 
 exportJobToXLSX() async {
 
-  CellStyle oldDate = CellStyle(backgroundColorHex: '#FF8980');
+  // CellStyle oldDate = CellStyle(backgroundColorHex: '#FF8980');
 
   List<List<dynamic>> finalSheet = [];
 
@@ -3234,7 +3153,7 @@ exportJobToXLSX() async {
 writeJob(StockJob job, bool overwrite) async {
   var filePath = '/storage/emulated/0/Documents/';
 
-  // If "/Documents" folder does not exist, create it.
+  // If "/Documents" folder does not exist, make it!
   await Directory(filePath).exists().then((value){
     if(!value){
       Directory('/storage/emulated/0/Documents/').create().then((Directory directory) {
@@ -3326,6 +3245,46 @@ bool barcodeExists(String barcode, int ignore){
 }
 
 void gunDataTXT(){
-  var startString = "S     ";
-  var locString = "";
+  String finalTxt = "";
+
+  for(int i = 0; i < job.literals.length; i++){
+    finalTxt += "S    ";
+
+    // Barcodes (22 characters)
+    // Using first barcode since barcodes can be multiline
+    String bcode = job.literals[i]["barcode"].toString().split(",").toList()[0];
+
+    for (int b = bcode.length; b < 22; b++){
+      bcode += " ";
+    }
+
+    finalTxt += bcode;
+
+    // Count (4 characters)
+    String count = job.literals[i]["count"].toString();
+    for (int c = count.length; c < 4; c++){
+      count += " ";
+    }
+
+    finalTxt += count;
+
+    // Location (25 characters)
+    String loc = job.literals[i]["location"].toString();
+    if(loc.length > 25){
+      loc.substring(0,25);
+    }
+
+    for (int l = loc.length; l < 25; l++){
+      loc += " ";
+    }
+
+    finalTxt += loc;
+    finalTxt += "\n";
+  }
+
+  String date = job.date.toString().replaceAll("_", "-");
+  var path = '/storage/emulated/0/Documents/$date-${job.id}-s12LZAC.txt';
+  var jobFile = File(path);
+  jobFile.writeAsString(finalTxt);
+
 }
