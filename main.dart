@@ -8,7 +8,6 @@ LEGAL:
 BUILD CMD:
       flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=1.0.0 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
 */
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -23,7 +22,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart';
 import 'stock_job.dart';
 
-// TABLE INDICES
+// TABLE INDICES // INDICES INDEX
 const int tIndex = 0;
 const int tBarcode = 1;
 const int tCategory = 2;
@@ -32,19 +31,15 @@ const int tUom = 4;
 const int tPrice = 5;
 const int tDatetime = 6;
 const int tOrdercode = 7;
-
-// STOCK ITEM INDICES
 const int iIndex = 0;
 const int iCount = 1;
 const int iLocation = 2;
-
-Permission storageType = Permission.manageExternalStorage;
-//Permission storageType = Permission.storage;
+Permission storageType = Permission.manageExternalStorage;//Permission.storage
 String jobStartStr = "ASJob_";
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
 List<String> jobList = [];
 List<List<dynamic>> jobTable = List.empty();
-List<dynamic> itemCopy = List.empty();
+int copyIndex = -1;
 Directory? rootDir;
 SpreadsheetTable? mainTable;
 List<String> masterCategory = [];
@@ -103,7 +98,8 @@ class _HomePage extends State<HomePage> {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     versionNum = packageInfo.version;
     buildNum = packageInfo.buildNumber;
-    refresh(this);
+    setState(() {});
+    //refresh(this);
 
     // Check for new version
     // Link to new version/download and install option?
@@ -145,14 +141,14 @@ class _HomePage extends State<HomePage> {
                               onPressed: () async {
                                 if(mainTable == null) {
                                   loadingAlert(context);
-                                  refresh(this);
+                                  setState(() {});
 
                                   // load default spreadsheet
                                   await loadMasterSheet().then((value) async{
                                     if(mainTable != null || mainTable!.maxRows > 0){
                                       await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) async{
                                         await getSession().then((value){
-                                          refresh(this);
+                                          setState(() {});
                                           Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                                         });
                                       });
@@ -161,7 +157,7 @@ class _HomePage extends State<HomePage> {
                                 }
                                 else{
                                   await getSession().then((value){
-                                    refresh(this);
+                                    setState(() {});
                                     Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                                   });
                                 }
@@ -178,59 +174,37 @@ class _HomePage extends State<HomePage> {
                               child: const Text('Sync Master Database', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                               onPressed: () async {
                                 loadingAlert(context);
-                                refresh(this);
+                                setState(() {});
                                 await loadMasterSheet().then((value) async {
                                   await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) {
-                                    refresh(this);
-                                    goToPage(context, const HomePage(), false);
+                                    setState(() {});
+                                    goToPage(context, const HomePage());
                                   });
                                 });
                               },
                             )
                         ),
-
-                        //
-                        // TEST TABLE
-                        //
-
-                        rBox(
-                          context,
-                          Colors.black,
-                          TextButton(
-                              child: const Text("TEST TABLE"),
-                              onPressed: (){
-                                if(mainTable!.rows.isNotEmpty) {
-                                    jobTable = mainTable!.rows;
-                                    goToPage(context, const GridView(action: ActionType.view), false);
-                                    //goToPage(context, const StaticTable(tableType: TableType.export), false);
-                                  }
-                                },
-                          ),
-                        ),
-
                         rBox(
                           context,
                           Colors.redAccent.shade200,
                           TextButton(
                             child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                             onPressed: () async {
-
                               // Load default if not loaded
                               if(mainTable == null){
                                 loadingAlert(context);
-                                refresh(this);
-
+                                setState(() {});
                                 await loadMasterSheet().then((value) async {
                                   await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) async{
                                     await getSession().then((value){
-                                      goToPage(context, const AppSettings(), false);
+                                      goToPage(context, const AppSettings());
                                     });
                                   });
                                 });
                               }
                               else{
                                 await getSession().then((value){
-                                  goToPage(context, const AppSettings(), false);
+                                  goToPage(context, const AppSettings());
                                 });
                               }
                             },
@@ -298,14 +272,14 @@ class _AppSettings extends State<AppSettings> {
                                 icon: const Icon(Icons.remove_circle_outline),
                                 onPressed: () {
                                   sFile["fontScale"] -= sFile["fontScale"] - 1 > 8 ? 1 : 0;
-                                  refresh(this);
+                                  setState(() {});
                                 },
                               ),
                               trailing: IconButton(
                                 icon: const Icon(Icons.add_circle_outline),
                                 onPressed: () {
                                   sFile["fontScale"] += sFile["fontScale"] + 1 < 30 ? 1 : 0;
-                                  refresh(this);
+                                  setState(() {});
                                 },
                               ),
                             )
@@ -333,7 +307,7 @@ class _AppSettings extends State<AppSettings> {
                                   }
                                 });
 
-                                refresh(this);
+                                setState(() {});
                               }),
                             ),
                           ),
@@ -351,7 +325,7 @@ class _AppSettings extends State<AppSettings> {
                 TextButton(
                   child: Text('Back', style: whiteText),
                   onPressed: () {
-                    goToPage(context, const HomePage(), false);
+                    goToPage(context, const HomePage());
                   },
                 )
             ),
@@ -416,7 +390,7 @@ class _JobsPage extends State<JobsPage> {
       }
     }
 
-    refresh(this);
+    setState(() {});
   }
 
   _readJob(String path) async {
@@ -452,14 +426,14 @@ class _JobsPage extends State<JobsPage> {
                                   color: Colors.redAccent,
                                   onPressed: () {
                                     jobList.removeAt(index);
-                                    refresh(this);
+                                    setState(() {});
                                   },
                                 ),
                                 onTap: () async {
                                   if(access) {
                                     await _readJob(jobList[index]).then((value) {
                                       jobTable = mainTable!.rows + job.nofList();
-                                      goToPage(context, const Stocktake(), true);
+                                      goToPage(context, const Stocktake());
                                     });
                                   }
                                   else{
@@ -483,7 +457,7 @@ class _JobsPage extends State<JobsPage> {
                                   TextButton(
                                     child: Text('New Job', style: whiteText),
                                     onPressed: () {
-                                      goToPage(context, const NewJob(), false);
+                                      goToPage(context, NewJob());
                                     },
                                   )
                               ),
@@ -513,7 +487,7 @@ class _JobsPage extends State<JobsPage> {
                                         await _copyJobFile(path);
                                         await _readJob(path).then((value) {
                                           jobTable = mainTable!.rows + job.nofList();
-                                          goToPage(context, const Stocktake(), true);
+                                          goToPage(context, const Stocktake());
                                         });
                                       }
                                       else {
@@ -543,7 +517,7 @@ class _JobsPage extends State<JobsPage> {
                     child: Text('Back', style: whiteText),
                     onPressed: () {
                       job = StockJob(id: "EMPTY", name: "EMPTY");
-                      goToPage(context, const HomePage(), false);
+                      goToPage(context, const HomePage());
                     },
                   )
               ),
@@ -553,81 +527,63 @@ class _JobsPage extends State<JobsPage> {
   }
 }
 
-class NewJob extends StatefulWidget {
-  const NewJob({
-    super.key,
-  });
-
-  @override
-  State<NewJob> createState() => _NewJob();
-}
-class _NewJob extends State<NewJob> {
-  StockJob newJob = StockJob(id: "NULL", name: "EMPTY");
-  TextEditingController idCtrl = TextEditingController();
-  var idFocus = FocusNode();
-  TextEditingController nameCtrl = TextEditingController();
-  var nameFocus = FocusNode();
+class NewJob extends StatelessWidget{
+  NewJob({super.key});
 
   _clearFocus(){
     idFocus.unfocus();
     nameFocus.unfocus();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _clearFocus();
-    _prepareStorage();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
+  final StockJob newJob = StockJob(id: "NULL", name: "EMPTY");
+  final TextEditingController idCtrl = TextEditingController();
+  final idFocus = FocusNode();
+  final TextEditingController nameCtrl = TextEditingController();
+  final nameFocus = FocusNode();
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text("New Job"),
-            automaticallyImplyLeading: false,
-          ),
-          body: GestureDetector(
-              onTapDown: (_) => _clearFocus(),
-              child:SingleChildScrollView(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        headerPadding("Job Id:", TextAlign.left),
-                        Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                            child: Card(
-                                child: TextFormField(
-                                  controller: idCtrl,
-                                  focusNode: idFocus,
-                                  textAlign: TextAlign.left,
-                                )
-                            )
-                        ),
-                        headerPadding("Job Name:", TextAlign.left),
-                        Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                            child: Card(
-                                child: TextFormField(
-                                  controller: nameCtrl,
-                                  focusNode: nameFocus,
-                                  textAlign: TextAlign.left,
-                                )
-                            )
-                        ),
-                      ]
-                  )
-              )
-          ),
+            appBar: AppBar(
+              centerTitle: true,
+              title: const Text("New Job"),
+              automaticallyImplyLeading: false,
+            ),
+            body: GestureDetector(
+                onTapDown: (_) => _clearFocus(),
+                child:SingleChildScrollView(
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          headerPadding("Job Id:", TextAlign.left),
+                          Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                              child: Card(
+                                  child: TextFormField(
+                                    controller: idCtrl,
+                                    focusNode: idFocus,
+                                    textAlign: TextAlign.left,
+                                  )
+                              )
+                          ),
+                          headerPadding("Job Name:", TextAlign.left),
+                          Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                              child: Card(
+                                  child: TextFormField(
+                                    controller: nameCtrl,
+                                    focusNode: nameFocus,
+                                    textAlign: TextAlign.left,
+                                  )
+                              )
+                          ),
+                        ]
+                    )
+                )
+            ),
 
             bottomNavigationBar: Padding(
               padding: const EdgeInsets.all(8.0),
@@ -642,7 +598,7 @@ class _NewJob extends State<NewJob> {
                               onPressed: () async {
                                 // job must need id
                                 if(idCtrl.text.isEmpty){
-                                  //showNotification(context, Colors.orange, whiteText, "!! ALERT", "\n* Job ID is empty: ${idCtrl.text.isEmpty}");
+                                  showAlert(context, "JOB ID IS EMTPY", "", Colors.orange);
                                   return;
                                 }
 
@@ -670,7 +626,7 @@ class _NewJob extends State<NewJob> {
                                 }
 
                                 jobTable = mainTable!.rows + job.nofList();
-                                goToPage(context, const Stocktake(), false);
+                                goToPage(context, const Stocktake());
                               },
                             )
                         ),
@@ -681,7 +637,7 @@ class _NewJob extends State<NewJob> {
                               child:
                               Text('Cancel', style: whiteText),
                               onPressed: () {
-                                goToPage(context, const JobsPage(), false);
+                                goToPage(context, const JobsPage());
                               },
                             )
                         )
@@ -697,6 +653,7 @@ class _NewJob extends State<NewJob> {
 
 class Stocktake extends StatelessWidget {
   const Stocktake({super.key});
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -740,7 +697,7 @@ class Stocktake extends StatelessWidget {
                             child: Text('SCAN', style: whiteText),
                             onPressed: () {
                               if (job.location.isNotEmpty) {
-                                goToPage(context, const ScanItem(), false);
+                                goToPage(context, const ScanItem());
                               } else {
                                 showAlert(context, "Alert", 'Create and set location before scanning.', Colors.red.withOpacity(0.8));
                               }
@@ -754,7 +711,7 @@ class Stocktake extends StatelessWidget {
                             child: Text('SEARCH', style: whiteText),
                             onPressed: () {
                               if (job.location.isNotEmpty) {
-                                goToPage(context, const GridView(action: ActionType.add), false);
+                                goToPage(context, const GridView(action: ActionType.add));
                               } else {
                                 showAlert(context, "Alert", 'Create and set location before adding items.', Colors.red.withOpacity(0.8));
                               }
@@ -767,7 +724,7 @@ class Stocktake extends StatelessWidget {
                           TextButton(
                             child: Text('EDIT STOCKTAKE', style: whiteText),
                             onPressed: () {
-                              job.literals.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit), false) :
+                              job.literals.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit)) :
                                 showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
                             },
                           )
@@ -799,7 +756,8 @@ class Stocktake extends StatelessWidget {
                             child: Text('Back', style: whiteText),
                             onPressed: () async {
                               await writeJob(job, true).then((value) {
-                                goToPage(context, const JobsPage(), false);
+                                copyIndex = -1; // Reset copy index
+                                goToPage(context, const JobsPage());
                               });
                             },
                           )
@@ -916,7 +874,7 @@ class _ScanItem extends State<ScanItem> {
                                 keyboardType: TextInputType.name,
                                 onChanged: (String? value){
                                   _scanString(value as String);
-                                  refresh(this);
+                                  setState(() {});
                                 },
                               ),
                             ),
@@ -944,7 +902,7 @@ class _ScanItem extends State<ScanItem> {
                                       double count = (double.tryParse(countCtrl.text) ?? 0.0) + 1;
                                       countCtrl.text = count.toString();
                                     }
-                                    refresh(this);
+                                    setState(() {});
                                   },
                                 ),
                                 title: TextField(
@@ -962,7 +920,7 @@ class _ScanItem extends State<ScanItem> {
                                       double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
                                       countCtrl.text = max(count, 0).toString();
                                     }
-                                    refresh(this);
+                                    setState(() {});
                                   },
                                 ),
                               )
@@ -979,13 +937,11 @@ class _ScanItem extends State<ScanItem> {
                               onPressed: () {
                                 if(!found){
                                   addNOF(context, searchCtrl.text, double.tryParse(countCtrl.text) ?? 0.0);
-
                                   // Refresh search string
                                   searchCtrl.text = "";
                                   found = false;
                                   searchItem = List.empty();
-
-                                  refresh(this);
+                                  setState(() {});
                                 }
                                 else if(found)
                                 {
@@ -1006,7 +962,7 @@ class _ScanItem extends State<ScanItem> {
                                   }
 
                                   //showNotification(context, colorWarning, whiteText, "Added [$count] $shortDescript", "");
-                                  refresh(this);
+                                  setState(() {});
                                 }
                               }
                           ),
@@ -1028,7 +984,7 @@ class _ScanItem extends State<ScanItem> {
                             onPressed: () async {
                               job.calcTotal();
                               //Navigator.pop(context);
-                              goToPage(context, const Stocktake(), false);
+                              goToPage(context, const Stocktake());
                             },
                           )
                           ),
@@ -1055,22 +1011,25 @@ class GridView extends StatefulWidget {
 }
 class _GridView extends State<GridView> {
   FocusNode barcodeFocus = FocusNode();
-  FocusNode ordercodeFocus = FocusNode();
-  FocusNode priceFocus = FocusNode();
-  FocusNode descriptionFocus = FocusNode();
   FocusNode countFocus = FocusNode();
+  FocusNode descriptionFocus = FocusNode();
+  FocusNode ordercodeFocus = FocusNode();
   FocusNode locationFocus = FocusNode();
+  FocusNode priceFocus = FocusNode();
   FocusNode searchFocus = FocusNode();
-  // FocusNode uomFocus = FocusNode();
+
   TextEditingController barcodeCtrl = TextEditingController();
-  TextEditingController ordercodeCtrl = TextEditingController();
-  TextEditingController priceCtrl = TextEditingController();
-  TextEditingController descriptionCtrl = TextEditingController();
-  TextEditingController countCtrl = TextEditingController();
-  TextEditingController locationCtrl = TextEditingController();
   TextEditingController categoryCtrl = TextEditingController();
+  TextEditingController countCtrl = TextEditingController();
+  TextEditingController descriptionCtrl = TextEditingController();
+  TextEditingController ordercodeCtrl = TextEditingController();
+  TextEditingController locationCtrl = TextEditingController();
+  TextEditingController priceCtrl = TextEditingController();
   TextEditingController searchCtrl = TextEditingController();
+
+  // FocusNode uomFocus = FocusNode();
   // TextEditingController uomCtrl = TextEditingController();
+
   List<List<dynamic>> filterList = List.empty();
   List<String> barcodeList = List.empty();
   List<String> ordercodeList = List.empty();
@@ -1188,7 +1147,7 @@ class _GridView extends State<GridView> {
               }
 
               if (value.isEmpty || value == "") {
-                refresh(this);
+                setState(() {});
                 return;
               }
 
@@ -1230,7 +1189,7 @@ class _GridView extends State<GridView> {
                 _sortFilterList();
               }
 
-              refresh(this);
+              setState(() {});
             }
         ),
       ),
@@ -1409,7 +1368,7 @@ class _GridView extends State<GridView> {
                                 });
                               }
 
-                              refresh(this);
+                              setState(() {});
                             },
                           )
                       ),
@@ -1707,7 +1666,7 @@ class _GridView extends State<GridView> {
                                   }
                                 });
 
-                                refresh(this);
+                                setState(() {});
                               },
                             )
                         ),
@@ -1828,7 +1787,7 @@ class _GridView extends State<GridView> {
         child: ListTile(
           trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : IconButton(
             onPressed: () async {
-              refresh(this);
+              setState(() {});
               _clearFocus();
               _setTextFields(pIndex);
               await showGeneralDialog(
@@ -1839,9 +1798,9 @@ class _GridView extends State<GridView> {
                 pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                   return _editNOF(pIndex);
                 },
-              ).then((value){refresh(this);});
+              ).then((value){setState(() {});});
             },
-            icon: const Icon(Icons.edit_note, color: Colors.black,),
+            icon: const Icon(Icons.fiber_new, color: Colors.black,),
           ),
           title: Text(jobTable[(filterList[pIndex][iIndex])][tDescription], style: blackText, textAlign: TextAlign.center, softWrap: true),
           subtitle: Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center, softWrap: true),
@@ -1857,10 +1816,10 @@ class _GridView extends State<GridView> {
               pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                 return _addStock(pIndex);
               },
-            ).then((value){refresh(this);});
+            ).then((value){setState(() {});});
           },
           onLongPress: (){
-            itemCopy = filterList[pIndex];
+            copyIndex = filterList[pIndex][tIndex];
             showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
             //debugPrint(filterList[pIndex].toString());
           },
@@ -1879,7 +1838,7 @@ class _GridView extends State<GridView> {
                   subtitle: Text("Loc: ${filterList[pIndex][iLocation]}"),
                   trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : IconButton(
                     onPressed: () async {
-                      refresh(this);
+                      setState(() {});
                       _clearFocus();
                       _setTextFields(pIndex);
                       await showGeneralDialog(
@@ -1891,9 +1850,9 @@ class _GridView extends State<GridView> {
                         pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                           return _editNOF(pIndex);
                         },
-                      ).then((value){refresh(this);});
+                      ).then((value){setState(() {});});
                     },
-                    icon: const Icon(Icons.edit_note, color: Colors.black,),
+                    icon: const Icon(Icons.fiber_new, color: Colors.black,),
                   ),
                   onTap: () async {
                     _clearFocus();
@@ -1907,10 +1866,11 @@ class _GridView extends State<GridView> {
                       pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                         return _editStock(pIndex);
                       },
-                    ).then((value){refresh(this);});
+                    ).then((value){setState(() {});});
                   },
                   onLongPress: (){
-                    itemCopy = filterList[pIndex];
+                    copyIndex = tableIndex;
+                    //itemCopy = filterList[pIndex];
                     showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
                     //debugPrint(filterList[pIndex].toString());
                   },
@@ -1982,15 +1942,15 @@ class _GridView extends State<GridView> {
                                   ),
                                 ),
                               ),
-                              PopupMenuItem<int>(
-                                value: 2,
-                                child: Card(
-                                  child: ListTile(
-                                    title: const Text("Sort by Category"),
-                                    trailing: sortType == 2 ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
-                                  ),
-                                ),
-                              ),
+                              // PopupMenuItem<int>(
+                              //   value: 2,
+                              //   child: Card(
+                              //     child: ListTile(
+                              //       title: const Text("Sort by Category"),
+                              //       trailing: sortType == 2 ? const Icon(Icons.check_box) : const Icon(Icons.check_box_outline_blank),
+                              //     ),
+                              //   ),
+                              // ),
 
                               // const PopupMenuItem<int>(
                               //   value: 2,
@@ -2001,7 +1961,7 @@ class _GridView extends State<GridView> {
                           onSelected: (value) {
                             sortType = value;
                             _sortFilterList();
-                            refresh(this);
+                            setState(() {});
                           }
                       ),
                     ]
@@ -2177,7 +2137,7 @@ setLocation(BuildContext context1){
                                     job.location = job.allLocations[index];
                                     setState((){});
                                     //Navigator.pop(context);
-                                    goToPage(context, const Stocktake(), true);
+                                    goToPage(context, const Stocktake());
                                   },
                                 )
                             )
@@ -2207,7 +2167,6 @@ setLocation(BuildContext context1){
                                           job.allLocations.add(value);
                                         }
                                       });
-
                                       setState((){});
                                     },
                                   )
@@ -2219,7 +2178,6 @@ setLocation(BuildContext context1){
                                     child: Text('BACK', style: whiteText),
                                     onPressed: () {
                                       Navigator.pop(context);
-                                      //goToPage(context, const Stocktake(), false);
                                     },
                                   )
                               )
@@ -2227,16 +2185,16 @@ setLocation(BuildContext context1){
                         )
                     )
                 ),
-              );
+             );
             });
-        }
+      }
   );
 }
 
 addNOF(BuildContext context1, String barcode, double nCount){
-  List<String> barcodeList = List.empty();
+  List<String> barcodeList = List.empty(growable: true);
   int barcodeIndex = 0;
-  List<String> ordercodeList = List.empty();
+  List<String> ordercodeList = List.empty(growable: true);
   int ordercodeIndex = 0;
 
   TextEditingController barcodeCtrl = TextEditingController();
@@ -2252,32 +2210,27 @@ addNOF(BuildContext context1, String barcode, double nCount){
   var countFocus = FocusNode();
   String categoryValue = "MISC";
 
-  barcodeList = barcode.split(",").toList();
+  barcodeList.add(barcode);
   if(barcodeList.isNotEmpty){
     barcodeCtrl.text = barcodeList[barcodeIndex];
   }
   else {
-    barcodeCtrl.text = "###";
+    barcodeCtrl.text = "";
   }
+
+  ordercodeList.add("");
+  ordercodeCtrl.text = "";
 
   categoryValue = "MISC";
   descriptionCtrl.text = "";
-
-  ordercodeCtrl.text = "";
-
   priceCtrl.text = "0.0";
   countCtrl.text = nCount.toString();
-
-  //uomCtrl.text = "EACH";
-  //locationCtrl.text = job.location;
-  //locationFocus.unfocus();
 
   void clearFocus(){
     barcodeFocus.unfocus();
     countFocus.unfocus();
     descriptionFocus.unfocus();
     ordercodeFocus.unfocus();
-
     priceFocus.unfocus();
   }
 
@@ -2306,7 +2259,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
           return Scaffold(
               resizeToAvoidBottomInset: true,
               backgroundColor: Colors.black,
-
               body: GestureDetector(
                   onTapDown: (_) => clearFocus,
                   child: SingleChildScrollView(
@@ -2316,7 +2268,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
                               width: MediaQuery.of(context).size.width,
                               height: MediaQuery.of(context).size.height/20.0,
                             ),
-
                             titlePadding("Barcode:", TextAlign.left),
                             GestureDetector(
                                 onTapDown: (_) => clearFocus(),
@@ -2337,6 +2288,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             controller: barcodeCtrl,
                                             textAlign: TextAlign.center,
                                             onSubmitted: (value) {
+
                                               if(barcodeCtrl.text != "###" && barcodeCtrl.text != ""){
                                                 // MUST REMOVE COMMAS OR LIST WILL BE MESSED UP
                                                 barcodeList[barcodeIndex] = barcodeCtrl.text.replaceAll(",", "");
@@ -2389,7 +2341,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     )
                                 )
                             ),
-
                             titlePadding("Order Code:", TextAlign.left),
                             GestureDetector(
                                 onTapDown: (_) => clearFocus(),
@@ -2412,7 +2363,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                             onSubmitted: (value) {
                                               if(ordercodeCtrl.text.isNotEmpty && ordercodeCtrl.text != ""){
                                                 // MUST REMOVE COMMAS OR LIST WILL BE MESSED UP
-                                                ordercodeList[ordercodeIndex] =  ordercodeCtrl.text.replaceAll(",", "");
+                                                ordercodeList[ordercodeIndex] = ordercodeCtrl.text.replaceAll(",", "");
                                               }
                                               else{
                                                 showAlert(context, "", "Barcode format is not correct", colorWarning);
@@ -2462,13 +2413,11 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     )
                                 )
                             ),
-
                             titlePadding("Description:", TextAlign.left),
                             GestureDetector(
                                 onTapDown: (_) => clearFocus(),
                                 child: editTextCard(descriptionCtrl, descriptionFocus, 'Description', 0.0)
                             ),
-
                             titlePadding("Category:", TextAlign.left),
                             GestureDetector(
                                 onTapDown: (_) => clearFocus(),
@@ -2488,7 +2437,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                           ),
                                         );
                                       }).toList(),
-
                                       onChanged: (String? newValue) {
                                         setState(() {
                                           categoryValue = newValue!;
@@ -2504,12 +2452,10 @@ addNOF(BuildContext context1, String barcode, double nCount){
                             //     onTapDown: (_) => clearFocus(),
                             //     child: editTextField(uomCtrl, uomFocus, 'EACH', keyboardHeight)
                             // ),
-
                             // GestureDetector(
                             //     onTapDown: (_) => clearFocus(),
                             //     child: editTextCard(ordercodeCtrl, ordercodeFocus, '',  0.0)
                             // ),
-
                             titlePadding("Price:", TextAlign.left),
                             Padding(
                               padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
@@ -2525,12 +2471,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
                               ),
                             ),
 
-                            // titlePadding("Location:", TextAlign.left),
-                            // GestureDetector(
-                            //     onTapDown: (_) => clearFocus(),
-                            //     child: editTextCard(locationCtrl, locationFocus, '', 0.0)
-                            // ),
-
                             titlePadding("Add to Stocktake:", TextAlign.left),
                             Padding(
                                 padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
@@ -2542,7 +2482,7 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                           clearFocus();
                                           double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
                                           countCtrl.text = count.toString();
-                                          //refresh(this);
+                                          setState((){});
                                         },
                                       ),
                                       title: TextField(
@@ -2558,13 +2498,13 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                           clearFocus();
                                           double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
                                           countCtrl.text = max(count, 0.0).toString();
-                                          //refresh(this);
+                                          setState((){});
                                         },
                                       ),
                                     )
                                 )
                             ),
-                            itemCopy.isNotEmpty ? Padding(
+                            copyIndex != -1 ? Padding(
                                 padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                                 child: Card(
                                     child: ListTile(
@@ -2572,14 +2512,16 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                       title: TextButton(
                                         child: Text("Paste copied item", style: whiteText),
                                         onPressed:() {
+                                          barcodeList.clear();
+                                          barcodeList.add("");
                                           barcodeIndex = 0;
-                                          barcodeCtrl.text = "###"; // Need new barcode number otherwise duplicate will be detected
-                                          categoryValue = itemCopy[tCategory];
-                                          descriptionCtrl.text = itemCopy[tDescription].toString();
-                                          ordercodeCtrl.text = itemCopy[tOrdercode].toString() == "null" ? "" : itemCopy[tOrdercode].toString();
-                                          priceCtrl.text = itemCopy[tPrice].toString();
-                                          countCtrl.text = "0";
-                                          //locationCtrl.text = job.location;
+
+                                          barcodeCtrl.text = ""; // Need new barcode number otherwise duplicate will be detected
+                                          categoryValue = jobTable[copyIndex][tCategory];
+                                          descriptionCtrl.text = jobTable[copyIndex][tDescription].toString();
+                                          ordercodeIndex = 0;
+                                          ordercodeCtrl.text = jobTable[copyIndex][tOrdercode].toString();
+                                          priceCtrl.text = jobTable[copyIndex][tPrice].toString();
                                           setState((){});
                                         }
                                       )
@@ -2602,19 +2544,16 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                 onPressed: () async {
                                   int badIndex = -1;
                                   bool tooLong = false;
-
                                   String finalBarcode = "";
                                   for(int i = 0; i < barcodeList.length; i++){
                                     if(barcodeExists(barcodeList[i], -1)){
                                       badIndex = i;
                                       break;
                                     }
-
                                     if (barcodeList[i].length > 22){
                                       tooLong = true;
                                       break;
                                     }
-
                                     if(i > 0){
                                       if(barcodeList[i].isNotEmpty){
                                         finalBarcode += ",${barcodeList[i]}";
@@ -2646,19 +2585,15 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     if(countCtrl.text.isEmpty){
                                       countCtrl.text = '0.0';
                                     }
-                                    // if(locationCtrl.text.isEmpty){
-                                    //   locationCtrl.text = job.location;
-                                    // }
-
-                                    int newIndex = jobTable.length;
 
                                     // Add to NOF list
+                                    int newIndex = jobTable.length;
                                     job.nof.add({
                                       "index": newIndex,
                                       "barcode": finalBarcode,
                                       "category": categoryValue,
                                       "description": descriptionCtrl.text.toUpperCase(),
-                                      "uom": "EACH",//uomCtrl.text,
+                                      "uom": "EACH",
                                       "price": double.tryParse(priceCtrl.text) ?? 0.0,
                                       "datetime" : "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
                                       "ordercode" : ordercodeCtrl.text,
@@ -2666,7 +2601,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
                                     });
 
                                     jobTable = mainTable!.rows + job.nofList();
-
                                     double countNum = double.tryParse(countCtrl.text) ?? 0.0;
 
                                     // Add NOF to stocktake if applicable
@@ -2710,10 +2644,6 @@ addNOF(BuildContext context1, String barcode, double nCount){
   );
 }
 
-refresh(var widget) {
-  widget.setState(() {});
-}
-
 Widget headerPadding(String title, TextAlign l){
   return Padding(
     padding: const EdgeInsets.all(15.0),
@@ -2728,10 +2658,9 @@ Widget titlePadding(String title, TextAlign l){
   );
 }
 
-goToPage(BuildContext context, Widget page, bool animate) {
+goToPage(BuildContext context, Widget page) {
   Navigator.push(
     context,
-    // animate ? MaterialPageRoute(builder: (BuildContext context) {return page;})
     PageRouteBuilder(
       fullscreenDialog: true,
       pageBuilder: (context, animation1, animation2) => page,
@@ -2774,7 +2703,7 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
         padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
         behavior: SnackBarBehavior.floating,
         dismissDirection: DismissDirection.horizontal,
-        margin: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.97, right: 20, left: 20),
+        margin: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.4, right: 20, left: 20),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10.0),
         ),
@@ -2999,11 +2928,11 @@ exportJobToXLSX() async {
         jobTable[tableIndex][tDescription].toString(), // DESCRIPTION
         jobTable[tableIndex][tUom].toString(), // UOM
         job.literals[i]['count'].toString(), // COUNT
-        jobTable[tableIndex][tPrice] * job.literals[i]['count'], // TOTAL COST
+        (jobTable[tableIndex][tPrice] * job.literals[i]['count']).toString(), // TOTAL COST
         jobTable[tableIndex][tBarcode].toString(), // BARCODE
         nof.toString().toUpperCase(), // NOF
         date, // DATETIME
-        jobTable[tableIndex][tOrdercode] ?? 0, // ORDERCODE
+        (jobTable[tableIndex][tOrdercode] ?? 0).toString(), // ORDERCODE
       ]);
     }
   }
@@ -3022,7 +2951,7 @@ exportJobToXLSX() async {
           finalSheet[i][2],
           finalSheet[i][3],
           finalSheet[i][4],
-          finalSheet[i][5].toString(),
+          finalSheet[i][5],
           finalSheet[i][6],
           finalSheet[i][7],
           finalSheet[i][8],
@@ -3038,18 +2967,11 @@ exportJobToXLSX() async {
       debugPrint(finalSheet[i][8].toString());
     }
 
-
-
+    // Color code cell if date is older than 1 year
     if((DateTime.now().year - int.parse(finalSheet[i][8].split("/").first)) > 0){
       var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
       cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
     }
-
-
-    // debugPrint(finalSheet[i][8].toString());
-    // debugPrint(finalSheet[i][8].split("/").last);
-    //
-    // Color code cell if date is older than 1 year
   }
 
   // Set column widths
@@ -3161,7 +3083,6 @@ getSession() async {
 }
 
 bool barcodeExists(String barcode, int ignore){
-
   if (barcode.trim().isEmpty){
     return false;
   }
@@ -3179,7 +3100,6 @@ bool barcodeExists(String barcode, int ignore){
 
 gunDataTXT(){
   String finalTxt = "";
-
   for(int i = 0; i < job.literals.length; i++){
     finalTxt += "S    ";
 
@@ -3219,7 +3139,6 @@ gunDataTXT(){
   var path = '/storage/emulated/0/Documents/$date-${job.id}-s12LZAC.txt';
   var jobFile = File(path);
   jobFile.writeAsString(finalTxt);
-
 }
 
 getDateString(String d){
