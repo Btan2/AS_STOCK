@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   #sdk: '>=3.0.0-68.0.dev <4.0.0'
@@ -32,16 +32,17 @@ dependencies:
   flutter:
     sdk: flutter
 
+  #MIT:
   permission_handler: ^10.2.0 #^9.2.0 #requires Android SDK 33 which doesn't work with everything yet
-  filesystem_picker: ^3.1.0
-  path_provider: any
-  linked_scroll_controller: any
   excel: any
   spreadsheet_decoder: any
-  archive: ^3.3.4
-  package_info_plus: ^3.0.3
-  #flutter_barcode_scanner: ^2.0.0
 
+  #BDS3_clause
+  filesystem_picker: ^3.1.0
+  package_info_plus: ^3.0.3
+  path_provider: any
+
+  #archive: ^3.3.4
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -70,8 +71,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/AS_Logo2.png
-    - assets/MASTER_SHEET.xlsx
-    - assets/FD_TEMPLATE.xlsx
+    - assets/MASTERFILE_19032023.xlsx
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
