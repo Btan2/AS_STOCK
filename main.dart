@@ -21,7 +21,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart';
-import 'stock_job.dart';
 
 Permission storageType = Permission.manageExternalStorage;// Permission.storage
 String jobStartStr = "ASJob_";
@@ -36,7 +35,7 @@ int scanType = 0;
 int copyIndex = -1;
 String copyCode = "";
 enum TableType {literal, linear, export, full, search}
-enum ActionType {add, edit, editNOF, view, assignBarcode}
+enum ActionType {add, edit, editNOF, view, assignBarcode, assignOrdercode}
 
 // Table item indices
 const int tIndex = 0;
@@ -698,7 +697,7 @@ class Stocktake extends StatelessWidget {
                       leading: job.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
                       onTap: () {
                         setLocation(context);
-                        },
+                      },
                     ),
                   ),
                   SizedBox(
@@ -716,7 +715,7 @@ class Stocktake extends StatelessWidget {
                           } else {
                             showAlert(context, "Alert", 'Create and set location before scanning.', Colors.red.withOpacity(0.8));
                           }
-                          },
+                        },
                       )
                   ),
                   rBox(
@@ -725,9 +724,9 @@ class Stocktake extends StatelessWidget {
                       TextButton(
                         child: Text('EDIT STOCKTAKE', style: whiteText),
                         onPressed: () {
-                          job.literals.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit)) :
+                          job.stocktake.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit)) :
                           showAlert(context, "Alert", "Stocktake is empty.", colorDisable);
-                          },
+                        },
                       )
                   ),
                   SizedBox(
@@ -741,7 +740,7 @@ class Stocktake extends StatelessWidget {
                         child: Text('EXPORT STOCKTAKE', style: whiteText),
                         onPressed: () {
                           goToPage(context, const ExportPage());
-                          },
+                        },
                       )
                   ),
                 ]
@@ -756,16 +755,16 @@ class ExportPage extends StatelessWidget{
 
   _exportXLSX() async {
     List<List<dynamic>> finalSheet = [];
-    for(int i =0; i < job.literals.length; i++){
+    for(int i =0; i < job.stocktake.length; i++){
       bool skip = false;
-      var tableIndex = job.literals[i]["index"];
+      var tableIndex = job.stocktake[i]["index"];
       for(int j = 0; j < finalSheet.length; j++) {
         // Check if item already exists
         skip = finalSheet[j][0] == tableIndex;
         if(skip){
           // Add price and count to existing item
-          finalSheet[j][4] += job.literals[i]["count"];
-          finalSheet[j][5] += jobTable[tableIndex][5] * job.literals[i]["count"];
+          finalSheet[j][4] += job.stocktake[i]["count"];
+          finalSheet[j][5] += jobTable[tableIndex][5] * job.stocktake[i]["count"];
           break;
         }
       }
@@ -784,8 +783,8 @@ class ExportPage extends StatelessWidget{
           jobTable[tableIndex][tCategory].toString(), //CATEGORY
           jobTable[tableIndex][tDescription].toString(), // DESCRIPTION
           jobTable[tableIndex][tUom].toString(), // UOM
-          job.literals[i]['count'].toString(), // COUNT
-          (jobTable[tableIndex][tPrice] * job.literals[i]['count']).toString(), // TOTAL COST
+          job.stocktake[i]['count'].toString(), // COUNT
+          (jobTable[tableIndex][tPrice] * job.stocktake[i]['count']).toString(), // TOTAL COST
           jobTable[tableIndex][tBarcode].toString(), // BARCODE
           nof.toString().toUpperCase(), // NOF
           date, // DATETIME
@@ -863,12 +862,12 @@ class ExportPage extends StatelessWidget{
 
   _gunDataTXT(){
     String finalTxt = "";
-    for(int i = 0; i < job.literals.length; i++){
+    for(int i = 0; i < job.stocktake.length; i++){
       finalTxt += "S    ";
 
       // Barcodes (22 characters)
       // Using first barcode since barcodes can be multiline
-      String bcode = job.literals[i]["barcode"].toString().split(",").toList()[0];
+      String bcode = job.stocktake[i]["barcode"].toString().split(",").toList()[0];
 
       for (int b = bcode.length; b < 22; b++){
         bcode += " ";
@@ -877,7 +876,7 @@ class ExportPage extends StatelessWidget{
       finalTxt += bcode;
 
       // Count (4 characters)
-      String count = job.literals[i]["count"].toString();
+      String count = job.stocktake[i]["count"].toString();
       for (int c = count.length; c < 4; c++){
         count += " ";
       }
@@ -885,7 +884,7 @@ class ExportPage extends StatelessWidget{
       finalTxt += count;
 
       // Location (25 characters)
-      String loc = job.literals[i]["location"].toString();
+      String loc = job.stocktake[i]["location"].toString();
       if(loc.length > 25){
         loc.substring(0,25);
       }
@@ -1004,6 +1003,7 @@ class _GridView extends State<GridView> {
   FocusNode descriptionFocus = FocusNode();
   FocusNode ordercodeFocus = FocusNode();
   FocusNode locationFocus = FocusNode();
+  FocusNode countFocus = FocusNode();
   FocusNode priceFocus = FocusNode();
   FocusNode searchFocus = FocusNode();
 
@@ -1013,6 +1013,7 @@ class _GridView extends State<GridView> {
   TextEditingController ordercodeCtrl = TextEditingController();
   TextEditingController locationCtrl = TextEditingController();
   TextEditingController priceCtrl = TextEditingController();
+  TextEditingController countCtrl = TextEditingController();
   TextEditingController searchCtrl = TextEditingController();
 
   List<List<dynamic>> filterList = List.empty();
@@ -1032,11 +1033,13 @@ class _GridView extends State<GridView> {
   @override
   void initState() {
     super.initState();
-    _setSearchList();
+    if(widget.action == ActionType.edit){
+      filterList = job.stockList();
+    }
   }
 
   _setSearchList(){
-    filterList = widget.action == ActionType.edit ? job.literalList() :
+    filterList = widget.action == ActionType.edit ? job.stockList() :
     widget.action == ActionType.assignBarcode ? job.nofList() :
     jobTable;
   }
@@ -1044,17 +1047,46 @@ class _GridView extends State<GridView> {
   @override
   void dispose() {
     searchCtrl.dispose();
-    descriptionCtrl.dispose();
-    locationCtrl.dispose();
-    categoryCtrl.dispose();
-    barcodeFocus.dispose();
-    ordercodeFocus.dispose();
-    priceFocus.dispose();
-    descriptionFocus.dispose();
-    locationFocus.dispose();
     searchFocus.dispose();
 
+    barcodeCtrl.dispose();
+    barcodeFocus.dispose();
+
+    categoryCtrl.dispose();
+
+    descriptionCtrl.dispose();
+    descriptionFocus.dispose();
+
+    ordercodeCtrl.dispose();
+    ordercodeFocus.dispose();
+
+    locationCtrl.dispose();
+    locationFocus.dispose();
+
+    priceCtrl.dispose();
+    priceFocus.dispose();
+
+    countCtrl.dispose();
+    countFocus.dispose();
+
     super.dispose();
+  }
+
+  _setEmptyText(String barcode, String ordercode){
+    categoryValue = "MISC";
+    descriptionCtrl.text = "";
+    priceCtrl.text = "0.0";
+    locationCtrl.text = job.location;
+
+    barcodeIndex = 0;
+    barcodeList = List.empty(growable: true);
+    barcodeList.add("");
+    barcodeCtrl.text = barcodeList[barcodeIndex];
+
+    ordercodeIndex = 0;
+    ordercodeList = List.empty(growable: true);
+    ordercodeList.add("");
+    ordercodeCtrl.text = barcodeList[ordercodeIndex];
   }
 
   _setTextFields(int index){
@@ -1063,7 +1095,8 @@ class _GridView extends State<GridView> {
       final int tableIndex = filterList[index][iIndex];
 
       barcodeIndex = 0;
-      barcodeList = jobTable[tableIndex][tBarcode].toString().toUpperCase().split(",").toList();
+      barcodeList = List.empty(growable: true);
+      barcodeList += jobTable[tableIndex][tBarcode].toString().toUpperCase().split(",").toList();
       if(barcodeList.isNotEmpty){
         barcodeCtrl.text = barcodeList[barcodeIndex];
       }
@@ -1072,7 +1105,8 @@ class _GridView extends State<GridView> {
       }
 
       ordercodeIndex = 0;
-      ordercodeList = jobTable[tableIndex][tOrdercode].toString().toUpperCase().split(",").toList();
+      ordercodeList = List.empty(growable: true);
+      ordercodeList += jobTable[tableIndex][tOrdercode].toString().toUpperCase().split(",").toList();
       if(ordercodeList.isNotEmpty){
         ordercodeCtrl.text = ordercodeList[ordercodeIndex];
       }
@@ -1120,8 +1154,10 @@ class _GridView extends State<GridView> {
         trailing: IconButton(
           icon: const Icon(Icons.cancel),
           onPressed: () {
-            _setSearchList();
             searchCtrl.text = "";
+            if (widget.action != ActionType.edit){
+              filterList = List.empty();
+            }
             setState(() {});
           },
         ),
@@ -1130,13 +1166,14 @@ class _GridView extends State<GridView> {
             controller: searchCtrl,
             focusNode: searchFocus,
             decoration: const InputDecoration(hintText: 'Enter search text', border: InputBorder.none),
-            onSubmitted: (String value) { // onSubmitted:
-              _setSearchList();
+            onChanged: (String value) { // onSubmitted:
 
               if (value.isEmpty || value == "") {
                 setState(() {});
                 return;
               }
+
+              _setSearchList();
 
               bool found = false;
               String search = value.toUpperCase();
@@ -1158,12 +1195,17 @@ class _GridView extends State<GridView> {
                   List<List<dynamic>> refined = filterList.where((List<dynamic> column) =>
                       column[tDescription].split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
                   // refine filter list to reduce search items
-                  filterList = refined..sort((x, y) => (x[tDescription][0] as dynamic).compareTo((y[tDescription][0] as dynamic)));
+                  filterList = refined..sort((x, y) => (x[tDescription][tIndex] as dynamic).compareTo((y[tDescription][tIndex] as dynamic)));
                 }
               }
 
               if (!found){
-                filterList = List.empty();
+                if (widget.action != ActionType.edit){
+                  filterList = List.empty();
+                }
+                else{
+                  filterList = job.stockList();
+                }
               }
 
               setState(() {});
@@ -1192,17 +1234,18 @@ class _GridView extends State<GridView> {
 
             if(scanType == scanBarcode){
               filterList = jobTable.where((List<dynamic> column) =>
-                  column[tBarcode].split(',').where((String s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+                  column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
             }
             else if(scanType == scanOrdercode){
               filterList = jobTable.where((List<dynamic> column) =>
-                  column[tOrdercode].split(',').where((String s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+                  column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
             }
             else if (scanType == scanBothCodes){
               filterList = jobTable.where((List<dynamic> column) =>
-                  column[tBarcode].split(',').where((String s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+                  column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+
               filterList += jobTable.where((List<dynamic> column) =>
-                  column[tOrdercode].split(',').where((String s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+                  column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
             }
 
             if(filterList.isNotEmpty){
@@ -1228,6 +1271,7 @@ class _GridView extends State<GridView> {
         trailing: IconButton(
           icon: const Icon(Icons.clear),
           onPressed: (){
+            filterList = List.empty();
             searchCtrl.text = "";
             setState(() {});
           },
@@ -1236,32 +1280,39 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _checkFields(){
-    if(barcodeCtrl.text.isEmpty){
-      barcodeCtrl.text = '';
-    }
-    if(ordercodeCtrl.text.isEmpty){
-      ordercodeCtrl.text = '';
-    }
-    if(priceCtrl.text.isEmpty){
-      priceCtrl.text = '0.0';
-    }
-    if(locationCtrl.text.isEmpty){
-      locationCtrl.text = job.location;
-    }
-  }
+  _assignCode(int pIndex) async{
+    int tableIndex = filterList[pIndex][tIndex];
+    String descript = jobTable[tableIndex][tDescription];
+    return Card(
+        shadowColor: Colors.white.withOpacity(0.0),
+        child: ListTile(
+          trailing: filterList[pIndex][tIndex] >= mainTable!.rows.length ? const Icon(Icons.fiber_new, color: Colors.black,) : null,
+          title: Text(descript, style: blackText, textAlign: TextAlign.center, softWrap: true),
+          subtitle: Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center, softWrap: true),
+          onTap: () async {
 
-  _assignBarcode(int index) async {
-    int tableIndex = filterList[index][iIndex];
-    if(tableIndex >= mainTable!.maxRows){
-      await confirmDialog(context, "Assign barcode to item?").then((value){
-        if(value){
-          jobTable[tableIndex][tBarcode] += ",$copyCode";
-          setState((){});
-          copyCode = "";
-        }
-      });
-    }
+            String codeColumn = widget.action == ActionType.assignBarcode ? "barcode" : "ordercode";
+            if (tableIndex >= mainTable!.maxRows) {
+              await confirmDialog(context, "Assign $copyCode to $codeColumn?").then((value) {
+                if (value) {
+                  int nofIndex = tableIndex - mainTable!.maxRows;
+                  String s = job.nof[nofIndex][codeColumn].toString();
+
+                  if(s.isEmpty) {
+                    job.nof[nofIndex][codeColumn] = copyCode;
+                  }
+                  else {
+                    job.nof[nofIndex][codeColumn] += ",$copyCode";
+                  }
+
+                  copyCode = "";
+                  setState(() {});
+                }
+              });
+            }
+          }
+        )
+    );
   }
 
   _editNOF(int index) {
@@ -1300,7 +1351,7 @@ class _GridView extends State<GridView> {
                                       scrollPadding: EdgeInsets.symmetric(vertical: MediaQuery.of(context).size.height/4.0),
                                       controller: barcodeCtrl,
                                       textAlign: TextAlign.center,
-                                      onSubmitted: (value) {
+                                      onChanged: (value) {
                                         if(barcodeCtrl.text != "###" && barcodeCtrl.text != ""){
                                           barcodeList[barcodeIndex] = barcodeCtrl.text;
                                         }
@@ -1371,7 +1422,7 @@ class _GridView extends State<GridView> {
                                       scrollPadding: EdgeInsets.symmetric(vertical: MediaQuery.of(context).size.height/4.0),
                                       controller: ordercodeCtrl,
                                       textAlign: TextAlign.center,
-                                      onSubmitted: (value) {
+                                      onChanged: (value) {
                                         if(ordercodeCtrl.text != ""){
                                           ordercodeList[ordercodeIndex] = ordercodeCtrl.text;
                                         }
@@ -1442,7 +1493,9 @@ class _GridView extends State<GridView> {
                                 items: masterCategory.map((String value) {
                                   return DropdownMenuItem(
                                     value: value,
-                                    child: Center(child:Text(value, textAlign: TextAlign.center,),),
+                                    child: Center(
+                                        child: Text(value, textAlign: TextAlign.center,)
+                                    ),
                                   );
                                 }).toList(),
                               ),
@@ -1453,7 +1506,7 @@ class _GridView extends State<GridView> {
                       titlePadding("Description:", TextAlign.left),
                       GestureDetector(
                           onTapDown: (_) => _clearFocus(),
-                          child: editTextCard(descriptionCtrl, descriptionFocus, 'E.G. PETERS I/CREAM VAN 1L',  keyboardHeight + 15.0)
+                          child: editTextCard(descriptionCtrl, descriptionFocus, 'E.G. PETERS I/CREAM VAN 1L',  keyboardHeight)
                       ),
 
                       titlePadding("Price:", TextAlign.left),
@@ -1462,11 +1515,41 @@ class _GridView extends State<GridView> {
                         child: editDecimalCard(priceCtrl, priceFocus, '', keyboardHeight)
                       ),
 
-                      // titlePadding("UOM:", TextAlign.left),
-                      // GestureDetector(
-                      //     onTapDown: (_) => _clearFocus(),
-                      //     child: editTextField(uomCtrl, uomFocus, 'EACH', keyboardHeight)
-                      // ),
+                      index == -1 ? titlePadding("Add to Stocktake:", TextAlign.left) : Container(),
+                      index == -1 ? GestureDetector(
+                          onTapDown: (_) => _clearFocus(),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                            child: Card(
+                              child: ListTile(
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  onPressed: () {
+                                    _clearFocus();
+                                    double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
+                                    countCtrl.text = count.toString();
+                                    setState((){});
+                                  },
+                                ),
+                                title: TextField(
+                                  //scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
+                                  controller: countCtrl,
+                                  focusNode: countFocus,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                ),
+                                leading: IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                  onPressed: () {
+                                    _clearFocus();
+                                    double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
+                                    countCtrl.text = max(count, 0.0).toString();
+                                    setState((){});
+                                  },
+                                ),
+                              )
+                          )
+                      )) : Container(),
                     ],
                   )),
           ),
@@ -1480,41 +1563,61 @@ class _GridView extends State<GridView> {
                               child: Text('Confirm', style: whiteText),
                               onPressed: () async{
                                 await confirmDialog(context, "Confirm changes to NOF item?").then((bool value) async {
-                                  _checkFields();
                                   if (value) {
-                                    final itemIndex = filterList[index][iIndex];
-                                    final nofIndex = itemIndex - mainTable!.rows.length;
-
-                                    //debugPrint(nofIndex.toString());
-
-                                    int badIndex = -1;
-                                    String finalBarcode = "";
-
-                                    for(int i = 0; i < barcodeList.length; i++){
-                                      await barcodeExists(barcodeList[i], itemIndex).then((value){
-                                        if(value){
-                                          showAlert(context, "", "NOF contains duplicate barcode: ${barcodeList[badIndex]}\nRemove this barcode or get a new one (contact Andy).", colorWarning);
-                                          badIndex = i;
-                                        }
-                                      });
-
-                                      if(badIndex != -1){
-                                        break;
-                                      }
-
-                                      if(i > 0){
-                                        finalBarcode += ",${barcodeList[i]}";
-                                      }
-                                      else{ // first barcode should not have a comma
-                                        finalBarcode += barcodeList[i];
-                                      }
-                                    }
-
-                                    if(badIndex != -1){
-                                      debugPrint(barcodeList[badIndex]);
+                                    int itemIndex;
+                                    int nofIndex;
+                                    // NEW NOF
+                                    if (index == -1){
+                                      itemIndex = -1;
+                                      nofIndex = jobTable.length;
                                     }
                                     else{
+                                      itemIndex = filterList[index][iIndex];
+                                      nofIndex = itemIndex - mainTable!.rows.length;
+                                    }
 
+                                    int badIndex = -1;
+                                    bool tooLong = false;
+                                    bool noDescript = false;
+
+                                    String finalBarcode = "";
+
+                                    if(descriptionCtrl.text.isEmpty){
+                                      noDescript = true;
+                                      showAlert(context, "", "Description text must not be empty!", colorWarning);
+                                    }
+                                    else{
+                                      for(int i = 0; i < barcodeList.length; i++){
+                                        if(barcodeList[i].length > 22){
+                                          tooLong = true;
+                                          showAlert(context, "", "Barcode is too long: ${barcodeList[badIndex]}\n Barcode exceeds char limit (22).\n", colorWarning);
+                                          break;
+                                        }
+
+                                        await barcodeExists(barcodeList[i], itemIndex).then((bool value){
+                                          if(value){
+                                            showAlert(context, "", "NOF contains duplicate barcodes${barcodeList[badIndex]}! \nRemove this barcode or get a new one (contact Andy).", colorWarning);
+                                            badIndex = i;
+                                          }
+                                        });
+
+                                        if(badIndex != -1){
+                                          break;
+                                        }
+
+                                        if(i > 0){
+                                          finalBarcode += ",${barcodeList[i]}";
+                                        }
+                                        else{ // first barcode should not have a comma
+                                          finalBarcode += barcodeList[i];
+                                        }
+                                      }
+                                    }
+
+                                    if(badIndex != -1 || tooLong || noDescript){
+                                      //debugPrint(barcodeList[badIndex]);
+                                    }
+                                    else{
                                       String finalOrdercode = "";
                                       for(int i = 0; i < ordercodeList.length; i++){
                                         if(i > 0){
@@ -1525,18 +1628,50 @@ class _GridView extends State<GridView> {
                                         }
                                       }
 
-                                      job.nof[nofIndex]["barcode"] = finalBarcode;
-                                      job.nof[nofIndex]["category"] = categoryValue;
-                                      job.nof[nofIndex]["description"] = descriptionCtrl.text.toUpperCase();
-                                      job.nof[nofIndex]["uom"] = "EACH";//uomCtrl.text;
-                                      job.nof[nofIndex]["price"] = double.tryParse(priceCtrl.text) ?? 0.0;
-                                      job.nof[nofIndex]["datetime"] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-                                      job.nof[nofIndex]["ordercode"] = finalOrdercode;
-                                      job.nof[nofIndex]["nof"] = true;
+                                      if(index == -1){
+                                        // NEW NOF
+                                        int nofIndex = jobTable.length;
+                                        job.nof.add({
+                                          "index" : nofIndex,
+                                          "barcode" : finalBarcode,
+                                          "category" : categoryValue,
+                                          "description" : descriptionCtrl.text.toUpperCase(),
+                                          "uom" : "EACH", //uomCtrl.text;
+                                          "price" : double.tryParse(priceCtrl.text) ?? 0.0,
+                                          "datetime" : "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
+                                          "ordercode" : finalOrdercode,
+                                          "nof" : true,
+                                        });
+
+                                        // ADD NEW NOF TO STOCKTAKE
+                                        double addCount = double.tryParse(countCtrl.text) ?? 0.0;
+                                        if(addCount > 0){
+                                          job.stocktake.add({
+                                            "index": nofIndex,
+                                            "count": addCount,
+                                            "location": job.location,
+                                          });
+
+                                          job.calcTotal();
+                                        }
+                                      }
+                                      else{
+                                        // EDIT NOF
+                                        job.nof[nofIndex]["barcode"] = finalBarcode;
+                                        job.nof[nofIndex]["category"] = categoryValue;
+                                        job.nof[nofIndex]["description"] = descriptionCtrl.text.toUpperCase();
+                                        job.nof[nofIndex]["uom"] = "EACH";//uomCtrl.text;
+                                        job.nof[nofIndex]["price"] = double.tryParse(priceCtrl.text) ?? 0.0;
+                                        job.nof[nofIndex]["datetime"] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+                                        job.nof[nofIndex]["ordercode"] = finalOrdercode;
+                                        job.nof[nofIndex]["nof"] = true;
+                                      }
 
                                       // Refresh jobTable
                                       jobTable = mainTable!.rows + job.nofList();
-                                      filterList = widget.action == ActionType.edit ? job.literalList() : jobTable;
+                                      filterList = List.empty();
+
+                                      //filterList = widget.action == ActionType.edit ? job.stockList() : jobTable;
 
                                       await writeJob(job, true).then((value){
                                         Navigator.pop(context);
@@ -1569,19 +1704,23 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _gridItemADD(int pIndex){
+  _addItem(int pIndex){
 
     int tableIndex = filterList[pIndex][iIndex];
     String descript = "";
 
-    if(tableIndex == jobTable.length){
-      descript = filterList[pIndex][tDescription];
-    }
-    else{
-      descript = jobTable[tableIndex][tDescription];
-    }
+    //descript = filterList[pIndex][tDescription];
+    descript = jobTable[tableIndex][tDescription];
+
+    // if(tableIndex == jobTable.length){
+    //   descript = filterList[pIndex][tDescription];
+    // }
+    // else{
+    //   descript = jobTable[tableIndex][tDescription];
+    // }
 
     return Card(
+      shadowColor: Colors.white.withOpacity(0.0),
         child: ListTile(
           trailing: filterList[pIndex][0] < mainTable!.rows.length ? null :
           IconButton(
@@ -1610,7 +1749,7 @@ class _GridView extends State<GridView> {
             _setTextFields(pIndex);
             await counterConfirm(context, filterList[pIndex][tDescription], 0.0).then((double addCount) async{
               if(addCount != -1){
-                job.literals.add({
+                job.stocktake.add({
                   "index": filterList[pIndex][tIndex],
                   "count": addCount,
                   "location": job.location,
@@ -1627,22 +1766,23 @@ class _GridView extends State<GridView> {
             copyIndex = filterList[pIndex][tIndex];
             showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
           },
-        )
-    );
+        ));
   }
 
-  _gridItemEDIT(int pIndex){
+  _editStock(int pIndex){
     int tableIndex = filterList[pIndex][iIndex];
+    bool nofItem = filterList[pIndex][0] >= mainTable!.rows.length;
     return Row(
         children: [
           Card(
+              shadowColor: Colors.white.withOpacity(0.0),
               child: SizedBox(height: 150.0, width: MediaQuery.of(context).size.width * 0.75,
                 child: ListTile(
                   title: Text(jobTable[tableIndex][tDescription], softWrap: true,),
                   subtitle: Text("Loc: ${filterList[pIndex][iLocation]}"),
-                  trailing: filterList[pIndex][0] < mainTable!.rows.length ? null : const Icon(Icons.fiber_new, color: Colors.black,),
+                  trailing:  nofItem ? const Icon(Icons.fiber_new, color: Colors.black,) : null,
                   onTap: () async {
-                    if(filterList[pIndex][0] >= mainTable!.rows.length){
+                    if(nofItem){
                       _clearFocus();
                       _setTextFields(pIndex);
                       await showGeneralDialog(
@@ -1662,14 +1802,13 @@ class _GridView extends State<GridView> {
 
                   onLongPress: (){
                     copyIndex = tableIndex;
-                    //itemCopy = filterList[pIndex];
                     showNotification(context, colorWarning, whiteText, "", "Item copied @[$pIndex]");
-                    //debugPrint(filterList[pIndex].toString());
                   },
                 ),
               )
           ),
           Card(
+              shadowColor: Colors.white.withOpacity(0.0),
               child: SizedBox(
                   height: 150.0,
                   width: MediaQuery.of(context).size.width * 0.195,
@@ -1685,7 +1824,7 @@ class _GridView extends State<GridView> {
 
                       await counterConfirm(context, jobTable[tableIndex][tDescription], c).then((double newCount) async {
                         if (newCount > -1 && newCount != c){
-                          job.literals[pIndex]["count"] = newCount;
+                          job.stocktake[pIndex]["count"] = newCount;
                           job.calcTotal();
                           //stockCount = job.total;
                           writeJob(job, true);
@@ -1694,11 +1833,6 @@ class _GridView extends State<GridView> {
                           setState(() {});
                         }
                       });
-
-
-                      // await editCountPopup(context, pIndex, jobTable[tableIndex][tDescription], filterList[pIndex][iCount]).then((value){
-                      //
-                      // });
                     },
                   ),
                 )
@@ -1719,6 +1853,21 @@ class _GridView extends State<GridView> {
         physics: const ClampingScrollPhysics(),
         slivers: <Widget>[
           SliverAppBar(
+              backgroundColor: Colors.blue,
+              floating: true,
+              pinned: true,
+              collapsedHeight: 120,
+              centerTitle: true,
+
+              title: widget.action == ActionType.edit ? const Text("Edit Stocktake") : Text( scanType > 0 ? "Scan codes" : "Search text"),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: (){
+                  goToPage(context, const Stocktake());
+                },
+              ),
+
+              // Set search mode type
               actions: [
                 PopupMenuButton(
                     itemBuilder: (context) {
@@ -1761,19 +1910,7 @@ class _GridView extends State<GridView> {
                 ),
               ],
 
-              backgroundColor: Colors.blue,
-              floating: true,
-              pinned: true,
-              collapsedHeight: 120,
-              centerTitle: true,
-              title: widget.action == ActionType.edit ? const Text("Edit Stocktake") : Text( scanType > 0 ? "Scan codes" : "Search text"),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: (){
-                  goToPage(context, const Stocktake());
-                  },
-              ),
-
+              // Search bar
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.none,
                   centerTitle: true,
@@ -1795,59 +1932,113 @@ class _GridView extends State<GridView> {
                 onTapDown: (_) => _clearFocus(),
                 child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: Colors.white,
                       border: Border.all(
-                        color: Colors.black38.withOpacity(1.0),
+                        color: colorOk,
                         style: BorderStyle.solid,
                         width: 3.0,
                       ),
                     ),
-                    child: widget.action == ActionType.edit ? _gridItemEDIT(pIndex) :
-                        widget.action == ActionType.assignBarcode ? _assignBarcode(pIndex) :
-                        _gridItemADD(pIndex),
+                  child: widget.action == ActionType.edit ? _editStock(pIndex) :
+                      widget.action == ActionType.assignBarcode ? _assignCode(pIndex) :
+                      widget.action == ActionType.assignOrdercode ? _assignCode(pIndex) :
+                      _addItem(pIndex),
                 )
               );
               },
             ),
-          )
-        ],
-      ),
+          ),
 
-      bottomNavigationBar: GestureDetector(
-          onTapDown: (_) => _clearFocus(),
-          child: SingleChildScrollView(
-              child: Center(
-                child: Column(
-                    children: [
-                      widget.action == ActionType.add ? rBox(
-                        context,
-                        scanType > 0 ? colorOk : colorDisable,
-                        TextButton(
-                            child: Text('Assign Ordercode to Product', style: whiteText),
-                            onPressed: () {
-                              if(searchCtrl.text.isNotEmpty && scanType > 0){
-                                copyCode = searchCtrl.text;
-                                //goToPage(context, const GridView(action: ActionType.assignBarcode));
-                              }
-                            }
-                        ),
-                      ) : Container(),
-                      widget.action == ActionType.add ? rBox(
-                        context,
-                        colorOk,
-                        TextButton(
-                            child: Text('Add NOF', style: whiteText),
-                            onPressed: () {
-                              if(searchCtrl.text.isNotEmpty && scanType > 0){
-                                addNOF(context, "", 0.0);
-                              }
-                            }
-                        ),
-                      ) : Container(),
-                    ]
-                ),
+          SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 40.0, left: 10.0, right: 10.0, bottom: 10.0),
+                child: widget.action == ActionType.add ? Container(
+                  height: 50,
+                  width: MediaQuery.of(context).size.width * 0.7,
+                  decoration: BoxDecoration(color: colorEdit, borderRadius: BorderRadius.circular(5)),
+                  child: TextButton(
+                    onPressed: () async {
+                      // Copy search text if ordercode/barcode only
+                      if(scanType < 2){
+                        _setEmptyText("", "");
+                      }
+                      else if (scanType == 2){
+                        _setEmptyText(searchCtrl.text, "");
+                      }
+                      else if (scanType == 3){
+                        _setEmptyText("", searchCtrl.text);
+                      }
+
+                      await showGeneralDialog(
+                        context: context,
+                        barrierColor: Colors.black12, // Background color
+                        barrierDismissible: false,
+                        transitionDuration: const Duration(milliseconds: 100),
+                        pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                          return _editNOF(-1);
+                        }
+                      ).then((value){
+                          setState(() {});
+                        });
+                    },
+                    child: Text('+ Add NOF', style: whiteText),
+                  ),
+                ) : Container(),
               )
-          )
+          ),
+
+          SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: widget.action == ActionType.add && scanType > 0 ? Container(
+                  height: 50,
+                  width: MediaQuery.of(context).size.width * 0.7,
+                  decoration: BoxDecoration(color: colorEdit, borderRadius: BorderRadius.circular(5)),
+                  child: TextButton(
+                      child: Text('Assign Ordercode to Item', style: whiteText),
+                      onPressed: () {
+                        // Do not check for duplicate ordercodes?
+                        if(searchCtrl.text.isNotEmpty && scanType > 0){
+                          copyCode = searchCtrl.text;
+                          goToPage(context, const GridView(action: ActionType.assignOrdercode));
+                        }
+                     }
+                  ),
+                ) : Container(),
+              )
+          ),
+
+          SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: widget.action == ActionType.add && scanType > 0 ? Container(
+                  height: 50,
+                  width: MediaQuery.of(context).size.width * 0.7,
+                  decoration: BoxDecoration(color: colorEdit, borderRadius: BorderRadius.circular(5)),
+                  child: TextButton(
+                      child: Text('Assign Barcode to Item', style: whiteText),
+                      onPressed: () async {
+                        if(searchCtrl.text.isNotEmpty && scanType > 0) {
+                          if(filterList.isEmpty){
+                            // If search is empty then the barcode must not exist
+                            copyCode = searchCtrl.text;
+                            goToPage(context, const GridView(action: ActionType.assignBarcode));
+                          }
+                          else{
+                            await barcodeExists(searchCtrl.text, -1).then((value) {
+                              if(!value){
+                                copyCode = searchCtrl.text;
+                                goToPage(context, const GridView(action: ActionType.assignBarcode));
+                              }
+                            });
+                          }
+                        }
+                      }
+                  ),
+                ) : Container(),
+              )
+          ),
+        ],
       ),
     );
   }
@@ -2073,12 +2264,12 @@ Future<String> pickFile(BuildContext context) async {
 Future<bool> barcodeExists(String barcode, int ignore) async{
   bool confirm = false;
 
-  if (barcode.trim().isNotEmpty){
-    for(int n = 0; n < jobTable.length; n++) {
-      if(jobTable[n][tBarcode] != null && jobTable[n][tBarcode].isNotEmpty && n != ignore) {
-        if (jobTable[n][tBarcode].split(",").toList().contains(barcode)) {
-          confirm = true;
-          break;
+  if (barcode.trim().isNotEmpty) {
+    for (int i = 0; i < jobTable.length; i++) {
+      if (jobTable[i][tBarcode].toString().isNotEmpty && i != ignore) {
+        if(jobTable[i][tBarcode].toString().split(",").toList().contains(barcode)) {
+            confirm = true;
+            break;
         }
       }
     }
@@ -2307,461 +2498,6 @@ setLocation(BuildContext context1){
   );
 }
 
-addNOF(BuildContext context1, String barcode, double nCount){
-  List<String> barcodeList = List.empty(growable: true);
-  int barcodeIndex = 0;
-  List<String> ordercodeList = List.empty(growable: true);
-  int ordercodeIndex = 0;
-
-  TextEditingController barcodeCtrl = TextEditingController();
-  var barcodeFocus = FocusNode();
-  TextEditingController ordercodeCtrl = TextEditingController();
-  var ordercodeFocus = FocusNode();
-  TextEditingController priceCtrl = TextEditingController();
-  var priceFocus = FocusNode();
-  TextEditingController descriptionCtrl = TextEditingController();
-  var descriptionFocus = FocusNode();
-  TextEditingController countCtrl = TextEditingController();
-  var countFocus = FocusNode();
-  String categoryValue = "MISC";
-
-  barcodeList.add(barcode);
-  if(barcodeList.isNotEmpty){
-    barcodeCtrl.text = barcodeList[barcodeIndex];
-  }
-  else {
-    barcodeCtrl.text = "";
-  }
-
-  ordercodeList.add("");
-  ordercodeCtrl.text = "";
-
-  categoryValue = "MISC";
-  descriptionCtrl.text = "";
-  priceCtrl.text = "0.0";
-  countCtrl.text = nCount.toString();
-
-  void clearFocus(){
-    barcodeFocus.unfocus();
-    countFocus.unfocus();
-    descriptionFocus.unfocus();
-    ordercodeFocus.unfocus();
-    priceFocus.unfocus();
-  }
-
-  void disposeControllers(){
-    barcodeCtrl.dispose();
-    countCtrl.dispose();
-    descriptionCtrl.dispose();
-    ordercodeCtrl.dispose();
-    priceCtrl.dispose();
-    barcodeFocus.dispose();
-    countFocus.dispose();
-    descriptionFocus.dispose();
-    ordercodeFocus.dispose();
-    priceFocus.dispose();
-  }
-
-  showGeneralDialog(
-    context: context1,
-    barrierColor: Colors.black12, // Background color
-    barrierDismissible: false,
-    barrierLabel: 'Dialog',
-    transitionDuration: const Duration(milliseconds: 100),
-    pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return Scaffold(
-            resizeToAvoidBottomInset: true,
-            backgroundColor: Colors.black,
-            body: GestureDetector(
-                onTapDown: (_) => clearFocus,
-                child: SingleChildScrollView(
-                    child: Column(
-                        children: <Widget>[
-                          SizedBox(
-                            width: MediaQuery.of(context).size.width,
-                            height: MediaQuery.of(context).size.height/20.0,
-                          ),
-                          titlePadding("Barcode:", TextAlign.left),
-                          GestureDetector(
-                              onTapDown: (_) => clearFocus(),
-                              child: Padding(
-                                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                                  child: Card(
-                                      child: ListTile(
-                                        trailing: IconButton(
-                                          icon: Icon(Icons.arrow_forward_sharp, color: barcodeIndex >= (barcodeList.length - 1) ? Colors.white.withOpacity(0.3) : Colors.grey),
-                                          onPressed: () {
-                                            barcodeIndex = min(barcodeIndex + 1, max(barcodeList.length-1 , 0));
-                                            barcodeCtrl.text = barcodeList[barcodeIndex];
-                                            setState(() {});
-                                          },
-                                        ),
-                                        title: TextField(
-                                          scrollPadding: EdgeInsets.symmetric(vertical: MediaQuery.of(context).size.height/4.0),
-                                          controller: barcodeCtrl,
-                                          textAlign: TextAlign.center,
-                                          onSubmitted: (value) {
-                                            if(barcodeCtrl.text != "###" && barcodeCtrl.text != ""){
-                                              // MUST REMOVE COMMAS OR LIST WILL BE MESSED UP
-                                              barcodeList[barcodeIndex] = barcodeCtrl.text.replaceAll(",", "");
-                                            }
-                                            else{
-                                              showAlert(context, "", "Barcode format is not correct", colorWarning);
-                                              barcodeCtrl.text = barcodeList[barcodeIndex];
-                                            }
-                                            setState((){});
-                                          },
-                                        ),
-                                        subtitle: Center(
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(Icons.delete_forever_sharp, color: Colors.red),
-                                                  onPressed: () {
-                                                    if(barcodeList.length > 1){
-                                                      barcodeList.removeAt(barcodeIndex);
-                                                      if(barcodeIndex >= barcodeList.length){
-                                                        barcodeIndex = barcodeList.length-1;
-                                                      }
-                                                    }
-                                                    setState(() {});
-                                                  },
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.fiber_new_rounded, color: Colors.blue),
-                                                  onPressed: () {
-                                                    barcodeList.add("");
-                                                    barcodeIndex = barcodeList.length - 1;
-                                                    barcodeCtrl.text = barcodeList[barcodeIndex];
-                                                    setState(() {});
-                                                  },
-                                                ),
-                                              ],
-                                            )
-                                        ),
-
-                                        leading: IconButton(
-                                          icon: Icon(Icons.arrow_back_sharp, color: barcodeIndex < 1 ? Colors.white.withOpacity(0.3) : Colors.grey),
-                                          onPressed: () {
-                                            barcodeIndex = max(barcodeIndex - 1, 0);
-                                            barcodeCtrl.text = barcodeList[barcodeIndex];
-                                            setState(() {});
-                                          },
-                                        ),
-                                      )
-                                  )
-                              )
-                          ),
-
-                          titlePadding("Order Code:", TextAlign.left),
-                          GestureDetector(
-                              onTapDown: (_) => clearFocus(),
-                              child: Padding(
-                                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                                  child: Card(
-                                      child: ListTile(
-                                        trailing: IconButton(
-                                          icon: Icon(Icons.arrow_forward_sharp, color: ordercodeIndex >= (ordercodeList.length - 1) ? Colors.white.withOpacity(0.3) : Colors.grey),
-                                          onPressed: () {
-                                            ordercodeIndex = min(ordercodeIndex + 1, max(ordercodeList.length-1 , 0));
-                                            ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                            setState(() {});
-                                          },
-                                        ),
-                                        title: TextField(
-                                          scrollPadding: EdgeInsets.symmetric(vertical: MediaQuery.of(context).size.height/4.0),
-                                          controller: ordercodeCtrl,
-                                          textAlign: TextAlign.center,
-                                          onSubmitted: (value) {
-                                            if(ordercodeCtrl.text.isNotEmpty && ordercodeCtrl.text != ""){
-                                              // MUST REMOVE COMMAS OR LIST WILL BE MESSED UP
-                                              ordercodeList[ordercodeIndex] = ordercodeCtrl.text.replaceAll(",", "");
-                                            }
-                                            else{
-                                              showAlert(context, "", "Barcode format is not correct", colorWarning);
-                                              ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                            }
-                                            setState((){});
-                                          },
-                                        ),
-                                        subtitle: Center(
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(Icons.delete_forever_sharp, color: Colors.red),
-                                                  onPressed: () {
-                                                    if(ordercodeList.length > 1){
-                                                      ordercodeList.removeAt(ordercodeIndex);
-                                                      if(ordercodeIndex >= ordercodeList.length){
-                                                        ordercodeIndex = ordercodeList.length-1;
-                                                      }
-                                                    }
-                                                    setState(() {});
-                                                  },
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.fiber_new_rounded, color: Colors.blue),
-                                                  onPressed: () {
-                                                    ordercodeList.add("");
-                                                    ordercodeIndex = ordercodeList.length - 1;
-                                                    ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                                    setState(() {});
-                                                  },
-                                                ),
-                                              ],
-                                            )
-                                        ),
-
-                                        leading: IconButton(
-                                          icon: Icon(Icons.arrow_back_sharp, color: ordercodeIndex < 1 ? Colors.white.withOpacity(0.3) : Colors.grey),
-                                          onPressed: () {
-                                            ordercodeIndex = max(ordercodeIndex - 1, 0);
-                                            ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                            setState(() {});
-                                          },
-                                        ),
-                                      )
-                                  )
-                              )
-                          ),
-
-                          titlePadding("Description:", TextAlign.left),
-                          GestureDetector(
-                              onTapDown: (_) => clearFocus(),
-                              child: editTextCard(descriptionCtrl, descriptionFocus, 'Description', 0.0)
-                          ),
-
-                          titlePadding("Category:", TextAlign.left),
-                          GestureDetector(
-                              onTapDown: (_) => clearFocus(),
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                                child: Card(
-                                  child: DropdownButton(
-                                    value: categoryValue,
-                                    isExpanded: true,
-                                    menuMaxHeight: MediaQuery.of(context).size.height / 2.0,
-                                    icon: const Icon(Icons.keyboard_arrow_down),
-                                    items: masterCategory.map((String items) {
-                                      return DropdownMenuItem(
-                                        value: items,
-                                        child: Center(
-                                            child: Text(items, textAlign: TextAlign.center,)
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (String? newValue) {
-                                      setState(() {
-                                        categoryValue = newValue!;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              )
-                          ),
-
-                          titlePadding("Price:", TextAlign.left),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                            child: Card(
-                                child: ListTile(
-                                  title: TextField(
-                                    //scrollPadding:  EdgeInsets.symmetric(vertical: 0.0),
-                                    controller: priceCtrl,
-                                    focusNode: priceFocus,
-                                    keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                  ),
-                                )
-                            ),
-                          ),
-
-                          titlePadding("Add to Stocktake:", TextAlign.left),
-                          Padding(
-                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                              child: Card(
-                                  child: ListTile(
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.add_circle_outline),
-                                      onPressed: () {
-                                        clearFocus();
-                                        double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
-                                        countCtrl.text = count.toString();
-                                        setState((){});
-                                      },
-                                    ),
-                                    title: TextField(
-                                      //scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight),
-                                      controller: countCtrl,
-                                      focusNode: countFocus,
-                                      textAlign: TextAlign.center,
-                                      keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                    ),
-                                    leading: IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline),
-                                      onPressed: () {
-                                        clearFocus();
-                                        double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
-                                        countCtrl.text = max(count, 0.0).toString();
-                                        setState((){});
-                                      },
-                                    ),
-                                  )
-                              )
-                          ),
-
-                          copyIndex != -1 ? Padding(
-                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                              child: Card(
-                                  child: ListTile(
-                                      tileColor: colorWarning,
-                                      title: TextButton(
-                                          child: Text("Paste copied item", style: whiteText),
-                                          onPressed:() {
-                                            barcodeList.clear();
-                                            barcodeList.add("");
-                                            barcodeIndex = 0;
-
-                                            barcodeCtrl.text = ""; // Need new barcode number otherwise duplicate will be detected
-                                            categoryValue = jobTable[copyIndex][tCategory];
-                                            descriptionCtrl.text = jobTable[copyIndex][tDescription].toString();
-                                            ordercodeIndex = 0;
-                                            ordercodeCtrl.text = jobTable[copyIndex][tOrdercode].toString();
-                                            priceCtrl.text = jobTable[copyIndex][tPrice].toString();
-                                            setState((){});
-                                          }
-                                      )
-                                  )
-                              )
-                          ) : Container(),
-                        ]
-                    )
-                )
-            ),
-
-            bottomNavigationBar: SingleChildScrollView(
-                child: Center(
-                    child: Column(
-                        children: [
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('Confirm', style: whiteText),
-                                onPressed: () async {
-                                  int badIndex = -1;
-                                  bool tooLong = false;
-                                  bool noDescription = false;
-                                  String finalBarcode = "";
-
-                                  if(descriptionCtrl.text.isNotEmpty){
-                                    for(int i = 0; i < barcodeList.length; i++){
-
-                                      if(barcodeList[i].length > 22){
-                                        tooLong = true;
-                                        showAlert(context, "", "Barcode is too long: ${barcodeList[badIndex]}\n Barcode exceeds char limit (22).\n", colorWarning);
-                                        break;
-                                      }
-
-                                      await barcodeExists(barcodeList[i], -1).then((value){
-                                        badIndex = i;
-                                        showAlert(context, "", "NOF contains duplicate barcode: ${barcodeList[badIndex]}\nRemove this barcode or get a new one (contact Andy).\n", colorWarning);
-                                      });
-
-                                      if(badIndex != -1){
-                                        break;
-                                      }
-
-                                      if(i > 0){
-                                        if(barcodeList[i].isNotEmpty){
-                                          finalBarcode += ",${barcodeList[i]}";
-                                        }
-                                      }
-                                      else{
-                                        finalBarcode += barcodeList[i];
-                                      }
-                                    }
-                                  }
-                                  else{
-                                    noDescription = true;
-                                    showAlert(context, "", "Description text must not be empty!", colorWarning);
-                                  }
-
-                                  if(badIndex != -1 || tooLong || noDescription){
-                                    //do nothing
-                                  }
-                                  else{
-                                    if(ordercodeCtrl.text.isEmpty){
-                                      ordercodeCtrl.text = '0';
-                                    }
-                                    if(priceCtrl.text.isEmpty){
-                                      priceCtrl.text = '0.0';
-                                    }
-                                    if(countCtrl.text.isEmpty){
-                                      countCtrl.text = '0.0';
-                                    }
-
-                                    // Add to NOF list
-                                    int newIndex = jobTable.length;
-                                    job.nof.add({
-                                      "index": newIndex,
-                                      "barcode": finalBarcode,
-                                      "category": categoryValue,
-                                      "description": descriptionCtrl.text.toUpperCase(),
-                                      "uom": "EACH",
-                                      "price": double.tryParse(priceCtrl.text) ?? 0.0,
-                                      "datetime" : "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
-                                      "ordercode" : ordercodeCtrl.text,
-                                      "nof": true,
-                                    });
-
-                                    jobTable = mainTable!.rows + job.nofList();
-                                    double countNum = double.tryParse(countCtrl.text) ?? 0.0;
-
-                                    // Add NOF to stocktake if applicable
-                                    if(countNum > 0) {
-                                      job.literals.add({
-                                        "index": newIndex,
-                                        "count": countNum,
-                                        "location": job.location,
-                                      });
-
-                                      job.calcTotal();
-                                    }
-
-                                    await writeJob(job, true).then((value){
-                                      disposeControllers();
-                                      Navigator.pop(context);
-                                    });
-                                  }
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              colorBack,
-                              TextButton(
-                                child: Text('Cancel', style: whiteText),
-                                onPressed: (){
-                                  disposeControllers();
-                                  Navigator.pop(context);
-                                },
-                              )
-                          ),
-                        ]
-                    )
-                )
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
 goToPage(BuildContext context, Widget page) {
   Navigator.push(
     context,
@@ -2928,4 +2664,132 @@ getDateString(String d){
 
   return fd;
   //(DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
+}
+
+class StockJob {
+  String date = '';
+  String id;
+  String name;
+  double total = 0;
+  List<Map<String, dynamic>> stocktake = List.empty(growable: true);
+  List<Map<String, dynamic>> nof = List.empty(growable: true);
+  List<String> allLocations = List.empty(growable: true);
+  String location = "";
+
+  @override
+  bool operator ==(Object other) => identical(this, other) || other is StockJob &&
+      runtimeType == other.runtimeType &&
+      date == other.date &&
+      id == other.id &&
+      name == other.name &&
+      stocktake == other.stocktake &&
+      nof == other.nof &&
+      allLocations == other.allLocations &&
+      location == other.location;
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stocktake.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode; // ^ dbPath.hashCode;
+
+  StockJob({
+    required this.id,
+    required this.name,
+    date,
+    total,
+    stocktake,
+    nof,
+    allLocations,
+  });
+
+  StockJob copy({
+    String? date,
+    String? id,
+    String? name,
+    double? total,
+    List<Map<String, dynamic>>? stocktake,
+    List<Map<String, dynamic>>? nof,
+    List<String>? allLocations,
+  }) =>
+      StockJob(
+          date: date ?? this.date,
+          id: id ?? this.id,
+          name: name ?? this.name,
+          total: total ?? this.total,
+          stocktake: stocktake ?? this.stocktake,
+          nof: nof ?? this.nof,
+          allLocations: allLocations ?? this.allLocations
+      );
+
+  // Import job file from json
+  factory StockJob.fromJson(dynamic json) {
+    StockJob job = StockJob(id: json['id'] as String, name: json['name'] as String);
+
+    job.date = json.containsKey("date") ? json['date'] as String : "";
+
+    job.stocktake = !json.containsKey("stocktake") || json['stocktake'] == null ? List.empty(growable: true) : [
+      for (final map in jsonDecode(json['stocktake'])){
+        // literal from json
+        "index": int.parse(map['index'].toString()),
+        "count": double.parse(map['count'].toString()),
+        "location": map['location'].toString(),
+      },
+    ];
+
+    job.nof = !json.containsKey("nof") || json['nof'] == null ? List.empty(growable: true) : [
+      for (final map in jsonDecode(json['nof'])){
+        // item from json
+        "index": map['index'] as int,
+        "barcode": map['barcode'] as String,
+        "category": map['category'] as String,
+        "description": map['description'] as String,
+        "uom": map['uom'] as String,
+        "price": map['price'] as double,
+        "datetime": map['datetime'] as String,
+        "ordercode": map['ordercode'] as String,
+        "nof": map['nof'] as bool,
+      }
+    ];
+
+    job.allLocations = !json.containsKey("allLocations") || json['allLocations'] == null ? List.empty(growable: true) : [
+      for(final l in jsonDecode(json['allLocations']))
+        l as String,
+    ];
+
+    job.location = ''; // reset job location
+    return job;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date.isEmpty ? "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}" : date,
+      'id': id,
+      'name': name,
+      'stocktake': jsonEncode(stocktake),
+      'nof': jsonEncode(nof),
+      'allLocations': jsonEncode(allLocations),
+      'location': location,
+    };
+  }
+
+  nofList() {
+    List<List<dynamic>> n = List.empty(growable: true);
+    for (var e in nof) {
+      n.add(e.values.toList());
+    }
+    return n;
+  }
+
+  stockList() {
+    List<List<dynamic>> l = List.empty(growable: true);
+    for (var e in stocktake) {
+      l.add(e.values.toList());
+    }
+    return l;
+  }
+
+  calcTotal() {
+    total = 0.0;
+    for (int i = 0; i < stocktake.length; i++) {
+      total += stocktake[i]["count"];
+    }
+  }
 }
