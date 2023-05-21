@@ -5,10 +5,15 @@ LEGAL:
 
    This program is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+BUILD NAME CONVENTIONS:
+ version.year.month+build
+
+ build --> anytime the project is intended to be used on a device in a non-debug environment
+ version --> major changes like file formats, new layouts, UX and so on
+
 BUILD CMD:
       flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.05 --build-number=4 --obfuscate --split-debug-info build/app/outputs/symbols
 */
-
 
 import 'dart:async';
 import 'dart:convert';
