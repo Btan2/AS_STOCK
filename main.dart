@@ -57,8 +57,6 @@ const int iLocation = 2;
 // Colors
 final Color colorOk = Colors.blue.shade400;
 final Color colorWarning = Colors.deepPurple.shade200;
-final Color colorDisable = Colors.blue.shade200;
-const Color colorAssign = Colors.teal;
 const Color colorEdit = Colors.blueGrey;
 const Color colorBack = Colors.redAccent;
 
@@ -780,7 +778,7 @@ class Stocktake extends StatelessWidget {
                             child: Text('EDIT STOCKTAKE', style: whiteText),
                             onPressed: () {
                               job.stocktake.isNotEmpty ? goToPage(context, const GridView(action: ActionType.edit)) :
-                              showAlert(context, "ERROR:", "Stocktake is empty.", colorDisable);
+                              showAlert(context, "ERROR:", "Stocktake is empty.", Colors.blue.shade200);
                             },
                           )
                       ),
@@ -1303,7 +1301,7 @@ class _GridView extends State<GridView> {
     }
     else if(widget.action == ActionType.assignOrdercode || widget.action == ActionType.assignOrdercode){
       filterList = job.nofList();
-      colorMode = colorAssign;
+      colorMode = Colors.teal;
     }
   }
 
@@ -2431,8 +2429,6 @@ class _GridView extends State<GridView> {
                               }
                               else{
                                 // Copy search text if ordercode/barcode only
-
-
                                 if (scanType == scanBarcode){
                                   if (barcodeExists(searchCtrl.text, -1)){
                                     return;
@@ -2910,10 +2906,10 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
         content: Text(message, style: textStyle, maxLines: 2, softWrap: true, overflow: TextOverflow.fade),
         backgroundColor: bkgColor,
         duration: const Duration(milliseconds: 1200),
-        padding: const EdgeInsets.all(15.0),  // Inner padding for SnackBar content.
+        padding: const EdgeInsets.only(left: 15.0, right: 15.0),
         behavior: SnackBarBehavior.floating,
         dismissDirection: DismissDirection.horizontal,
-        margin: const EdgeInsets.only(right: 10, left: 10),//finalTxt += dbCount.toStringAsFixed(1);
+        margin: const EdgeInsets.only(right: 10, left: 10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10.0),
         ),
