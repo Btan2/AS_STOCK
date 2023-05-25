@@ -1287,10 +1287,7 @@ class _GridView extends State<GridView> {
   @override
   void initState() {
     super.initState();
-    setFilterList();
-  }
-
-  setFilterList(){
+    // Set filter list and GridView color
     if(widget.action == ActionType.add){
       filterList = List.empty();
       colorMode = colorOk;
@@ -1347,7 +1344,7 @@ class _GridView extends State<GridView> {
     return "";
   }
 
-  barcodeExists(String barcode, int ignore) {
+  bool _barcodeExists(String barcode, int ignore) {
     bool confirm = false;
     if (barcode.trim().isNotEmpty) {
       for (int i = 0; i < jobTable.length; i++) {
@@ -1358,13 +1355,6 @@ class _GridView extends State<GridView> {
             break;
           }
         }
-
-        // if (jt[i][tBarcode].toString().isNotEmpty && i != ignore) {
-        //   if(jt[i][tBarcode].toString().split(",").toList().contains(barcode)) {
-        //     confirm = true;
-        //     break;
-        //   }
-        // }
       }
     }
 
@@ -1549,9 +1539,6 @@ class _GridView extends State<GridView> {
 
       // if(filterList.isNotEmpty){
       //   filterList = filterList..sort((x, y) => (x[tDescription]![0] as dynamic).compareTo((y[tDescription][0] as dynamic)));
-      // }
-      // else{
-      //   filterList = List.empty();
       // }
     }
 
@@ -1839,7 +1826,6 @@ class _GridView extends State<GridView> {
                                         ordercodeList.add("");
                                         ordercodeIndex = ordercodeList.length - 1;
                                         ordercodeCtrl.text = ordercodeList[ordercodeIndex];
-                                        //ordercodeFocus.requestFocus();
                                         setState(() {});
                                       },
                                     ),
@@ -1931,7 +1917,6 @@ class _GridView extends State<GridView> {
                                 trailing: IconButton(
                                   icon: const Icon(Icons.add_circle_outline),
                                   onPressed: () {
-                                    // _clearFocus();
                                     double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
                                     countCtrl.text = count.toString();
                                     setState((){});
@@ -1945,7 +1930,6 @@ class _GridView extends State<GridView> {
                                 leading: IconButton(
                                   icon: const Icon(Icons.remove_circle_outline),
                                   onPressed: () {
-                                    // _clearFocus();
                                     double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
                                     countCtrl.text = max(count, 0.0).toString();
                                     setState((){});
@@ -2008,16 +1992,12 @@ class _GridView extends State<GridView> {
                                               break;
                                             }
 
-                                            if(barcodeExists(barcodeList[i], itemIndex)){
+                                            if(_barcodeExists(barcodeList[i], itemIndex)){
                                               if(value){
                                                 showAlert(context, "ERROR:", "NOF contains duplicate barcodes${barcodeList[badIndex]}! \n\nRemove this barcode or get a new one (contact Andy).", colorWarning);
                                                 badIndex = i;
                                               }
                                             }
-
-                                            // await barcdodeExists(barcodeList[i], itemIndex).then((bool value){
-                                            //
-                                            // });
 
                                             if(badIndex != -1){
                                               break;
@@ -2201,10 +2181,11 @@ class _GridView extends State<GridView> {
                   trailing: nofItem ? const Icon(Icons.fiber_new, color: Colors.black,) : null,
                   onTap: () async {
                     if(nofItem){
+                      // Edit Nof details
                       _setNOFEditText(pIndex);
                       await showGeneralDialog(
                         context: context,
-                        barrierColor: Colors.black12, // Background color
+                        barrierColor: Colors.black12,
                         barrierDismissible: false,
                         barrierLabel: '',
                         transitionDuration: const Duration(milliseconds: 100),
@@ -2215,8 +2196,17 @@ class _GridView extends State<GridView> {
                       setState(() {});
                     }
                     else{
+                      // Show item details
                       int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
-                      _showDetails(tableIndex);
+                      showAlert(
+                          context,
+                          jobTable[tableIndex][tDescription].toString(),
+                          "Table Index: $tableIndex\n"
+                          "Category: ${jobTable[tableIndex][tCategory]}\n"
+                          "Price: ${jobTable[tableIndex][tPrice]}\n"
+                          "DateTime: ${jobTable[tableIndex][tDatetime]}",
+                          colorOk
+                      );
                     }
                   },
 
@@ -2235,7 +2225,6 @@ class _GridView extends State<GridView> {
                   child: ListTile(
                     title: Center(child: Text("${filterList[pIndex][iCount]}")),
                     onTap: () async {
-                      //int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
                       double c = double.parse(filterList[pIndex][iCount].toString());
                       await counterConfirm(context, jobTable[tableIndex][tDescription], c, true).then((double newCount) async {
                         if (newCount == -2){
@@ -2265,23 +2254,6 @@ class _GridView extends State<GridView> {
                 )
             )
         ]
-    );
-  }
-
-  _isListEmpty(){
-    return widget.action == ActionType.edit ? filterList.isNotEmpty :
-    widget.action == ActionType.add ? filterList.isNotEmpty : false;
-  }
-
-  _showDetails(int tableIndex){
-    showAlert(
-        context,
-        jobTable[tableIndex][tDescription].toString(),
-        "Table Index: $tableIndex\n"
-        "Category: ${jobTable[tableIndex][tCategory]}\n"
-        "Price: ${jobTable[tableIndex][tPrice]}\n"
-        "DateTime: ${jobTable[tableIndex][tDatetime]}",
-        colorOk
     );
   }
 
@@ -2362,7 +2334,6 @@ class _GridView extends State<GridView> {
                               ),
                             ];
                           },
-
                           onSelected: (value) async {
                             scanType = value;
                             setState((){});
@@ -2387,7 +2358,6 @@ class _GridView extends State<GridView> {
                       if (pIndex >= filterList.length){
                         return null;
                       }
-
                       return Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -2404,7 +2374,7 @@ class _GridView extends State<GridView> {
                   ),
 
                   SliverToBoxAdapter(
-                    child: _isListEmpty() ? Container() : Padding(
+                    child: filterList.isNotEmpty ? Container() : Padding(
                         padding: const EdgeInsets.only(top: 20.0, left: 10.0, right: 10.0),
                         child: Center(
                             child: Text("EMPTY", style: greyText)
@@ -2430,7 +2400,8 @@ class _GridView extends State<GridView> {
                               else{
                                 // Copy search text if ordercode/barcode only
                                 if (scanType == scanBarcode){
-                                  if (barcodeExists(searchCtrl.text, -1)){
+                                  if (_barcodeExists(searchCtrl.text, -1)){
+                                    showNotification(context, colorWarning, whiteText, "Cannot add duplicate barcodes!");
                                     return;
                                   }
                                   _setEmptyText(searchCtrl.text, "");
@@ -2494,8 +2465,7 @@ class _GridView extends State<GridView> {
                           child: TextButton(
                               child: Text('Assign Barcode to Item', style: whiteText),
                               onPressed: () async {
-
-                                if(barcodeExists(searchCtrl.text, -1)){
+                                if(_barcodeExists(searchCtrl.text, -1)){
                                     scanType = searchDescription;
                                     copyCode = searchCtrl.text;
                                     goToPage(context, const GridView(action: ActionType.assignBarcode));
