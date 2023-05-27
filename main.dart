@@ -25,10 +25,13 @@ import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:decimal/decimal.dart';
 
-Permission storageType = Permission.manageExternalStorage;//Permission.storage;
+Permission storageType = Permission.storage; //Permission.manageExternalStorage;
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
+//String errLog = "";
+
 List<String> jobList = [];
 List<List<dynamic>> jobTable = List.empty();
 List<List<dynamic>> mainTable = List.empty();
@@ -39,6 +42,7 @@ int copyIndex = -1;
 String copyCode = "";
 enum ActionType {add, edit, assignBarcode, assignOrdercode}
 const String versionStr = "0.23.05+6";
+String masterSheetPath = "";
 
 // Table indices
 const int tIndex = 0;
@@ -87,62 +91,11 @@ class _HomePage extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _prepareStorage();
-    _access();
   }
 
   @override
   void dispose() {
     super.dispose();
-  }
-
-  Future<void> _loadMasterSheet() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = directory.path;
-
-    String filePath = "$path/MASTERFILE_19032023.xlsx";
-    await Future.delayed(const Duration(microseconds: 0));
-    Uint8List bytes;
-    if(!File(filePath).existsSync()){
-      ByteData data = await rootBundle.load("assets/MASTERFILE_19032023.xlsx");
-      bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      await File(filePath).writeAsBytes(bytes);
-    }
-    else{
-      File file = File(filePath);
-      bytes = file.readAsBytesSync();
-    }
-
-    var excel = Excel.decodeBytes(bytes);
-    if(excel.tables.isNotEmpty){
-      Sheet? sheet = excel.tables.values.first;
-
-      sheet.removeRow(0); // Remove header row
-
-      mainTable = List.empty(growable: true);
-
-      for(List<Data?> row in sheet.rows){
-        List m = List.empty(growable: true);
-        for(Data? data in row){
-          m.add(data?.value.toString());
-        }
-
-        mainTable.add(m);
-      }
-    }
-  }
-
-  Future<void> _prepareStorage() async {
-    var path = '/storage/emulated/0';//!isEmulating ? '/storage/emulated/0' : 'sdcard';
-    rootDir = Directory(path);
-    var storage = await storageType.status;
-    if (storage != PermissionStatus.granted) {
-      await storageType.request();
-    }
-  }
-
-  _access() async{
-    access = await storageType.isGranted;
   }
 
   // UNCOMMENT THIS WHEN SOFTWARE UPDATING HAS BEEN PROGRAMMED
@@ -160,128 +113,136 @@ class _HomePage extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-          body: SingleChildScrollView(
-              child: Center(
-                  child: Column(
-                      children: <Widget>[
-                        const Padding(
-                          padding: EdgeInsets.only(top: 35.0),
-                          child: Center(
-                            child: SizedBox(
-                              width: 470,
-                              height: 200,
-                              child: Image(image: AssetImage('assets/AS_Logo2.png')),
-                            ),
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        body: SingleChildScrollView(
+            child: Center(
+                child: Column(
+                    children: <Widget>[
+                      const Padding(
+                        padding: EdgeInsets.only(top: 35.0),
+                        child: Center(
+                          child: SizedBox(
+                            width: 470,
+                            height: 200,
+                            child: Image(image: AssetImage('assets/AS_Logo2.png')),
                           ),
                         ),
-                        SizedBox(
-                          height: 50,
-                          width: MediaQuery.of(context).size.width,
-                          child: const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
-                        ),
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height / 10.0,
-                          width: MediaQuery.of(context).size.width,
-                        ),
-                        rBox(
-                            context,
-                            Colors.blue,
-                            TextButton(
-                              child: const Text('Jobs', style: TextStyle(color: Colors.white, fontSize: 20.0)),
-                              onPressed: () async {
-                                DateTime cDate = DateTime.now().isUtc ? DateTime.now() : DateTime.now().toUtc();
+                      ),
+                      SizedBox(
+                        height: 50,
+                        width: MediaQuery.of(context).size.width,
+                        child: const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
+                      ),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height / 10.0,
+                        width: MediaQuery.of(context).size.width,
+                      ),
+                      rBox(
+                          context,
+                          Colors.blue,
+                          TextButton(
+                            child: const Text('Jobs', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                            onPressed: () async {
+                              DateTime cDate = DateTime.now().isUtc ? DateTime.now() : DateTime.now().toUtc();
 
-                                if(cDate.month > 6 || cDate.month < 5 || cDate.year < 2023 || cDate.year > 2023){
-                                  showAlert(context, "", "ERROR: \n\nLicense has EXPIRED!\n\nYou are not authorized to use this software!", Colors.red);
-                                  return;
+                              if(cDate.month > 6 || cDate.month < 5 || cDate.year < 2023 || cDate.year > 2023){
+                                showAlert(context, "", "ERROR: \n\nLicense has EXPIRED!\n\nYou are not authorized to use this software!", Colors.red);
+                                return;
+                              }
+
+                              // _prepareStorage();
+                              // _access();
+
+                              if(mainTable.isEmpty) {
+
+                                if(masterSheetPath.isEmpty){
+                                  final directory = await getApplicationDocumentsDirectory();
+                                  final path = directory.path;
+                                  masterSheetPath = "$path/MASTERFILE.xlsx";
                                 }
 
-                                // _prepareStorage();
-                                // _access();
-
-                                if(!access){
-                                    showAlert(context, "!! ALERT !!", "* Read/Write permissions were DENIED \n\n* Try changing storage permissions in App Settings", Colors.red[900]!);
-                                }
-                                else{
-                                  if(mainTable.isEmpty) {
-
-                                    // load default spreadsheet
-                                    await _loadMasterSheet().then((value) async{
-                                      if(mainTable.isNotEmpty){
-                                        await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) async{
-                                          await getSession().then((value){
-                                            setState(() {});
-                                            Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
-                                          });
-                                        });
-                                      }
-                                      else{
-                                        showAlert(context, "", 'Master Spreadsheet was NOT loaded! \nSomething went wrong! \nThis is your fault, you did this.', colorWarning);
-                                      }
+                                // load default spreadsheet
+                                await loadMasterSheet(masterSheetPath).then((value) async{
+                                  if(mainTable.isNotEmpty){
+                                    await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) async{
+                                      await getSession().then((value){
+                                        setState(() {});
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
+                                      });
                                     });
                                   }
                                   else{
-                                    await getSession().then((value){
-                                      setState(() {});
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
-                                    });
-                                  }
-                                }
-                              },
-                            )
-                        ),
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height/40.0,
-                        ),
-                        rBox(
-                            context,
-                            Colors.deepPurpleAccent.shade100,
-                            TextButton(
-                              child: const Text('Sync Master Database', style: TextStyle(color: Colors.white, fontSize: 20.0)),
-                              onPressed: () async {
-                                // loadingAlert(context);
-                                // setState(() {});
-                                await _loadMasterSheet().then((value) async {
-                                  if(mainTable.isNotEmpty) {
-                                    await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) {
-                                      //goToPage(context, const HomePage());
-                                    });
+                                    showAlert(context, "ERROR", '* Master Spreadsheet was NOT loaded!\n* Something went wrong!', colorWarning);
                                   }
                                 });
-
-                                setState(() {});
-                              },
-                            )
-                        ),
-                        rBox(
-                          context,
-                          Colors.redAccent.shade200,
-                          TextButton(
-                            child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
-                            onPressed: () async {
-                              await getSession().then((value){
-                                goToPage(context, const AppSettings());
-                              });
+                              }
+                              else{
+                                await getSession().then((value){
+                                  setState(() {});
+                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
+                                });
+                              }
                             },
-                          ),
+                          )
+                      ),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height/40.0,
+                      ),
+                      rBox(
+                          context,
+                          Colors.deepPurpleAccent.shade100,
+                          TextButton(
+                            child: const Text('Sync Master Database', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                            onPressed: () async {
+                              // loadingAlert(context);
+                              // setState(() {});
+                              final directory = await getApplicationDocumentsDirectory();
+                              final path = directory.path;
+                              masterSheetPath = "$path/MASTERFILE.xlsx";
+
+                              await loadMasterSheet(masterSheetPath).then((value) async {
+                                if(mainTable.isNotEmpty) {
+                                  await showAlert(context, "", 'Master Spreadsheet was loaded successfully', colorOk).then((value) {
+                                    //goToPage(context, const HomePage());
+                                  });
+                                }
+                              });
+
+                              setState(() {});
+                            },
+                          )
+                      ),
+                      rBox(
+                        context,
+                        Colors.redAccent.shade200,
+                        TextButton(
+                          child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
+                          onPressed: () async {
+                            await getSession().then((value){
+                              goToPage(context, const AppSettings());
+                            });
+                          },
                         ),
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height/10.0 + 50.0,
-                        ),
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height/40.0,
-                        ),
-                        SizedBox(
-                          height: 32,
-                          width: MediaQuery.of(context).size.width,
-                          child: const Text('Version: $versionStr', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
-                        ),
-                      ]
-                  )
-              )
-          ),
-        );
+                      ),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height/10.0 + 50.0,
+                      ),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height/40.0,
+                      ),
+                      SizedBox(
+                        height: 32,
+                        width: MediaQuery.of(context).size.width,
+                        child: const Text('Version: $versionStr', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
+                      ),
+                    ]
+                )
+            )
+        ),
+      )
+    );
   }
 }
 
@@ -317,64 +278,105 @@ class _AppSettings extends State<AppSettings> {
           title: const Text('App Settings'),
           automaticallyImplyLeading: false,
         ),
-        body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                headerPadding('Font Size', TextAlign.left),
-                Padding(
-                    padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                    child: Card(
-                        child: ListTile(
-                          title: Text(sFile["fontScale"].toString(), textAlign: TextAlign.center),
-                          leading: IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () {
-                              sFile["fontScale"] -= sFile["fontScale"] - 1 > 8 ? 1 : 0;
-                              setState(() {});
-                            },
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () {
-                              sFile["fontScale"] += sFile["fontScale"] + 1 < 30 ? 1 : 0;
-                              setState(() {});
-                            },
+        body: SingleChildScrollView(
+            child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    headerPadding('Font Size', TextAlign.left),
+                    Padding(
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                        child: Card(
+                            child: ListTile(
+                              title: Text(sFile["fontScale"].toString(), textAlign: TextAlign.center),
+                              leading: IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: () {
+                                  sFile["fontScale"] -= sFile["fontScale"] - 1 > 8 ? 1 : 0;
+                                  setState(() {});
+                                },
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: () {
+                                  sFile["fontScale"] += sFile["fontScale"] + 1 < 30 ? 1 : 0;
+                                  setState(() {});
+                                },
+                              ),
+                            )
+                        )
+                    ),
+                    headerPadding('Storage Permission Type', TextAlign.left),
+                    Padding(
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
+                        child: Card(
+                          child: ListTile(
+                            title: DropdownButton(
+                              //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+                              value: storageType,
+                              icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
+                              items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
+                                return DropdownMenuItem(
+                                  value: index,
+                                  child: Text(index.toString()),
+                                );
+                              }).toList(),
+                              onChanged: ((pValue) async {
+                                await confirmDialog(context, "!! Warning !!\n -> Confirm only if you know what you are doing..").then((value){
+                                  if(value){
+                                    storageType = pValue as Permission;
+                                  }
+                                });
+                                setState(() {});
+                              }),
+                            ),
                           ),
                         )
+                    ),
+                    headerPadding('Load Spreadsheet from Storage', TextAlign.left),
+                    Center(
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 5.0, right: 5.0, bottom: 5),
+                            child: Text("MASTERFILE:\n$masterSheetPath", textAlign: TextAlign.center),
+                          ),
+                          Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
+                              child: rBox(
+                                  context,
+                                  colorOk,
+                                  TextButton(
+                                    child: Text('Load Spreadsheet', style: whiteText),
+                                    onPressed: () async {
+
+                                      prepareStorage();
+
+                                      await FilesystemPicker.open(
+                                        title: rootDir.toString(),
+                                        context: context,
+                                        rootDirectory: rootDir!,
+                                        fsType: FilesystemType.file,
+                                        allowedExtensions: ['.xlsx'],
+                                        pickText: 'Select file',
+                                        folderIconColor: Colors.blue,
+                                        fileTileSelectMode: FileTileSelectMode.wholeTile,
+                                        requestPermission: () async => await storageType.request().isGranted,
+                                      ).then((value){
+                                        masterSheetPath = value.toString();}
+                                      );
+                                    },
+                                  )
+                              )
+                          )
+                        ],
+                      )
                     )
-                ),
-                headerPadding('Storage Permission Type', TextAlign.left),
-                Padding(
-                    padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
-                    child: Card(
-                      child: ListTile(
-                        title: DropdownButton(
-                          //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
-                          value: storageType,
-                          icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
-                          items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
-                            return DropdownMenuItem(
-                              value: index,
-                              child: Text(index.toString()),
-                            );
-                          }).toList(),
-                          onChanged: ((pValue) async {
-                            await confirmDialog(context, "!! Warning !!\n -> Confirm only if you know what you are doing..").then((value){
-                              if(value){
-                                storageType = pValue as Permission;
-                              }
-                            });
-                            setState(() {});
-                          }),
-                        ),
-                      ),
-                    )
-                ),
-              ],
+                  ],
+              )
             )
-        ),
+        )
       )
     );
   }
@@ -388,15 +390,22 @@ class JobsPage extends StatefulWidget {
   State<JobsPage> createState() => _JobsPage();
 }
 class _JobsPage extends State<JobsPage> {
+  bool access = false;
 
   @override
   void initState() {
     super.initState();
+    prepareStorage();
+    _access();
   }
 
   @override
   void dispose() {
     super.dispose();
+  }
+
+  _access() async{
+    access = await storageType.isGranted;
   }
 
   _copyJobFile(String path) async {
@@ -437,6 +446,30 @@ class _JobsPage extends State<JobsPage> {
     var dynamic = json.decode(fileContent);
     job = StockJob.fromJson(dynamic);
     job.calcTotal();
+  }
+
+  Future<bool> _checkSheet() async{
+    if(job.sheet.isEmpty){
+      job.sheet = masterSheetPath;
+      return true;
+    }
+    else{
+      String jobSheet = job.sheet.split("/").last;
+      String masterSheet = masterSheetPath.split("/").last;
+      if(jobSheet != masterSheet){
+        showAlert(
+            context,
+            "WARNING",
+            "* This job uses a different MASTERFILE!\n\n"
+            "* Please ensure the correct MASTERFILE is loaded before opening this job!\n\n"
+            "* MASTERFILE for this job: $jobSheet",
+            Colors.red
+        );
+        return false;
+      }
+    }
+
+    return true;
   }
 
   Future<String> _pickFile(BuildContext context) async {
@@ -493,10 +526,14 @@ class _JobsPage extends State<JobsPage> {
                                 },
                               ),
                               onTap: () async {
-                                await _readJob(jobList[index]).then((value) {
-                                  jobTable = mainTable + job.nofList();
-                                  copyIndex = -1;
-                                  goToPage(context, const Stocktake());
+                                await _readJob(jobList[index]);
+
+                                await _checkSheet().then((value) {
+                                  if(value){
+                                    jobTable = mainTable + job.nofList();
+                                    copyIndex = -1;
+                                    goToPage(context, const Stocktake());
+                                  }
                                 });
                               }
                           ),
@@ -672,7 +709,7 @@ class _NewJob extends State<NewJob>{
                                 onPressed: () async {
                                   // Job must need ID
                                   if(idStr.isEmpty){
-                                    showAlert(context, "JOB ID IS EMTPY", "", Colors.orange);
+                                    showAlert(context, "WARNING", "* Job ID is empty!", Colors.orange);
                                     return;
                                   }
 
@@ -685,7 +722,7 @@ class _NewJob extends State<NewJob>{
 
                                   newJob.name = regexFormat(nameStr);
                                   newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-                                  String path = "/storage/emulated/0/Documents/${newJob.id}/ASJob_${newJob.id}_0";
+                                  String path = "/storage/emulated/0/Documents/${newJob.id}/ASJob_${newJob.id}";
 
                                   // Do not overwrite any other existing jobs
                                   writeJob(newJob, false);
@@ -694,6 +731,8 @@ class _NewJob extends State<NewJob>{
                                   if(!jobList.contains(path)){
                                     jobList.add(path);
                                   }
+
+                                  job.sheet = masterSheetPath;
 
                                   jobTable = mainTable + job.nofList();
                                   copyIndex = -1;
@@ -732,22 +771,22 @@ class Stocktake extends StatelessWidget {
             title: const Text("Stocktake", textAlign: TextAlign.center),
             automaticallyImplyLeading: false,
           ),
-          body:SingleChildScrollView(
+          body: SingleChildScrollView(
             child: Center(
                 child: Column(
                     children: [
+                      const SizedBox(height: 10.0,),
                       Card(
                         child: ListTile(
-                          title: Text("${job.id}\n${job.date.replaceAll("_", "/")}\nTotal: ${job.total}"),
-                          leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
+                          title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
+                          subtitle: Text("\n${job.date}\n${masterSheetPath.split("/").last}\n\nTOTAL: ${job.total}", style: blackText),
                         ),
                       ),
+
                       headerPadding("Current Location:", TextAlign.left),
                       Card(
                         child: ListTile(
-                          title: job.location.isEmpty ?
-                          Text("Tap to select a location...", style: greyText) :
-                          Text(job.location, textAlign: TextAlign.center),
+                          title: job.location.isEmpty ? Text("Tap to select a location...", style: greyText) : Text(job.location, textAlign: TextAlign.center),
                           leading: job.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
                           onTap: () {
                             setLocation(context);
@@ -812,116 +851,69 @@ class ExportPage extends StatelessWidget{
 
   ExportPage({super.key});
 
-  _formatDecimal(String val){
-    int pos = val.indexOf(".");
-    String startStr = val.substring(0,pos);
-    String checkStr = val.substring(pos, min(val.length, pos+3));
-
-    bool allZero = true;
-
-    for(int c = 0; c < checkStr.length; c++){
-      if(checkStr[c] != "0"){
-        allZero = false;
-      }
-    }
-
-    if(allZero){
-      return startStr;
-    }
-    else{
-      return startStr + checkStr;
-    }
-  }
-
-  // _formatDouble(Decimal val) {
-  //   return val % 1 == 0 ? int.parse(val.toString()) : val.toStringAsFixed(1);
-  // }
-
-  // _getDateString(String d){
-  //   const gsDateBase = 2209161600 / 86400;
-  //   const gsDateFactor = 86400000;
-  //
-  //   final date = double.tryParse(d);
-  //   if(date == null){
-  //     debugPrint("DATETIME IS STUPID");
-  //     return "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-  //   }
-  //
-  //   final millis = (date - gsDateBase) * gsDateFactor;
-  //
-  //   String fd = (DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
-  //   fd = fd.substring(0, 10);
-  //   fd = fd.replaceAll("-", "/");
-  //
-  //   var fls = fd.split("/");
-  //   if(fls[2].length < 2){
-  //     fls[2] = "0${fls[2]}";
-  //   }
-  //
-  //   fd = "${fls[2]}/${fls[1]}/${fls[0]}";
-  //
-  //   return fd;
-  //   //(DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)).toString();
-  // }
-
   _exportXLSX() async {
     List<List<dynamic>> finalSheet = [];
 
     for(int i = 0; i < job.stocktake.length; i++){
       bool skip = false;
 
-      int tableIndex = job.stocktake[i]["index"];
+      int tableIndex = int.parse(job.stocktake[i]["index"].toString());
 
       for(int j = 0; j < finalSheet.length; j++) {
         // Check if item already exists
-        skip = int.parse(finalSheet[j][0]) == tableIndex;
+        skip = int.parse(finalSheet[j][tIndex].toString()) == tableIndex;
 
+        // Add QTY and TOTAL COST to existing item
         if(skip){
-          // Add price and count to existing item
-          Decimal c = Decimal.parse(finalSheet[j][4].toString()) + Decimal.parse(job.stocktake[i]["count"].toString());
-          finalSheet[j][4] = c.toString();
+          Decimal qty = Decimal.parse(finalSheet[j][4].toString()) + Decimal.parse(job.stocktake[i]["count"].toString());
 
-          String fixedPrice = double.parse(jobTable[tableIndex][tPrice]).toStringAsFixed(2);
-          Decimal p = Decimal.parse(finalSheet[j][5].toString()) + Decimal.parse(fixedPrice) * Decimal.parse(job.stocktake[i]["count"].toString());
-          finalSheet[j][5] = p.toString();
+          Decimal price;
+          if(jobTable[tableIndex][tPrice] is String == false){
+            price = Decimal.parse(jobTable[tableIndex][tPrice].toStringAsFixed(2));
+          }
+          else{
+            price = Decimal.parse(jobTable[tableIndex][tPrice]);
+          }
+
+          finalSheet[j][4] = qty.toString();
+          finalSheet[j][5] = (qty * price).toStringAsFixed(2);
           break;
         }
       }
 
       // Item doesn't exist, so add new item to the sheet
       if(!skip){
-        bool nof = tableIndex >= mainTable.length;
-        String date = jobTable[tableIndex][tDatetime].toString();
+        Decimal qty = Decimal.parse(job.stocktake[i]['count'].toString());
 
-        if(!nof){
-          if(date.contains("T")){
-            date = jobTable[tableIndex][tDatetime].toString().substring(0, date.indexOf("T")).toString().toString().toString().toString().toString().toString().toString().toString();
-          }
-          else if(date.isEmpty) {
-            date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-          }
-
-          // else{
-          //   if(date.contains("T")){
-          //     date = jobTable[tableIndex][tDatetime].toString().substring(0, date.indexOf("T"));
-          //     date = _getDateString(date);
-          //   }
-          // }
+        Decimal price;
+        if(jobTable[tableIndex][tPrice] is String == false){
+          price = Decimal.parse(jobTable[tableIndex][tPrice].toStringAsFixed(2));
+        }
+        else{
+          price = Decimal.parse(jobTable[tableIndex][tPrice]);
         }
 
-        String fixedPrice = double.parse(jobTable[tableIndex][tPrice]).toStringAsFixed(2);
+        String barcode = jobTable[tableIndex][tBarcode].toString();
+        if(barcode == "null") {
+          barcode = "";
+        }
+
+        String ordercode = jobTable[tableIndex][tOrdercode].toString();
+        if(ordercode == "null"){
+          ordercode = "";
+        }
 
         finalSheet.add([
-          jobTable[tableIndex][tIndex].toString(), //INDEX
-          jobTable[tableIndex][tCategory].toString(), //CATEGORY
-          jobTable[tableIndex][tDescription].toString(), // DESCRIPTION
-          jobTable[tableIndex][tUom].toString(), // UOM
-          job.stocktake[i]['count'].toString(), // COUNT
-          (Decimal.parse(fixedPrice) * Decimal.parse(job.stocktake[i]['count'].toString())).toString(),
-          jobTable[tableIndex][tBarcode].toString(), // BARCODE
-          nof.toString().toUpperCase(), // NOF
-          date, // DATETIME
-          jobTable[tableIndex][tOrdercode].toString(), // ORDERCODE
+          jobTable[tableIndex][tIndex].toString(),                              // INDEX
+          jobTable[tableIndex][tCategory].toString().toUpperCase(),             // CATEGORY
+          jobTable[tableIndex][tDescription].toString().toUpperCase(),          // DESCRIPTION
+          jobTable[tableIndex][tUom].toString().toUpperCase(),                  // UOM
+          qty.toString(),                                                       // QTY
+          (qty * price).toStringAsFixed(2),                                     // COST EX GST
+          barcode,                                                              // BARCODE
+          (tableIndex >= mainTable.length).toString().toUpperCase(),            // NOF
+          getDateString(jobTable[tableIndex][tDatetime].toString()),            // DATETIME
+          ordercode,                                                            // ORDERCODE
         ]);
       }
     }
@@ -949,23 +941,14 @@ class ExportPage extends StatelessWidget{
           i+1
       );
 
-      // if(finalSheet[i][7] == "FALSE"){
-      //   debugPrint(finalSheet[i][8].toString());
-      // }
-      // else{
-      //   debugPrint(finalSheet[i][8].toString());
-      // }
-
-      //debugPrint(finalSheet[i][8].toString());
-
-      // int yearThen = int.parse(finalSheet[i][8].split("/").last);
-      // // Get last two year digits using mod
-      // int diff = (DateTime.now().year % 100) - (yearThen % 100);
-      // // Color code cell if date is older than 1 year
-      // if(diff > 0){
-      //   var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
-      //   cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
-      // }
+      int yearThen = int.parse(finalSheet[i][8].split("/").last);
+      // Get last two year digits using mod
+      int diff = (DateTime.now().year % 100) - (yearThen % 100);
+      // Color code cell if date is older than 1 year
+      if(diff > 0){
+        var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
+        cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
+      }
     }
 
     // Set column widths
@@ -1016,8 +999,9 @@ class ExportPage extends StatelessWidget{
       finalTxt += bcode;
 
       // Count (4 characters)
-      Decimal dbCount = Decimal.tryParse(job.stocktake[i]['count'].toString()) ?? Decimal.parse('0');
-      String count = _formatDecimal(dbCount.toString());
+      double dblCount = double.tryParse(job.stocktake[i]['count'].toString()) ?? 0;
+      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
+
       while(count.length < 4) {
         count += " ";
       }
@@ -1073,13 +1057,13 @@ class ExportPage extends StatelessWidget{
       finalTxt += "$bcode,";
 
       // Qty (5 chars + 1 whitespace)
-      var dbCount = Decimal.parse(job.stocktake[i]["count"].toString());
-      String sCount = _formatDecimal(dbCount.toString());
+      double dblCount = double.tryParse(job.stocktake[i]['count'].toString()) ?? 0;
+      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
 
-      while(sCount.length < 5){
-        sCount = "0$sCount";
+      while(count.length < 5){
+        count = "0$count";
       }
-      finalTxt += "$sCount ,";
+      finalTxt += "$count ,";
 
       finalTxt += dateTime;
       finalTxt += "\n";
@@ -1114,8 +1098,8 @@ class ExportPage extends StatelessWidget{
 
       finalTxt += "$bcode,";
 
-      var dbCount = _formatDecimal(job.stocktake[i]["count"]);
-      finalTxt += dbCount.toString();
+      double dblCount = double.tryParse(job.stocktake[i]['count'].toString()) ?? 0;
+      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
       finalTxt += "\n";
     }
 
@@ -1155,8 +1139,8 @@ class ExportPage extends StatelessWidget{
 
       finalTxt += "$ocode,";
 
-      var dbCount = _formatDecimal(job.stocktake[i]["count"].toString());
-      finalTxt += dbCount.toString();
+      double dblCount = double.tryParse(job.stocktake[i]['count'].toString()) ?? 0;
+      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
 
       finalTxt += "\n";
     }
@@ -1196,8 +1180,7 @@ class ExportPage extends StatelessWidget{
                             context,
                             colorOk,
                             TextButton(
-                              child:
-                              Text('XLSX', style: whiteText),
+                              child: Text('XLSX', style: whiteText),
                               onPressed: () {
                                 _exportXLSX();
                                 showAlert(context, "Job Data Exported!", "../Documents/${job.id}/stocktake_${job.id}_[num].xlsx\n", Colors.orange);
@@ -1208,8 +1191,7 @@ class ExportPage extends StatelessWidget{
                             context,
                             colorOk,
                             TextButton(
-                              child:
-                              Text('SCANDATA (.TXT)', style: whiteText),
+                              child: Text('SCANDATA (.TXT)', style: whiteText),
                               onPressed: () {
                                 _gunDataTXT();
                                 String date = job.date.toString().replaceAll("_", "-");
@@ -1221,8 +1203,7 @@ class ExportPage extends StatelessWidget{
                             context,
                             colorOk,
                             TextButton(
-                              child:
-                              Text('H&L (POS)', style: whiteText),
+                              child: Text('H&L (POS)', style: whiteText),
                               onPressed: () {
                                 _exportHL();
                                 String shortMonth = monthNames[DateTime.now().month - 1];
@@ -1236,8 +1217,7 @@ class ExportPage extends StatelessWidget{
                             context,
                             colorOk,
                             TextButton(
-                              child:
-                              Text('Barcode / Qty', style: whiteText),
+                              child: Text('Barcode / Qty', style: whiteText),
                               onPressed: () {
                                 _exportBarcodeQty();
                                 String shortMonth = monthNames[DateTime.now().month - 1];
@@ -1251,8 +1231,7 @@ class ExportPage extends StatelessWidget{
                             context,
                             colorOk,
                             TextButton(
-                              child:
-                              Text('Ordercode / Qty', style: whiteText),
+                              child: Text('Ordercode / Qty', style: whiteText),
                               onPressed: () {
                                 _exportOrdercodeQty();
 
@@ -1342,11 +1321,19 @@ class _GridView extends State<GridView> {
 
   @override
   void dispose() {
+
+    // Make sure Focus is removed before disposing controller
+    FocusScopeNode currentFocus = FocusScope.of(context);
+    if (!currentFocus.hasPrimaryFocus) {
+      currentFocus.unfocus();
+    }
+
     barcodeCtrl.dispose();
     ordercodeCtrl.dispose();
     countCtrl.dispose();
     searchCtrl.dispose();
     deviceFocus.dispose();
+
     super.dispose();
   }
 
@@ -1537,6 +1524,9 @@ class _GridView extends State<GridView> {
               if (!found){
                 filterList = List.empty();
               }
+              // else{
+              //   debugPrint(filterList.toString());
+              // }
 
               setState(() {});
             }
@@ -1623,10 +1613,10 @@ class _GridView extends State<GridView> {
               // Automatically show item add popup if one item is found
               // Duplicate barcodes are not allowed so it should always only return one item for barcode scanning
 
-              if(filterList.isNotEmpty && filterList.length == 1){
-                await counterConfirm(context, filterList[0][tDescription], 0.0, false).then((double addCount) async{
+              if(filterList.length == 1){
+                await counterConfirm(context, filterList[0][tDescription], 1.0, false).then((double addCount) async{
                   if(addCount != -1){
-                    Decimal c = roundDecimal(addCount.toString());
+                    Decimal c = Decimal.parse(addCount.toStringAsFixed(3));
 
                     job.stocktake.add({
                       "index": filterList[0][tIndex],
@@ -1638,7 +1628,7 @@ class _GridView extends State<GridView> {
 
 
                     String shortDescript = filterList[0][tDescription];
-                    shortDescript.substring(0, 14);
+                    shortDescript.substring(0, min(shortDescript.length, 14));
                     showNotification(context, colorWarning, whiteText, "Added $shortDescript --> $c");
 
                     job.calcTotal();
@@ -1737,7 +1727,11 @@ class _GridView extends State<GridView> {
   }
 
   Widget _addGridCard(int pIndex){
-    int tableIndex = int.parse(filterList[pIndex][tIndex]);
+
+    //debugPrint(filterList[pIndex][tIndex].toString());
+
+
+    int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
     String descript = "";
     descript = filterList[pIndex][tDescription];
 
@@ -1770,21 +1764,23 @@ class _GridView extends State<GridView> {
           title: Text(descript, textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.fade,),
           subtitle: Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center, softWrap: true, overflow: TextOverflow.fade),
           onTap: () async {
-            await counterConfirm(context, filterList[pIndex][tDescription], 0.0, false).then((double addCount) async{
+            await counterConfirm(context, filterList[pIndex][tDescription], 1.0, false).then((double addCount) async{
               if(addCount != -1){
-                Decimal c = roundDecimal(addCount.toString());
+
+
+                //Decimal c = roundDecimal(addCount.toString());
 
                 job.stocktake.add({
-                  "index": int.parse(filterList[pIndex][tIndex]),
-                  "count": c,
+                  "index": int.parse(filterList[pIndex][tIndex].toString()),
+                  "count": Decimal.parse(addCount.toStringAsFixed(3)), //double.parse(addCount.toStringAsFixed(3)),
                   "location": job.location,
                   "barcode_index" : addBarcodeIndex,
                   "ordercode_index" : addOrdercodeIndex,
                 });
 
-                String shortDescript = filterList[pIndex][tDescription];
+                String shortDescript = filterList[pIndex][tDescription].toString();
                 shortDescript.substring(0, min(shortDescript.length, 14));
-                showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $c");
+                showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $addCount");
 
                 job.calcTotal();
 
@@ -1838,14 +1834,14 @@ class _GridView extends State<GridView> {
                       // Show item details
                       int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
                       String date = jobTable[tableIndex][tDatetime].toString();
-                      date = date.substring(0, date.indexOf("T"));
+                      date = getDateString(date);
 
                       showAlert(
                           context,
-                          jobTable[tableIndex][tDescription].toString(),
+                          '${jobTable[tableIndex][tDescription]}',
                           "Table Index: $tableIndex\n"
                           "Category: ${jobTable[tableIndex][tCategory]}\n"
-                          "Price: ${double.parse(jobTable[tableIndex][tPrice]).toStringAsFixed(2)}\n"
+                          "Price: ${jobTable[tableIndex][tPrice]}\n"
                           "DateTime: $date",
                           colorOk
                       );
@@ -1866,7 +1862,7 @@ class _GridView extends State<GridView> {
                   height: 150.0,
                   width: MediaQuery.of(context).size.width * 0.195,
                   child: ListTile(
-                    title: Center(child: Text("${filterList[pIndex][iCount]}")),
+                    title: Center(child: Text(filterList[pIndex][iCount].toString())),
                     onTap: () async {
                       double c = double.parse(filterList[pIndex][iCount].toString());
                       await counterConfirm(context, jobTable[tableIndex][tDescription], c, true).then((double newCount) async {
@@ -1881,10 +1877,12 @@ class _GridView extends State<GridView> {
                           setState(() {});
                         }
                         else if (newCount > -1 && newCount != c){
-                          job.stocktake[pIndex]["count"] = roundDecimal(newCount.toString()).toString();
+                          Decimal decimalCount = Decimal.parse(newCount.toStringAsFixed(3));
+
+                          job.stocktake[pIndex]["count"] = decimalCount;
                           job.calcTotal();
                           writeJob(job, true);
-                          filterList[pIndex][iCount] = roundDecimal(newCount.toString()).toString();
+                          filterList[pIndex][iCount] = decimalCount;
                           setState(() {});
                         }
                       });
@@ -2276,7 +2274,7 @@ class _GridView extends State<GridView> {
               "category" : categoryValue,
               "description" : descriptionText.toUpperCase(),
               "uom" : "EACH", //uomCtrl.text;
-              "price" : Decimal.parse(priceText),
+              "price" : Decimal.parse(double.parse(priceText).toStringAsFixed(2)),//Decimal.parse(priceText),
               "datetime" : "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
               "ordercode" : finalOrdercode,
               "nof" : true,
@@ -2303,7 +2301,7 @@ class _GridView extends State<GridView> {
             job.nof[nofIndex]["category"] = categoryValue;
             job.nof[nofIndex]["description"] = descriptionText.toUpperCase();
             job.nof[nofIndex]["uom"] = "EACH";//uomCtrl.text;
-            job.nof[nofIndex]["price"] = Decimal.parse(priceText);
+            job.nof[nofIndex]["price"] = Decimal.parse(double.parse(priceText).toStringAsFixed(2));
             job.nof[nofIndex]["datetime"] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
             job.nof[nofIndex]["ordercode"] = finalOrdercode;
             job.nof[nofIndex]["nof"] = true;
@@ -2311,13 +2309,10 @@ class _GridView extends State<GridView> {
 
           // Refresh jobTable
           jobTable = mainTable + job.nofList();
-
           if(widget.action != ActionType.edit){
             filterList = List.empty();
           }
-
           searchCtrl.text = "";
-
           await writeJob(job, true).then((value){
             Navigator.pop(context);
           });
@@ -2328,6 +2323,15 @@ class _GridView extends State<GridView> {
     setState(() {});
   }
 
+  _popBack(){
+    if(widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
+      goToPage(context, const GridView(action: ActionType.add));
+    }
+    else{
+      goToPage(context, const Stocktake());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
@@ -2335,9 +2339,7 @@ class _GridView extends State<GridView> {
     final double itemHeight = (size.height - kToolbarHeight - 24) / 2;
     final double itemWidth = size.width / 2;
     return WillPopScope(
-       onWillPop: () async => (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode) ?
-            goToPage(context, const GridView(action: ActionType.add)) :
-            goToPage(context, const Stocktake()),
+       onWillPop: () async => _popBack(),
 
         child: GestureDetector(
             onTap: () {
@@ -2356,7 +2358,7 @@ class _GridView extends State<GridView> {
                     backgroundColor: colorMode,
                     floating: true,
                     pinned: true,
-                    collapsedHeight: kToolbarHeight * 2,// : kToolbarHeight,
+                    collapsedHeight: kToolbarHeight * 2,
                     centerTitle: true,
                     title: Text(_setTitle()),
                     leading: IconButton(
@@ -2569,11 +2571,31 @@ class _GridView extends State<GridView> {
   }
 }
 
-Decimal roundDecimal(String val){
-  int pos = val.indexOf(".");
-  String startStr = val.substring(0, pos);
-  String endStr = val.substring(pos, min(val.length, pos+3));
-  return Decimal.parse(startStr + endStr);
+String getDateString(String d){
+  if(d.contains("T")){
+    return d.substring(0, d.indexOf("T")).toString();
+  }
+  else if(d.contains("/") || d.contains("-")){
+    return d;
+  }
+
+  if(d.isEmpty) {
+    return "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+  }
+
+  int timestamp = int.tryParse(d) ?? -1;
+
+  if(timestamp != -1){
+    const gsDateBase = 2209161600 / 86400;
+    const gsDateFactor = 86400000;
+    final millis = (timestamp - gsDateBase) * gsDateFactor;
+    String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
+    date = date.substring(0, 10);
+    var dateSplit = date.split("-");
+    return "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+  }
+
+  return "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
 }
 
 Widget headerPadding(String title, TextAlign l){
@@ -2593,14 +2615,14 @@ Widget titlePadding(String title, TextAlign l){
   );
 }
 
-Widget rBox(BuildContext context, Color c, Widget w) {
+Widget rBox(BuildContext context, Color color, Widget widget) {
   return Padding(
     padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
     child: Container(
       height: 50,
       width: MediaQuery.of(context).size.width * 0.8,
-      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(20)),
-      child: w,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      child: widget,
     ),
   );
 }
@@ -2608,122 +2630,137 @@ Widget rBox(BuildContext context, Color c, Widget w) {
 Future<double> counterConfirm(BuildContext context, String descript, double c, bool edit) async {
   bool confirmed = false;
   bool delete = false;
-
   double addCount = c;
-  String txtCtrl = c.toString();
 
   await showDialog(
-    useSafeArea: true,
+      useSafeArea: true,
       context: context,
       barrierDismissible: false,
       barrierColor: colorOk.withOpacity(0.8),
       builder: (context){
-        return StatefulBuilder(
-            builder: (context, setState) {
-              return WillPopScope(
-                  onWillPop: () async => false,
-                  child: AlertDialog(
-                    alignment: Alignment.center,
-                    actionsAlignment: MainAxisAlignment.spaceAround,
-                    title: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 2,),
-                    content: GestureDetector(
-                      onTap: () {
-                        FocusScopeNode currentFocus = FocusScope.of(context);
-                        if (!currentFocus.hasPrimaryFocus) {
-                          currentFocus.unfocus();
-                        }
-                      },
-                      child: SingleChildScrollView(
-                          child: Column(
-                              children: <Widget>[
-                                const Text("Count"),
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
-                                  child: Card(
-                                      shadowColor: Colors.white.withOpacity(0.0),
-                                      child: ListTile(
-                                        trailing: IconButton(
-                                          icon: const Icon(Icons.add_circle_outline),
-                                          onPressed: (){
-                                            addCount = (double.tryParse(txtCtrl) ?? 0.0) + 1;
-                                            txtCtrl = addCount.toString();
-                                            setState((){});
-                                          },
-                                        ),
-                                        title: TextFormField(
-                                          initialValue: c.toString(),
-                                          textAlign: TextAlign.center,
-                                          keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                          onChanged:(String value){
-                                            txtCtrl = value;
-                                            setState((){});
-                                          }
-                                        ),
 
-                                        leading: IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline),
-                                          onPressed: (){
-                                            addCount = (double.tryParse(txtCtrl) ?? 0.0) - 1.0;
-                                            txtCtrl = max(addCount, 0).toString();
-                                            setState((){});
-                                          },
-                                        ),
-                                      )
-                                  ),
-                                ),
-                                edit ? Padding(
-                                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                                    onPressed: () async {
-                                      await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
-                                        if(value){
-                                          delete = true;
-                                          Navigator.pop(context);
-                                        }
-                                      });
+        TextEditingController txtCtrl = TextEditingController(text: c.toString());
+
+        return WillPopScope(
+            onWillPop: () async => false,
+            child: AlertDialog(
+              alignment: Alignment.center,
+              actionsAlignment: MainAxisAlignment.spaceAround,
+              title: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 2,),
+              content: GestureDetector(
+                onTap: () {
+                  FocusScopeNode currentFocus = FocusScope.of(context);
+                  if (!currentFocus.hasPrimaryFocus) {
+                    currentFocus.unfocus();
+                  }
+                },
+                child: SingleChildScrollView(
+                    child: Column(
+                        children: <Widget>[
+                          const Text("Count"),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
+                            child: Card(
+                                shadowColor: Colors.white.withOpacity(0.0),
+                                child: ListTile(
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    onPressed: () {
+                                      addCount += 1;
+                                      txtCtrl.text = addCount.toString();
                                     },
-                                    child: const Text("DELETE"),
                                   ),
-                                ) : Container(),
-                              ]
-                          )
-                      ),
-                    ),
-                    actions: <Widget>[
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text("Cancel"),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-                        onPressed: () async {
-                          addCount = double.tryParse(txtCtrl) ?? 0.0;
-                          if(addCount > 0){
-                            confirmed = true;
-                            Navigator.pop(context);
-                          }
-                          else{
-                            String er = "Count is zero (0).";
-                            if(edit){
-                              er += "\n\nPress 'DELETE' if you wish to remove this item.";
-                            }
-                            showAlert(context, "ERROR:", er, colorWarning);
-                            txtCtrl = "0.0";
-                          }
-                        },
-                        child: const Text("Confirm"),
-                      ),
-                    ],
-                  )
-              );
-            }
+                                  title: TextFormField(
+                                    controller: txtCtrl,
+                                    textAlign: TextAlign.center,
+                                    keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                    onChanged: (String value){
+                                      addCount = double.tryParse(value) ?? 0.0;
+                                    },
+                                  ),
+
+                                  leading: IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline),
+                                    onPressed: (){
+                                      addCount = max(addCount - 1, 0);
+                                      txtCtrl.text = addCount.toString();
+                                    },
+                                  ),
+                                )
+                            ),
+                          ),
+                          edit ? Padding(
+                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                              onPressed: () async {
+                                await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
+                                  if(value){
+                                    delete = true;
+                                    // Unfocus then dispose
+                                    FocusScopeNode currentFocus = FocusScope.of(context);
+                                    if (!currentFocus.hasPrimaryFocus) {
+                                      currentFocus.unfocus();
+                                    }
+                                    txtCtrl.dispose();
+                                    Navigator.pop(context);
+                                  }
+                                });
+                              },
+                              child: const Text("DELETE"),
+                            ),
+                          ) : Container(),
+                        ]
+                    )
+                ),
+              ),
+              actions: <Widget>[
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                  onPressed: () {
+                    //Unfocus then dispose
+                    FocusScopeNode currentFocus = FocusScope.of(context);
+                    if (!currentFocus.hasPrimaryFocus) {
+                      currentFocus.unfocus();
+                    }
+
+                    txtCtrl.dispose();
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                  onPressed: () async {
+                    if(addCount > 0){
+                      confirmed = true;
+
+                      //Unfocus then dispose
+                      FocusScopeNode currentFocus = FocusScope.of(context);
+                      if (!currentFocus.hasPrimaryFocus) {
+                        currentFocus.unfocus();
+                      }
+
+                      txtCtrl.dispose();
+                      Navigator.pop(context);
+                    }
+                    else{
+                      String er = "Count is zero (0).";
+                      if(edit){
+                        er += "\n\nPress 'DELETE' if you wish to remove this item.";
+                      }
+                      showAlert(context, "ERROR:", er, colorWarning);
+                      txtCtrl.text = "0.0";
+                    }
+                  },
+
+                  child: const Text("Confirm"),
+                ),
+              ],
+            )
         );
       }
-  );
+    );
 
   return confirmed ? addCount : (delete ? -2 : -1);
 }
@@ -2763,6 +2800,37 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   );
 
   return confirmation;
+}
+
+Future<void> prepareStorage() async {
+  var path = '/storage/emulated/0';//!isEmulating ? '/storage/emulated/0' : 'sdcard';
+  rootDir = Directory(path);
+  var storage = await storageType.status;
+  if (storage != PermissionStatus.granted) {
+    await storageType.request();
+  }
+}
+
+Future<void> loadMasterSheet(String filePath) async {
+  Uint8List bytes;
+
+  if(!File(filePath).existsSync()){
+    ByteData data = await rootBundle.load("assets/MASTERFILE.xlsx");
+    bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    await File(filePath).writeAsBytes(bytes);
+  }
+  else{
+    File file = File(filePath);
+    bytes = file.readAsBytesSync();
+  }
+
+  var decoder = SpreadsheetDecoder.decodeBytes(bytes);
+  var sheets = decoder.tables.keys.toList();
+  SpreadsheetTable? table = decoder.tables[sheets[0]];
+  table?.rows.removeAt(0);
+
+  // Remove header row
+  mainTable = table!.rows;
 }
 
 setLocation(BuildContext context1){
@@ -3023,24 +3091,24 @@ writeJob(StockJob job, bool overwrite) async {
   filePath += 'ASJob_${job.id}';
   //filePath = '/storage/emulated/0/Documents/${job.id}/$jobStartStr${job.id}_0';
 
-  // Check if file exists and create new
-  if(!overwrite){
-    String num = '0';
-    bool readyWrite = false;
-
-    while(!readyWrite){
-      await File(filePath).exists().then((value){
-        if(value){
-          // Add iterable value at end of file
-          num = (int.parse(num) + 1).toString();
-          filePath = '/storage/emulated/0/Documents/${job.id}/ASJob_${job.id}_$num';
-        }
-        else{
-          readyWrite = true;
-        }
-      });
-    }
-  }
+  // // Check if file exists and create new
+  // if(!overwrite){
+  //   String num = '0';
+  //   bool readyWrite = false;
+  //
+  //   while(!readyWrite){
+  //     await File(filePath).exists().then((value){
+  //       if(value){
+  //         // Add iterable value at end of file
+  //         num = (int.parse(num) + 1).toString();
+  //         filePath = '/storage/emulated/0/Documents/${job.id}/ASJob_${job.id}';
+  //       }
+  //       else{
+  //         readyWrite = true;
+  //       }
+  //     });
+  //   }
+  // }
 
   var jobFile = File(filePath);
   Map<String, dynamic> jMap = job.toJson();
@@ -3103,6 +3171,7 @@ class StockJob {
   List<Map<String, dynamic>> nof = List.empty(growable: true);
   List<String> allLocations = List.empty(growable: true);
   String location = "";
+  String sheet = "";
 
   @override
   bool operator == (Object other) => identical(this, other) || other is StockJob &&
@@ -3113,10 +3182,11 @@ class StockJob {
       stocktake == other.stocktake &&
       nof == other.nof &&
       allLocations == other.allLocations &&
-      location == other.location;
+      location == other.location &&
+      sheet == other.sheet;
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stocktake.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode; // ^ dbPath.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ date.hashCode ^ stocktake.hashCode ^ nof.hashCode ^ allLocations.hashCode ^ location.hashCode ^ sheet.hashCode; // ^ dbPath.hashCode;
 
   StockJob({
     required this.id,
@@ -3126,6 +3196,8 @@ class StockJob {
     stocktake,
     nof,
     allLocations,
+    location,
+    sheet,
   });
 
   StockJob copy({
@@ -3136,6 +3208,8 @@ class StockJob {
     List<Map<String, dynamic>>? stocktake,
     List<Map<String, dynamic>>? nof,
     List<String>? allLocations,
+    String? location,
+    String? sheet,
   }) =>
       StockJob(
           date: date ?? this.date,
@@ -3144,7 +3218,9 @@ class StockJob {
           total: total ?? this.total,
           stocktake: stocktake ?? this.stocktake,
           nof: nof ?? this.nof,
-          allLocations: allLocations ?? this.allLocations
+          allLocations: allLocations ?? this.allLocations,
+          location: location ?? this.location,
+          sheet: sheet ?? this.sheet
       );
 
   factory StockJob.fromJson(dynamic json) {
@@ -3184,6 +3260,8 @@ class StockJob {
     ];
 
     job.location = '';
+    job.sheet = !json.containsKey("sheet") || json['shet'] == null ? "" : json['sheet'] as String;
+
     return job;
   }
 
@@ -3196,6 +3274,7 @@ class StockJob {
       'nof': jsonEncode(nof),
       'allLocations': jsonEncode(allLocations),
       'location': location,
+      'sheet': sheet,
     };
   }
 
@@ -3228,8 +3307,21 @@ class StockJob {
     for (int i = 0; i < stocktake.length; i++) {
       total += Decimal.parse(stocktake[i]["count"].toString());
     }
-
-    //Round to 3 decimal places
-    //total = roundDouble(total, 3);
   }
 }
+
+/*
+writeErrLog() async {
+  String filePath = '/storage/emulated/0/Documents/${job.id}/';
+  filePath += 'ERR_LOG_${job.id}';
+
+  var jobFile = File(filePath);
+  jobFile.writeAsString(errLog);
+}
+*/
+
+/*
+  _searchTable(){}
+  _searchNOFList(){}
+  _searchStocktake(){}
+*/
