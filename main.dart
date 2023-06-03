@@ -34,8 +34,8 @@ StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
 String errorString = "";
 
 List<String> jobList = [];
-List<List<dynamic>> jobTable = List.empty();
-List<List<dynamic>> mainTable = List.empty();
+List<List<String>> jobTable = List.empty();
+List<List<String>> mainTable = List.empty();
 Map<String, dynamic> sFile = {};
 Directory? rootDir;
 int scanType = 0;
@@ -109,6 +109,17 @@ class HomePage extends StatelessWidget{
     }
   }
 
+  _createErrLog() async {
+    // Create error log and store in App Directory if it doesn't exist
+    final directory = await getApplicationDocumentsDirectory();
+    final errPath = directory.path;
+
+    if(!File('$errPath/fd_err_log.txt').existsSync()){
+      final errFile = File('$errPath/fd_err_log.txt');
+      errFile.writeAsString("++ FD APP ERROR LOG ++\n\n");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -143,21 +154,22 @@ class HomePage extends StatelessWidget{
                             TextButton(
                               child: const Text('Jobs', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                               onPressed: () async {
-                                DateTime cDate = DateTime.now().isUtc ? DateTime.now() : DateTime.now().toUtc();
 
+                                DateTime cDate = DateTime.now().isUtc ? DateTime.now() : DateTime.now().toUtc();
                                 if(cDate.month > 6 || cDate.month < 5 || cDate.year < 2023 || cDate.year > 2023){
                                   showAlert(context, "", "ERROR: \n\nLicense has EXPIRED!\n\nYou are not authorized to use this software!", Colors.red);
                                   return;
                                 }
 
+                                await _createErrLog();
                                 _prepareStorage();
-
                                 await _access().then((value){
                                   if(value){
                                     Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                                   }
                                   else{
-                                    showAlert(context, "ERROR", "* Storage permissions were denied!\n\n* Try chaging storage permission type in 'App Settings'", Colors.red);
+                                    //* Try chaging storage permission type in 'App Settings'
+                                    showAlert(context, "ERROR", "* Storage permissions were denied!\n\n", Colors.red);
                                   }
                                 });
                               },
@@ -172,6 +184,7 @@ class HomePage extends StatelessWidget{
                           TextButton(
                             child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                             onPressed: () async {
+                              await _createErrLog();
                               await getSession().then((value){
                                 goToPage(context, const AppSettings());
                               });
@@ -261,6 +274,22 @@ class _AppSettings extends State<AppSettings> {
                                 )
                             )
                         ),
+                        headerPadding('Error Reports', TextAlign.left),
+                        Center(
+                          child: Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                              child: Card(
+                                  color: Colors.blueGrey[400],
+                                  child: ListTile(
+                                    title: Text('Copy Error Log', textAlign: TextAlign.center, style: whiteText),
+                                    onTap: () async {
+                                      copyErrLog();
+                                      showAlert(context, "ALERT", "'fd_error_log.txt' has been copied to Internal Storage -> Documents", colorOk);
+                                    },
+                                  )
+                              )
+                          ),
+                        )
                         // headerPadding('Storage Permission Type', TextAlign.left),
                         // Padding(
                         //     padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
@@ -319,10 +348,10 @@ class _JobsPage extends State<JobsPage> {
   }
 
   _copyJobFile(String path) async {
-    List<String> spt = path.split("/");
-    String str = spt[spt.length - 1];
-
-    if (str.startsWith("ASJob_")){
+    // List<String> spt = path.split("/").last;
+    // String str = spt[spt.length - 1];
+    String fileName = path.split("/").last;
+    if (fileName.startsWith("ASJob_")){
       //String newPath = path;
       bool copyJob = false;
 
@@ -347,9 +376,9 @@ class _JobsPage extends State<JobsPage> {
           writeJob(j, false);
         }
         catch (e){
-         errorString = "FAILED TO COPY JOB FILE => ${e.toString()}";
-         writeToErrLog(errorString);
-         errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
+          writeErrLog(e.toString(), fileName);
+          showAlert(context, "ERROR", "Failed to copy job file => $e", Colors.red);
+          //errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
         }
       }
     }
@@ -366,9 +395,8 @@ class _JobsPage extends State<JobsPage> {
       job.calcTotal();
     }
     catch (e){
-      errorString = "FAILED TO READ JOB FILE => ${e.toString()}";
-      writeToErrLog(errorString);
-      errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
+      writeErrLog(e.toString(), path);
+      showAlert(context, "ERROR", "Failed to read job file => $e", Colors.red);
     }
 
     setState(() {});
@@ -486,8 +514,8 @@ class _JobsPage extends State<JobsPage> {
 
                                       // Copy job file to documents folder if it is not there
                                       await _copyJobFile(path);
+
                                       await _readJob(path).then((value) async {
-                                        debugPrint(job.sheet);
                                         await loadMasterSheet(job.sheet).then((value) async{
                                           if(mainTable.isNotEmpty){
                                             await getSession().then((value){
@@ -567,7 +595,6 @@ class _NewJob extends State<NewJob>{
                                   child: Text('Load default MASTERFILE.xlsx', style: whiteText),
                                   onPressed: () async {
                                     await _getDefaultMastersheet().then((value){
-                                      debugPrint(masterfileStr);
                                       setState(() {});
                                       Navigator.pop(context2);
                                     });
@@ -693,7 +720,6 @@ class _NewJob extends State<NewJob>{
                                     title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
                                     onTap: () async {
                                       _masterfileSelector();
-                                      debugPrint(masterfileStr);
                                     }
                                 ),
                               ),
@@ -731,7 +757,7 @@ class _NewJob extends State<NewJob>{
                                   String path = "/storage/emulated/0/Documents/${newJob.id}/ASJob_${newJob.id}";
 
                                   // Do not overwrite any other existing jobs
-                                  writeJob(newJob, false);
+                                  await writeJob(newJob, false);
                                   job = newJob;
 
                                   job.calcTotal();
@@ -749,6 +775,7 @@ class _NewJob extends State<NewJob>{
                                         });
                                       }
                                       else{
+                                        writeErrLog(errorString, newJob.id);
                                         showAlert(context, "ERROR", errorString, colorWarning);
                                       }
                                   });
@@ -884,12 +911,14 @@ class ExportPage extends StatelessWidget{
           Decimal qty = Decimal.parse(finalSheet[j][4].toString()) + Decimal.parse(job.stocktake[i][sCount]);
 
           Decimal price;
-          if(jobTable[tableIndex][tPrice] is String == false){
-            price = Decimal.parse(jobTable[tableIndex][tPrice].toStringAsFixed(2));
-          }
-          else{
-            price = Decimal.parse(jobTable[tableIndex][tPrice]);
-          }
+          price = Decimal.parse(jobTable[tableIndex][tPrice]);
+
+          // if(jobTable[tableIndex][tPrice] is String == false){
+          //   price = Decimal.parse(jobTable[tableIndex][tPrice].toStringAsFixed(2));
+          // }
+          // else{
+          //   price = Decimal.parse(jobTable[tableIndex][tPrice]);
+          // }
 
           finalSheet[j][4] = qty.toString();
           finalSheet[j][5] = (qty * price).toStringAsFixed(2);
@@ -902,12 +931,11 @@ class ExportPage extends StatelessWidget{
         Decimal qty = Decimal.parse(job.stocktake[i][sCount].toString());
 
         Decimal price;
-        if(jobTable[tableIndex][tPrice] is String == false){
-          price = Decimal.parse(jobTable[tableIndex][tPrice].toStringAsFixed(2));
-        }
-        else{
-          price = Decimal.parse(jobTable[tableIndex][tPrice]);
-        }
+        // if(jobTable[tableIndex][tPrice] is String == false){
+        //   price = Decimal.parse(jobTable[tableIndex][tPrice]);
+        // }
+        // else{
+        price = Decimal.parse(jobTable[tableIndex][tPrice]);
 
         String barcode = jobTable[tableIndex][tBarcode].toString();
         if(barcode == "null") {
@@ -1389,10 +1417,9 @@ class _GridView extends State<GridView> {
     bool confirm = false;
     if (barcode.trim().isNotEmpty) {
       for (int i = 0; i < jobTable.length; i++) {
-        String barcodeStr = jobTable[i][tBarcode] ?? "";
+        String barcodeStr = jobTable[i][tBarcode];
         if(barcodeStr.isNotEmpty && i != ignore){
           if(barcodeStr.split(",").toList().contains(barcode)){
-            //debugPrint(barcodeStr);
             confirm = true;
             break;
           }
@@ -1540,9 +1567,6 @@ class _GridView extends State<GridView> {
               if (!found){
                 filterList = List.empty();
               }
-              // else{
-              //   debugPrint(filterList.toString());
-              // }
 
               setState(() {});
             }
@@ -1833,7 +1857,7 @@ class _GridView extends State<GridView> {
 
                       showAlert(
                           context,
-                          '${jobTable[tableIndex][tDescription]}',
+                          jobTable[tableIndex][tDescription],
                           "Table Index: $tableIndex\n"
                               "Category: ${jobTable[tableIndex][tCategory]}\n"
                               "Price: ${jobTable[tableIndex][tPrice]}\n"
@@ -2288,8 +2312,6 @@ class _GridView extends State<GridView> {
             }
           }
           else{
-            //debugPrint(finalBarcode);
-
             // EDIT NOF
             job.nof[nofIndex][nBarcode] = finalBarcode;
             job.nof[nofIndex][nCategory] = categoryValue;
@@ -2566,6 +2588,7 @@ class _GridView extends State<GridView> {
 }
 
 String getDateString(String d){
+  // If date contains '/' , '-' or 'T' it is asssumed correct
   if(d.contains("T")){
     return d.substring(0, d.indexOf("T")).toString();
   }
@@ -2573,23 +2596,22 @@ String getDateString(String d){
     return d;
   }
 
-  if(d.isEmpty) {
-    return "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+  String newDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+
+  if(d.isNotEmpty) {
+    int timestamp = int.tryParse(d) ?? -1;
+    if(timestamp != -1){
+      const gsDateBase = 2209161600 / 86400;
+      const gsDateFactor = 86400000;
+      final millis = (timestamp - gsDateBase) * gsDateFactor;
+      String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
+      date = date.substring(0, 10);
+      List<String> dateSplit = date.split("-");
+      newDate = "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+    }
   }
 
-  int timestamp = int.tryParse(d) ?? -1;
-
-  if(timestamp != -1){
-    const gsDateBase = 2209161600 / 86400;
-    const gsDateFactor = 86400000;
-    final millis = (timestamp - gsDateBase) * gsDateFactor;
-    String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
-    date = date.substring(0, 10);
-    List<String> dateSplit = date.split("-");
-    return "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
-  }
-
-  return "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+  return newDate;
 }
 
 Widget headerPadding(String title, TextAlign l){
@@ -2876,8 +2898,7 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
 
 Future<void> loadMasterSheet(String filePath) async {
   Uint8List bytes;
-
-  mainTable = List.empty();
+  mainTable = List.empty(growable: true);
 
   if(!filePath.toUpperCase().endsWith(".XLSX")){
     errorString = "* Invalid spreadsheet format!\n\n* The file you are trying to load is not an XLSX\n\n* Only XLSX documents are accepted.";
@@ -2885,7 +2906,7 @@ Future<void> loadMasterSheet(String filePath) async {
   }
 
   if(!File(filePath).existsSync()){
-    // LOAD DEFAULT SPREADSHEET INTO APPLICATIONS DIRECTORY IF IT DOES NOT EXIST THERE
+    // LOAD DEFAULT SPREADSHEET INTO APPLICATIONS DIRECTORY IF IT DOES NOT EXIST
     if(filePath.endsWith("MASTERFILE.xlsx")){
       ByteData data = await rootBundle.load("assets/MASTERFILE.xlsx");
       bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
@@ -2906,10 +2927,32 @@ Future<void> loadMasterSheet(String filePath) async {
     var sheets = decoder.tables.keys.toList();
     SpreadsheetTable? table = decoder.tables[sheets[0]];
     table?.rows.removeAt(0); // Remove header row
-    mainTable = table!.rows;
+    //mainTable = table!.rows;
+
+    if(table!.rows.isEmpty){
+      errorString = "Spreadsheet was not loaded!\nThe selected spreadsheet is empty.\n";
+      return;
+    }
+
+    if(table.rows[0].length != 8){
+      errorString = "Spreadsheet was not loaded!\nThe spreadsheet does not cotain the correct number of rows.\n";
+      return;
+    }
+
+    for(int t = 0; t < table.rows.length; t++) {
+      mainTable.add([
+        table.rows[t][0].toString(),
+        table.rows[t][1].toString(),
+        table.rows[t][2].toString(),
+        table.rows[t][3].toString(),
+        table.rows[t][4].toString(),
+        table.rows[t][5].toString(),
+        table.rows[t][6].toString(),
+        table.rows[t][7].toString()
+      ]);
+    }
 
     const int maxCheck = 4;
-
     for(int i = 0; i < mainTable.length; i++){
       if(i >= maxCheck){
         break;
@@ -2917,16 +2960,18 @@ Future<void> loadMasterSheet(String filePath) async {
 
       int indexCheck = int.tryParse(mainTable[i][tIndex]) ?? -1;
       if(i != indexCheck){
-        mainTable = List.empty();
+        mainTable = List.empty(growable: true);
         errorString = "Spreadsheet was not loaded!\nThe index column contains non-sequential numbers!\n";
         return;
       }
     }
   }
   catch (e){
-    errorString = "FAILED TO LOAD SPREADSHEET: ${e.toString()}";
-    writeToErrLog(errorString);
-    errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
+    errorString = "Spreadsheet was not loaded!\n$e";
+
+    // errorString = "FAILED TO LOAD SPREADSHEET: ${e.toString()}";
+    // writeToErrLog(errorString);
+    // errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
   }
 }
 
@@ -3203,30 +3248,11 @@ writeSession() async {
   };
 
   final jString = jsonEncode(jMap);
-
   final directory = await getApplicationDocumentsDirectory();
   final path = directory.path;
   //final path = await _localPath;
   final filePath = File('$path/session_file');
-  filePath.writeAsString(jString);
-}
-
-writeToErrLog(String err) async {
-  String errLine = "[ ERROR @ ${DateTime.now()} ]\n";
-  errLine += "$err\n";
-  errLine += "[ END LOG ]\n\n";
-
-  String filePath = '/storage/emulated/0/Documents/${job.id}/';
-  filePath += 'ERR_LOG_${job.id}';
-
-  var jobFile = File(filePath);
-
-  if((jobFile.readAsLines() as List<String>).length > 5000){
-    jobFile.writeAsString(errLine, mode: FileMode.write);
-  }
-  else{
-    jobFile.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
-  }
+  filePath.writeAsString(jString, mode: FileMode.writeOnly);
 }
 
 getSession() async {
@@ -3235,6 +3261,7 @@ getSession() async {
   //final path = await _localPath;
 
   var filePath = File('$path/session_file');
+
   if(!await filePath.exists()) {
     // Make new session file
     sFile = {
@@ -3257,6 +3284,45 @@ getSession() async {
     };
     return false;
   }
+}
+
+writeErrLog(String err, String id) async {
+  // Construct error line entry
+  String errLine = "[ ERROR @ ${DateTime.now()} ]\n";
+  errLine += "ID : $id\n";
+  errLine += " --> $err\n";
+  errLine += "[ END ]\n\n";
+
+  // Get error log file from app directory
+  final directory = await getApplicationDocumentsDirectory();
+  final path = directory.path;
+
+
+  // Create new file if lines exceed 5000
+  if(File('$path/fd_err_log.txt').existsSync()){
+    final file = File('$path/fd_err_log.txt');
+    List<String> fl = file.readAsLines() as List<String>;
+    if(fl.length > 50000) {
+      file.writeAsString("++ FD APP ERROR LOG ++\n\n$errLine", mode: FileMode.writeOnly);
+    }
+    else{
+      file.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
+    }
+  }
+  else { // Append error line entry to error log
+    final file = File('$path/fd_err_log.txt');
+    file.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
+  }
+}
+
+copyErrLog() async {
+  final directory = await getApplicationDocumentsDirectory();
+  final path = directory.path;
+  var filePath = File('$path/fd_err_log.txt');
+  String fileContent = await filePath.readAsString();
+  String copyPath = '/storage/emulated/0/Documents/fd_err_log.txt';
+  var errFile = File(copyPath);
+  errFile.writeAsString(fileContent, mode: FileMode.writeOnly);
 }
 
 class StockJob {
