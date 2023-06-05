@@ -12,9 +12,8 @@ BUILD NAME CONVENTIONS:
  build --> anytime the project is intended to be used on a device in a non-debug environment
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.05 --build-number=7 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
 */
-
 
 import 'dart:async';
 import 'dart:convert';
@@ -42,7 +41,7 @@ int scanType = 0;
 int copyIndex = -1;
 String copyCode = "";
 enum ActionType {add, edit, assignBarcode, assignOrdercode}
-const String versionStr = "0.23.05+7";
+const String versionStr = "0.23.06+1";
 
 // Table indices, messy but quick
 const int tIndex = 0;
@@ -223,6 +222,7 @@ class _AppSettings extends State<AppSettings> {
   void initState() {
     super.initState();
   }
+
   @override
   void dispose() {
     super.dispose();
@@ -289,36 +289,34 @@ class _AppSettings extends State<AppSettings> {
                                   )
                               )
                           ),
-                        )
-                        // headerPadding('Storage Permission Type', TextAlign.left),
-                        // Padding(
-                        //     padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
-                        //     child: Card(
-                        //       child: ListTile(
-                        //         title: DropdownButton(
-                        //           //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
-                        //           value: storageType,
-                        //           icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
-                        //           items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
-                        //             return DropdownMenuItem(
-                        //               value: index,
-                        //               child: Text(index.toString()),
-                        //             );
-                        //           }).toList(),
-                        //           onChanged: ((pValue) async {
-                        //             await passConfirm(context, "33934").then((value) async{
-                        //               await confirmDialog(context, "!! Warning !!\n -> Confirm only if you know what you are doing..").then((value){
-                        //                 if(value){
-                        //                   storageType = pValue as Permission;
-                        //                 }
-                        //                 setState(() {});
-                        //               });
-                        //             });
-                        //           }),
-                        //         ),
-                        //       ),
-                        //     )
-                        // ),
+                        ),
+                        headerPadding('Storage Permission Type', TextAlign.left),
+                        Padding(
+                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
+                            child: Card(
+                              child: ListTile(
+                                title: DropdownButton(
+                                  //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
+                                  value: storageType,
+                                  icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
+                                  items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
+                                    return DropdownMenuItem(
+                                      value: index,
+                                      child: Text(index.toString()),
+                                    );
+                                  }).toList(),
+                                  onChanged: ((pValue) async {
+                                    await passConfirm(context, "33934").then((value) async{
+                                      if(value){
+                                        storageType = pValue as Permission;
+                                        setState(() {});
+                                      }
+                                    });
+                                  }),
+                                ),
+                              ),
+                            )
+                        ),
                       ],
                     )
                 )
@@ -456,6 +454,7 @@ class _JobsPage extends State<JobsPage> {
                                   },
                                 ),
                                 onTap: () async {
+                                  showLoading(context);
                                   await _readJob(jobList[index]).then((value) async {
                                     await loadMasterSheet(job.sheet).then((value) async{
                                       if(mainTable.isNotEmpty){
@@ -467,7 +466,7 @@ class _JobsPage extends State<JobsPage> {
                                         });
                                       }
                                       else{
-                                        showAlert(context, "ERROR", errorString, colorWarning);
+                                        showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", colorWarning);
                                       }
                                     });
                                   });
@@ -502,6 +501,7 @@ class _JobsPage extends State<JobsPage> {
                                       String path = "";
                                       await _pickFile(context).then((String value){
                                         path = value;
+                                        showLoading(context);
                                       });
 
                                       // Check if path is valid
@@ -737,6 +737,9 @@ class _NewJob extends State<NewJob>{
                                 child: Text('Create Job', style: whiteText),
                                 onPressed: () async {
 
+                                  showLoading(context);
+                                  setState((){});
+
                                   // Job must need ID
                                   if(idStr.isEmpty){
                                     showAlert(context, "WARNING", "* Job ID is empty!", Colors.orange);
@@ -776,7 +779,7 @@ class _NewJob extends State<NewJob>{
                                       }
                                       else{
                                         writeErrLog(errorString, newJob.id);
-                                        showAlert(context, "ERROR", errorString, colorWarning);
+                                        showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", colorWarning);
                                       }
                                   });
                                 },
@@ -1344,7 +1347,6 @@ class _GridView extends State<GridView> {
 
     // Set filter list and GridView color
     if(widget.action == ActionType.add){
-
       if(prevScanType != -1){
         scanType = prevScanType;
         prevScanType = -1;
@@ -1354,18 +1356,17 @@ class _GridView extends State<GridView> {
       colorMode = colorOk;
     }
     else if(widget.action == ActionType.edit){
-      filterList = job.stocktake;
+      filterList = List.of(job.stocktake);
       colorMode = colorOk;
     }
     else{ //if(widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-      filterList = job.nof;
+      filterList = List.of(job.nof);
       colorMode = Colors.teal;
     }
   }
 
   @override
   void dispose() {
-
     // Make sure Focus is removed before disposing controller
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {
@@ -1379,6 +1380,144 @@ class _GridView extends State<GridView> {
     deviceFocus.dispose();
 
     super.dispose();
+  }
+
+  Future<double> _counterConfirm(BuildContext context, String descript, double c, bool edit) async {
+    bool confirmed = false;
+    bool delete = false;
+    double addCount = c;
+
+    await showDialog(
+        useSafeArea: true,
+        context: context,
+        barrierDismissible: false,
+        barrierColor: colorOk.withOpacity(0.8),
+        builder: (context){
+
+          TextEditingController txtCtrl = TextEditingController(text: c.toString());
+
+          return WillPopScope(
+              onWillPop: () async => false,
+              child: AlertDialog(
+                alignment: Alignment.center,
+                actionsAlignment: MainAxisAlignment.spaceAround,
+                title: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 2,),
+                content: GestureDetector(
+                  onTap: () {
+                    FocusScopeNode currentFocus = FocusScope.of(context);
+                    if (!currentFocus.hasPrimaryFocus) {
+                      currentFocus.unfocus();
+                    }
+                  },
+                  child: SingleChildScrollView(
+                      child: Column(
+                          children: <Widget>[
+                            const Text("Count"),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
+                              child: Card(
+                                  shadowColor: Colors.white.withOpacity(0.0),
+                                  child: ListTile(
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.add_circle_outline),
+                                      onPressed: () {
+                                        addCount += 1;
+                                        txtCtrl.text = addCount.toString();
+                                      },
+                                    ),
+                                    title: TextFormField(
+                                      controller: txtCtrl,
+                                      textAlign: TextAlign.center,
+                                      keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                                      onChanged: (String value){
+                                        addCount = double.tryParse(value) ?? 0.0;
+                                      },
+                                    ),
+
+                                    leading: IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline),
+                                      onPressed: (){
+                                        addCount = max(addCount - 1, 0);
+                                        txtCtrl.text = addCount.toString();
+                                      },
+                                    ),
+                                  )
+                              ),
+                            ),
+                            edit ? Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                                onPressed: () async {
+                                  await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
+                                    if(value){
+                                      delete = true;
+                                      // Unfocus then dispose
+                                      FocusScopeNode currentFocus = FocusScope.of(context);
+                                      if (!currentFocus.hasPrimaryFocus) {
+                                        currentFocus.unfocus();
+                                      }
+                                      txtCtrl.dispose();
+                                      Navigator.pop(context);
+                                    }
+                                  });
+                                },
+                                child: const Text("DELETE"),
+                              ),
+                            ) : Container(),
+                          ]
+                      )
+                  ),
+                ),
+                actions: <Widget>[
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                    onPressed: () {
+                      //Unfocus then dispose
+                      FocusScopeNode currentFocus = FocusScope.of(context);
+                      if (!currentFocus.hasPrimaryFocus) {
+                        currentFocus.unfocus();
+                      }
+
+                      txtCtrl.dispose();
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                    onPressed: () async {
+                      if(addCount > 0){
+                        confirmed = true;
+
+                        //Unfocus then dispose
+                        FocusScopeNode currentFocus = FocusScope.of(context);
+                        if (!currentFocus.hasPrimaryFocus) {
+                          currentFocus.unfocus();
+                        }
+
+                        txtCtrl.dispose();
+                        Navigator.pop(context);
+                      }
+                      else{
+                        String er = "Count is zero (0).";
+                        if(edit){
+                          er += "\n\nPress 'DELETE' if you wish to remove this item.";
+                        }
+                        showAlert(context, "ERROR:", er, colorWarning);
+                        txtCtrl.text = "0.0";
+                      }
+                    },
+
+                    child: const Text("Confirm"),
+                  ),
+                ],
+              )
+          );
+        }
+    );
+
+    return confirmed ? addCount : (delete ? -2 : -1);
   }
 
   String _setTitle(){
@@ -1490,10 +1629,10 @@ class _GridView extends State<GridView> {
               filterList = List.empty();
             }
             else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-              filterList = job.nof;
+              filterList = List.of(job.nof);
             }
             else{
-              filterList = job.stocktake;
+              filterList = List.of(job.stocktake);
             }
 
             setState(() {});
@@ -1511,20 +1650,20 @@ class _GridView extends State<GridView> {
                   setState(() {});
                 }
                 else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-                  filterList = job.nof;
+                  filterList = List.of(job.nof);
                   setState(() {});
                 }
                 else{
-                  filterList = job.stocktake;
+                  filterList = List.of(job.stocktake);
                   setState(() {});
                 }
                 return;
               }
 
-              filterList = widget.action == ActionType.add ? jobTable :
-              widget.action == ActionType.assignBarcode ? job.nof :
-              widget.action == ActionType.assignOrdercode ? job.nof :
-              widget.action == ActionType.edit ? job.stocktake : List.empty();
+              filterList = widget.action == ActionType.add ? List.of(jobTable) :
+              widget.action == ActionType.assignBarcode ? List.of(job.nof) :
+              widget.action == ActionType.assignOrdercode ? List.of(job.nof) :
+              widget.action == ActionType.edit ? List.of(job.stocktake) : List.empty();
 
               bool found = false;
               List<String> searchWords = value.toUpperCase().split(' ').where((String s) => s.isNotEmpty).toList();
@@ -1541,7 +1680,7 @@ class _GridView extends State<GridView> {
                   }
 
                   if (first.isNotEmpty) {
-                    filterList = first;//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+                    filterList = List.of(first);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
                     found = true;
                   }
                 }
@@ -1559,7 +1698,7 @@ class _GridView extends State<GridView> {
 
                   // Check if any remaining search words are inside the filtered list and sort list by description names
                   if(refined.isNotEmpty){
-                    filterList = refined;//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+                    filterList = List.of(refined);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
                   }
                 }
               }
@@ -1579,10 +1718,10 @@ class _GridView extends State<GridView> {
     scanList(String value){
       if(value.isEmpty){
         if(widget.action == ActionType.edit){
-          filterList = job.stocktake;
+          filterList = List.of(job.stocktake);
         }
         else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignBarcode){
-          filterList = job.nof;
+          filterList = List.of(job.nof);
         }
         else{
           filterList = List.empty();
@@ -1653,7 +1792,7 @@ class _GridView extends State<GridView> {
               // Automatically show item add popup if one item is found
               // Duplicate barcodes are not allowed so it should always only return one item for barcode scanning
               if(filterList.length == 1){
-                await counterConfirm(context, filterList[0][tDescription], 1.0, false).then((double addCount) async{
+                await _counterConfirm(context, filterList[0][tDescription], 1.0, false).then((double addCount) async{
                   if(addCount != -1){
                     Decimal c = Decimal.parse(addCount.toStringAsFixed(3));
 
@@ -1702,7 +1841,7 @@ class _GridView extends State<GridView> {
             icon: const Icon(Icons.cancel),
             onPressed: (){
               if(widget.action == ActionType.edit){
-                filterList = job.stocktake;
+                filterList = List.of(job.stocktake);
               }
               else{
                 filterList = List.empty();
@@ -1789,7 +1928,7 @@ class _GridView extends State<GridView> {
           title: Text(descript, textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.fade,),
           subtitle: Text("\n${filterList[pIndex][tCategory]}", textAlign: TextAlign.center, softWrap: true, overflow: TextOverflow.fade),
           onTap: () async {
-            await counterConfirm(context, filterList[pIndex][tDescription], 1.0, false).then((double addCount) async{
+            await _counterConfirm(context, filterList[pIndex][tDescription], 1.0, false).then((double addCount) async{
               if(addCount != -1){
                 job.stocktake.add(<String>[
                   int.parse(filterList[pIndex][tIndex].toString()).toString(),
@@ -1884,9 +2023,11 @@ class _GridView extends State<GridView> {
                   title: Center(child: Text(filterList[pIndex][sCount].toString())),
                   onTap: () async {
                     double c = double.parse(filterList[pIndex][sCount].toString());
-                    await counterConfirm(context, jobTable[tableIndex][tDescription], c, true).then((double newCount) async {
+                    await _counterConfirm(context, jobTable[tableIndex][tDescription], c, true).then((double newCount) async {
                       if (newCount == -2){
+
                         job.stocktake.removeAt(pIndex);
+
                         if(copyIndex == pIndex){
                           copyIndex = -1;
                         }
@@ -2643,144 +2784,6 @@ Widget rBox(BuildContext context, Color color, Widget widget) {
   );
 }
 
-Future<double> counterConfirm(BuildContext context, String descript, double c, bool edit) async {
-  bool confirmed = false;
-  bool delete = false;
-  double addCount = c;
-
-  await showDialog(
-      useSafeArea: true,
-      context: context,
-      barrierDismissible: false,
-      barrierColor: colorOk.withOpacity(0.8),
-      builder: (context){
-
-        TextEditingController txtCtrl = TextEditingController(text: c.toString());
-
-        return WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              alignment: Alignment.center,
-              actionsAlignment: MainAxisAlignment.spaceAround,
-              title: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 2,),
-              content: GestureDetector(
-                onTap: () {
-                  FocusScopeNode currentFocus = FocusScope.of(context);
-                  if (!currentFocus.hasPrimaryFocus) {
-                    currentFocus.unfocus();
-                  }
-                },
-                child: SingleChildScrollView(
-                    child: Column(
-                        children: <Widget>[
-                          const Text("Count"),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
-                            child: Card(
-                                shadowColor: Colors.white.withOpacity(0.0),
-                                child: ListTile(
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.add_circle_outline),
-                                    onPressed: () {
-                                      addCount += 1;
-                                      txtCtrl.text = addCount.toString();
-                                    },
-                                  ),
-                                  title: TextFormField(
-                                    controller: txtCtrl,
-                                    textAlign: TextAlign.center,
-                                    keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                    onChanged: (String value){
-                                      addCount = double.tryParse(value) ?? 0.0;
-                                    },
-                                  ),
-
-                                  leading: IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline),
-                                    onPressed: (){
-                                      addCount = max(addCount - 1, 0);
-                                      txtCtrl.text = addCount.toString();
-                                    },
-                                  ),
-                                )
-                            ),
-                          ),
-                          edit ? Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                              onPressed: () async {
-                                await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
-                                  if(value){
-                                    delete = true;
-                                    // Unfocus then dispose
-                                    FocusScopeNode currentFocus = FocusScope.of(context);
-                                    if (!currentFocus.hasPrimaryFocus) {
-                                      currentFocus.unfocus();
-                                    }
-                                    txtCtrl.dispose();
-                                    Navigator.pop(context);
-                                  }
-                                });
-                              },
-                              child: const Text("DELETE"),
-                            ),
-                          ) : Container(),
-                        ]
-                    )
-                ),
-              ),
-              actions: <Widget>[
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                  onPressed: () {
-                    //Unfocus then dispose
-                    FocusScopeNode currentFocus = FocusScope.of(context);
-                    if (!currentFocus.hasPrimaryFocus) {
-                      currentFocus.unfocus();
-                    }
-
-                    txtCtrl.dispose();
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-                  onPressed: () async {
-                    if(addCount > 0){
-                      confirmed = true;
-
-                      //Unfocus then dispose
-                      FocusScopeNode currentFocus = FocusScope.of(context);
-                      if (!currentFocus.hasPrimaryFocus) {
-                        currentFocus.unfocus();
-                      }
-
-                      txtCtrl.dispose();
-                      Navigator.pop(context);
-                    }
-                    else{
-                      String er = "Count is zero (0).";
-                      if(edit){
-                        er += "\n\nPress 'DELETE' if you wish to remove this item.";
-                      }
-                      showAlert(context, "ERROR:", er, colorWarning);
-                      txtCtrl.text = "0.0";
-                    }
-                  },
-
-                  child: const Text("Confirm"),
-                ),
-              ],
-            )
-        );
-      }
-  );
-
-  return confirmed ? addCount : (delete ? -2 : -1);
-}
-
 Future<bool> passConfirm(BuildContext context, String pass) async {
   bool confirmed = false;
   String userInput = "";
@@ -2791,9 +2794,6 @@ Future<bool> passConfirm(BuildContext context, String pass) async {
       barrierDismissible: false,
       barrierColor: colorOk.withOpacity(0.8),
       builder: (context){
-
-        TextEditingController txtCtrl = TextEditingController();
-
         return WillPopScope(
             onWillPop: () async => false,
             child: AlertDialog(
@@ -2811,7 +2811,7 @@ Future<bool> passConfirm(BuildContext context, String pass) async {
                     child: Column(
                         children: <Widget>[
                           TextFormField(
-                            controller: txtCtrl,
+                            autofocus: true,
                             textAlign: TextAlign.center,
                             keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
                             onChanged: (String value) {
@@ -2826,13 +2826,6 @@ Future<bool> passConfirm(BuildContext context, String pass) async {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: colorBack),
                   onPressed: () {
-                    //Unfocus then dispose
-                    FocusScopeNode currentFocus = FocusScope.of(context);
-                    if (!currentFocus.hasPrimaryFocus) {
-                      currentFocus.unfocus();
-                    }
-
-                    txtCtrl.dispose();
                     Navigator.pop(context);
                   },
                   child: const Text("Cancel"),
@@ -2842,6 +2835,7 @@ Future<bool> passConfirm(BuildContext context, String pass) async {
                   onPressed: () async {
                     if(userInput == pass){
                       confirmed = true;
+                      Navigator.pop(context);
                     }
                     else{
                       showAlert(context, "ERROR", "Incorrect passcode", Colors.red);
@@ -3175,6 +3169,22 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
   );
 }
 
+showLoading(BuildContext context){
+  AlertDialog alert=AlertDialog(
+    content: Row(
+      children: [
+        const CircularProgressIndicator(),
+        Container(margin: const EdgeInsets.only(left: 5), child: const Text("Loading" )),
+      ],),
+  );
+  showDialog(barrierDismissible: false,
+    context:context,
+    builder:(BuildContext context){
+      return alert;
+    },
+  );
+}
+
 showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   return showDialog(
       barrierDismissible: false,
@@ -3330,10 +3340,8 @@ class StockJob {
   String id;
   String name;
   Decimal total = Decimal.parse('0.0');
-
   List<List<String>> stocktake = List.empty(growable: true);
   List<List<String>> nof = List.empty(growable: true);
-
   List<String> allLocations = List.empty(growable: true);
   String location = "";
   String sheet = "";
