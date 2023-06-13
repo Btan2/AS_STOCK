@@ -8,11 +8,8 @@ LEGAL:
 BUILD NAME CONVENTIONS:
  version.year.month+build
 
- version --> major releases or changes like file formats, new layouts, UX and so on
- build --> anytime the project is intended to be used on a device in a non-debug environment
-
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=2 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -32,19 +29,25 @@ Permission storageType = Permission.manageExternalStorage; //Permission.storage;
 StockJob job = StockJob(id: "EMPTY", name: "EMPTY");
 String errorString = "";
 
-List<String> jobList = [];
+List<String> jobPageList = [];
 List<List<String>> jobTable = List.empty();
 List<List<String>> mainTable = List.empty();
 Map<String, dynamic> sFile = {};
+String appDir = "";
 Directory? rootDir;
+const String versionStr = "0.23.06+2";
+
+// GridView vars
 int scanType = 0;
 int copyIndex = -1;
 String copyCode = "";
 enum ActionType {add, edit, assignBarcode, assignOrdercode}
-const String versionStr = "0.23.06+1";
+List<String> masterCategory = List.empty();
 
-// Table indices, messy but quick
-const int tIndex = 0;
+// table, nof and job.stocktake item index is always first
+const int iIndex = 0;
+
+// mainTable indices
 const int tBarcode = 1;
 const int tCategory = 2;
 const int tDescription = 3;
@@ -53,6 +56,7 @@ const int tPrice = 5;
 const int tDatetime = 6;
 const int tOrdercode = 7;
 
+// NOF indices
 const int nBarcode = 1;
 const int nCategory = 2;
 const int nDescript = 3;
@@ -62,7 +66,7 @@ const int nDate = 6;
 const int nOrdercode = 7;
 const int nNof = 8;
 
-const int sIndex = 0;
+// job.stocktake indices
 const int sCount = 1;
 const int sLocation = 2;
 const int sBcodeIndex = 3;
@@ -79,7 +83,13 @@ TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["
 TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 TextStyle get blackText{ return TextStyle(color: Colors.black, fontSize: sFile["fontScale"]);}
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await getAppDir();
+  await loadDefMastersheet();
+  await loadSessionFile();
+
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -94,30 +104,6 @@ void main() {
 
 class HomePage extends StatelessWidget{
   const HomePage({super.key});
-
-  Future<bool> _access() async{
-    return await storageType.isGranted;
-  }
-
-  Future<void> _prepareStorage() async {
-    var path = '/storage/emulated/0';//!isEmulating ? '/storage/emulated/0' : 'sdcard';
-    rootDir = Directory(path);
-    var storage = await storageType.status;
-    if (storage != PermissionStatus.granted) {
-      await storageType.request();
-    }
-  }
-
-  _createErrLog() async {
-    // Create error log and store in App Directory if it doesn't exist
-    final directory = await getApplicationDocumentsDirectory();
-    final errPath = directory.path;
-
-    if(!File('$errPath/fd_err_log.txt').existsSync()){
-      final errFile = File('$errPath/fd_err_log.txt');
-      errFile.writeAsString("++ FD APP ERROR LOG ++\n\n");
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,22 +139,22 @@ class HomePage extends StatelessWidget{
                             TextButton(
                               child: const Text('Jobs', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                               onPressed: () async {
-
                                 DateTime cDate = DateTime.now().isUtc ? DateTime.now() : DateTime.now().toUtc();
                                 if(cDate.month > 6 || cDate.month < 5 || cDate.year < 2023 || cDate.year > 2023){
                                   showAlert(context, "", "ERROR: \n\nLicense has EXPIRED!\n\nYou are not authorized to use this software!", Colors.red);
                                   return;
                                 }
 
-                                await _createErrLog();
-                                _prepareStorage();
-                                await _access().then((value){
+                                if(rootDir == null){
+                                  prepareStorage();
+                                }
+
+                                await grantAccess().then((value){
                                   if(value){
                                     Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                                   }
                                   else{
-                                    //* Try chaging storage permission type in 'App Settings'
-                                    showAlert(context, "ERROR", "* Storage permissions were denied!\n\n", Colors.red);
+                                    showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
                                   }
                                 });
                               },
@@ -183,10 +169,7 @@ class HomePage extends StatelessWidget{
                           TextButton(
                             child: const Text('Settings', style: TextStyle(color: Colors.white, fontSize: 20.0)),
                             onPressed: () async {
-                              await _createErrLog();
-                              await getSession().then((value){
-                                goToPage(context, const AppSettings());
-                              });
+                              goToPage(context, const AppSettings());
                             },
                           ),
                         ),
@@ -237,8 +220,10 @@ class _AppSettings extends State<AppSettings> {
             appBar: AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: (){
-                  goToPage(context, const HomePage());
+                onPressed: () async {
+                  await writeSession().then((value){
+                    goToPage(context, const HomePage());
+                  });
                 },
               ),
               centerTitle: true,
@@ -284,7 +269,7 @@ class _AppSettings extends State<AppSettings> {
                                     title: Text('Copy Error Log', textAlign: TextAlign.center, style: whiteText),
                                     onTap: () async {
                                       copyErrLog();
-                                      showAlert(context, "ALERT", "'fd_error_log.txt' has been copied to Internal Storage -> Documents", colorOk);
+                                      showAlert(context, "ALERT", "'fd_error_log.txt' has been copied to Internal Storage -> Documents\n", colorOk);
                                     },
                                   )
                               )
@@ -306,12 +291,33 @@ class _AppSettings extends State<AppSettings> {
                                     );
                                   }).toList(),
                                   onChanged: ((pValue) async {
-                                    await passConfirm(context, "33934").then((value) async{
+                                    // change storage then check if valid, if not valid tell user
+                                    storageType = pValue as Permission;
+                                    if(storageType == Permission.manageExternalStorage){
+                                      sFile["permission"] = "${Permission.manageExternalStorage}";
+                                    }
+                                    else if(storageType == Permission.storage){
+                                      sFile["permission"] = "${Permission.storage}";
+                                    }
+
+                                    // Inform the user storage can be accessed
+                                    prepareStorage();
+                                    await grantAccess().then((value){
                                       if(value){
-                                        storageType = pValue as Permission;
-                                        setState(() {});
+                                        showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
+                                      }
+                                      else {
+                                        showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
                                       }
                                     });
+
+                                    await writeSession().then((value){
+                                      if(errorString.isNotEmpty){
+                                        showNotification(context, Colors.red, whiteText, "Write session file error: $errorString\n");
+                                      }
+                                    });
+
+                                    setState(() {});
                                   }),
                                 ),
                               ),
@@ -350,17 +356,15 @@ class _JobsPage extends State<JobsPage> {
     // String str = spt[spt.length - 1];
     String fileName = path.split("/").last;
     if (fileName.startsWith("ASJob_")){
-      //String newPath = path;
       bool copyJob = false;
 
-      if(path.contains('sdcard')){
-        if(!path.contains("sdcard/Documents")){
-          //newPath = 'sdcard/Documents/$str';
-          copyJob = true;
-        }
-      }
-      else if(!path.contains("/storage/emulated/0/Documents")){
-        //newPath = 'storage/emulated/0/Documents/$str';
+      // if(path.contains('sdcard')){
+      //   if(!path.contains("sdcard/Documents")){
+      //     copyJob = true;
+      //   }
+      // }
+
+      if(!path.contains("/storage/emulated/0/Documents")){
         copyJob = true;
       }
 
@@ -371,10 +375,22 @@ class _JobsPage extends State<JobsPage> {
           String fileContent = await jsn.readAsString();
           var dynamic = json.decode(fileContent);
           var j = StockJob.fromJson(dynamic);
-          writeJob(j, false);
+
+          String checkPath = "/storage/emulated/0/Documents/${j.id}";
+          await File(checkPath).exists().then((value) async {
+            if(value){
+              confirmDialog(context, "ALERT!\n\nJob file already exists inside Documents directory!\n\nDO YOU WISH TO REPLACE THE EXISTING JOB FILE?").then((value){
+                if(!value){
+                  return;
+                }
+              });
+            }
+          });
+
+          writeJob(j);
         }
         catch (e){
-          writeErrLog(e.toString(), fileName);
+          writeErrLog(e.toString(), "JobsPage() -> _copyJobFile() -> $fileName");
           showAlert(context, "ERROR", "Failed to copy job file => $e", Colors.red);
           //errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
         }
@@ -393,7 +409,7 @@ class _JobsPage extends State<JobsPage> {
       job.calcTotal();
     }
     catch (e){
-      writeErrLog(e.toString(), path);
+      writeErrLog(e.toString(), "JobsPage() -> _readJob() -> $path");
       showAlert(context, "ERROR", "Failed to read job file => $e", Colors.red);
     }
 
@@ -442,33 +458,32 @@ class _JobsPage extends State<JobsPage> {
                     children: [
                       headerPadding("Available Jobs:", TextAlign.left),
                       Column(
-                          children: List.generate(jobList.length, (index) => Card(
+                          children: List.generate(jobPageList.length, (index) => Card(
                             child: ListTile(
-                                title: Text(jobList[index].split("/").last),
+                                title: Text(jobPageList[index].split("/").last),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_forever_sharp),
                                   color: Colors.redAccent,
                                   onPressed: () {
-                                    jobList.removeAt(index);
+                                    jobPageList.removeAt(index);
                                     setState(() {});
                                   },
                                 ),
                                 onTap: () async {
-                                  showLoading(context);
-                                  await _readJob(jobList[index]).then((value) async {
-                                    await loadMasterSheet(job.sheet).then((value) async{
-                                      if(mainTable.isNotEmpty){
-                                        await getSession().then((value){
-                                          jobTable = mainTable + job.nof;
-                                          copyIndex = -1;
-                                          goToPage(context, const Stocktake());
-                                          setState(() {});
-                                        });
-                                      }
-                                      else{
-                                        showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", colorWarning);
-                                      }
-                                    });
+                                  await _readJob(jobPageList[index]);
+
+                                  await loadSpreadSheet(job.sheet).then((value) async{
+                                    if(mainTable.isNotEmpty){
+                                      jobTable = mainTable + job.nof;
+                                      copyIndex = -1;
+                                      goToPage(context, const Stocktake());
+                                      setState(() {});
+                                    }
+                                    else{
+                                      writeErrLog(errorString, "JobsPage() -> _readJob() -> loadMasterSheet()");
+                                      showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", colorWarning);
+                                      setState(() {});
+                                    }
                                   });
                                 }
                             ),
@@ -499,36 +514,34 @@ class _JobsPage extends State<JobsPage> {
                                     child: Text('Load from Storage', style: whiteText),
                                     onPressed: () async{
                                       String path = "";
+
                                       await _pickFile(context).then((String value){
                                         path = value;
-                                        showLoading(context);
                                       });
 
                                       // Check if path is valid
                                       if(path.isEmpty || path == "null" || !path.contains("ASJob_")){
                                         return;
                                       }
-                                      if(!jobList.contains(path)){
-                                        jobList.add(path);
+                                      if(!jobPageList.contains(path)){
+                                        jobPageList.add(path);
                                       }
 
                                       // Copy job file to documents folder if it is not there
                                       await _copyJobFile(path);
-
-                                      await _readJob(path).then((value) async {
-                                        await loadMasterSheet(job.sheet).then((value) async{
-                                          if(mainTable.isNotEmpty){
-                                            await getSession().then((value){
-                                              jobTable = mainTable + job.nof;
-                                              copyIndex = -1;
-                                              goToPage(context, const Stocktake());
-                                              setState(() {});
-                                            });
-                                          }
-                                          else{
-                                            showAlert(context, "ERROR", errorString, colorWarning);
-                                          }
-                                        });
+                                      await _readJob(path);
+                                      await loadSpreadSheet(job.sheet).then((value) async{
+                                        if(mainTable.isNotEmpty){
+                                          jobTable = mainTable + job.nof;
+                                          copyIndex = -1;
+                                          goToPage(context, const Stocktake());
+                                          setState(() {});
+                                        }
+                                        else{
+                                          writeErrLog(errorString, "JobsPage() -> loadMasterSheet()");
+                                          showNotification(context, Colors.red, whiteText, "ERROR LOADING MASTERSHEET.xlsx -> written to fd_err_log.txt");
+                                          setState(() {});
+                                        }
                                       });
                                     },
                                   )
@@ -559,18 +572,24 @@ class _NewJob extends State<NewJob>{
   String masterfileStr = "";
   String idStr = "";
   String nameStr = "";
-  StockJob newJob = StockJob(id: "NULL", name: "EMPTY");
 
   @override
   void initState() {
     super.initState();
-     _getDefaultMastersheet();
+    _getDefaultMastersheet();
   }
 
-  _getDefaultMastersheet() async{
-    final directory = await getApplicationDocumentsDirectory();
-    final path = directory.path;
-    masterfileStr = "$path/MASTERFILE.xlsx";
+  @override
+  void dispose(){
+    super.dispose();
+  }
+
+  _getDefaultMastersheet() {
+
+    //final directory = await getApppplicationDocumentsDirectory();
+    //final path = directory.path;
+    // final defPath = ;
+    masterfileStr = "$appDir/MASTERFILE.xlsx";
     setState(() {});
   }
 
@@ -637,7 +656,6 @@ class _NewJob extends State<NewJob>{
     String regex = r'[^\p{Alphabetic}\p{Mark}\p{Decimal_Number}\p{Connector_Punctuation}\p{Join_Control}\s]+';
     String fString = s.replaceAll(RegExp(regex, unicode: true),'');
 
-
     // if (fString.contains("\\")){
     //   fString = fString.replaceAll("/", '');
     // }
@@ -660,7 +678,7 @@ class _NewJob extends State<NewJob>{
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: () async => goToPage(context, const JobsPage()),
+        onWillPop: () async => false,
         child: GestureDetector(
             onTap: () {
               FocusScopeNode currentFocus = FocusScope.of(context);
@@ -669,127 +687,126 @@ class _NewJob extends State<NewJob>{
               }
             },
             child: Scaffold(
-              appBar: AppBar(
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: (){
-                    Navigator.pop(context, true);
-                  },
-                ),
-                centerTitle: true,
-                title: const Text("New Job"),
-                automaticallyImplyLeading: false,
-              ),
-              body: SingleChildScrollView(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        headerPadding("Job Id:", TextAlign.left),
-                        Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                            child: Card(
-                                child: TextFormField(
-                                  textAlign: TextAlign.left,
-                                  onChanged: (String value){
-                                    idStr = value;
-                                    setState(() {});
-                                  },
+                  appBar: AppBar(
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: (){
+                        Navigator.pop(context, true);
+                      },
+                    ),
+                    centerTitle: true,
+                    title: const Text("New Job"),
+                    automaticallyImplyLeading: false,
+                  ),
+                  body: SingleChildScrollView(
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            headerPadding("Job Id:", TextAlign.left),
+                            Padding(
+                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                                child: Card(
+                                    child: TextFormField(
+                                      textAlign: TextAlign.left,
+                                      onChanged: (String value){
+                                        idStr = value;
+                                        setState(() {});
+                                      },
+                                    )
                                 )
-                            )
-                        ),
-                        headerPadding("Job Name:", TextAlign.left),
-                        Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                            child: Card(
-                                child: TextFormField(
-                                    textAlign: TextAlign.left,
-                                    onChanged: (String value){
-                                      nameStr = value;
-                                      setState((){});
-                                    }
+                            ),
+                            headerPadding("Job Name:", TextAlign.left),
+                            Padding(
+                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                                child: Card(
+                                    child: TextFormField(
+                                        textAlign: TextAlign.left,
+                                        onChanged: (String value){
+                                          nameStr = value;
+                                          setState((){});
+                                        }
+                                    )
                                 )
-                            )
-                        ),
-                        headerPadding('Masterfile:', TextAlign.left),
-                        Padding(
-                            padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 10, bottom: 10),
-                            child: Center(
-                              child: Card(
-                                child: ListTile(
-                                    title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
-                                    onTap: () async {
-                                      _masterfileSelector();
-                                    }
-                                ),
-                              ),
-                            )
-                        ),
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width,
-                          height: MediaQuery.of(context).size.height/10.0,
-                        ),
-                        Center(
-                          child: rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('Create Job', style: whiteText),
-                                onPressed: () async {
+                            ),
+                            headerPadding('Masterfile:', TextAlign.left),
+                            Padding(
+                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 10, bottom: 10),
+                                child: Center(
+                                  child: Card(
+                                    child: ListTile(
+                                        title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
+                                        onTap: () async {
+                                          _masterfileSelector();
+                                        }
+                                    ),
+                                  ),
+                                )
+                            ),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width,
+                              height: MediaQuery.of(context).size.height/10.0,
+                            ),
+                            Center(
+                              child: rBox(
+                                  context,
+                                  colorOk,
+                                  TextButton(
+                                    child: Text('Create Job', style: whiteText),
+                                    onPressed: () async {
+                                      String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
+                                      if(File(jobFilePath).existsSync()){
+                                        showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job before proceeding.", colorWarning);
+                                        return;
+                                      }
 
-                                  showLoading(context);
-                                  setState((){});
+                                      // Job must need ID
+                                      if(idStr.isEmpty){
+                                        showAlert(context, "WARNING", "Job ID is empty!", Colors.orange);
+                                        return;
+                                      }
 
-                                  // Job must need ID
-                                  if(idStr.isEmpty){
-                                    showAlert(context, "WARNING", "* Job ID is empty!", Colors.orange);
-                                    return;
-                                  }
+                                      idStr = _regexFormat(idStr);
 
-                                  newJob.id = _regexFormat(idStr);
+                                      // Using jobID for name if no name exists
+                                      if(nameStr.isEmpty){
+                                        nameStr = "Job$nameStr";
+                                      }
 
-                                  // Using jobID for name if no name exists
-                                  if(nameStr.isEmpty){
-                                    nameStr = "Job$nameStr";
-                                  }
+                                      nameStr = _regexFormat(nameStr);
 
-                                  newJob.name = _regexFormat(nameStr);
-                                  newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-                                  newJob.sheet = masterfileStr;
+                                      StockJob newJob = StockJob(id: idStr, name: nameStr);
+                                      newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+                                      newJob.sheet = masterfileStr;
 
-                                  String path = "/storage/emulated/0/Documents/${newJob.id}/ASJob_${newJob.id}";
+                                      // User must rename jobID if it already exists
+                                      await writeJob(newJob);
+                                      job = newJob;
+                                      job.calcTotal();
 
-                                  // Do not overwrite any other existing jobs
-                                  await writeJob(newJob, false);
-                                  job = newJob;
+                                      if (!jobPageList.contains(jobFilePath)) {
+                                        jobPageList.add(jobFilePath);
+                                      }
 
-                                  job.calcTotal();
-                                  if(!jobList.contains(path)){
-                                    jobList.add(path);
-                                  }
-
-                                  await loadMasterSheet(job.sheet).then((value) async{
-                                      if(mainTable.isNotEmpty){
-                                        await getSession().then((value){
+                                      await loadSpreadSheet(job.sheet).then((value) async {
+                                        if (mainTable.isNotEmpty) {
                                           jobTable = mainTable + job.nof;
                                           copyIndex = -1;
                                           goToPage(context, const Stocktake());
-                                          setState(() {});
-                                        });
-                                      }
-                                      else{
-                                        writeErrLog(errorString, newJob.id);
-                                        showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", colorWarning);
-                                      }
-                                  });
-                                },
-                              )
-                          ),
-                        )
-                      ]
-                  )
-              ),
-            )
+                                        }
+                                        else {
+                                          writeErrLog(errorString, "NewJob() -> loadMasterSheet() -> ${newJob.id} | $jobFilePath");
+                                          showAlert(context, "ERROR", "$errorString\nSheet Path: ${job.sheet}", Colors.red);
+                                        }
+                                      });
+                                    },
+                                  )
+                              ),
+                            )
+                          ]
+                      )
+                  ),
+                ),
         )
     );
   }
@@ -892,10 +909,10 @@ class Stocktake extends StatelessWidget {
 }
 
 class ExportPage extends StatelessWidget{
+  ExportPage({super.key});
+
   // Shortened Month names
   final List<String> monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  ExportPage({super.key});
 
   _exportXLSX() async {
     List<List<dynamic>> finalSheet = [];
@@ -903,11 +920,11 @@ class ExportPage extends StatelessWidget{
     for(int i = 0; i < job.stocktake.length; i++){
       bool skip = false;
 
-      int tableIndex = int.parse(job.stocktake[i][sIndex]);
+      int tableIndex = int.parse(job.stocktake[i][iIndex]);
 
       for(int j = 0; j < finalSheet.length; j++) {
         // Check if item already exists
-        skip = int.parse(finalSheet[j][tIndex].toString()) == tableIndex;
+        skip = int.parse(finalSheet[j][iIndex].toString()) == tableIndex;
 
         // Add QTY and TOTAL COST to existing item
         if(skip){
@@ -951,7 +968,7 @@ class ExportPage extends StatelessWidget{
         }
 
         finalSheet.add([
-          jobTable[tableIndex][tIndex].toString(),                              // INDEX
+          jobTable[tableIndex][iIndex].toString(),                              // INDEX
           jobTable[tableIndex][tCategory].toString().toUpperCase(),             // CATEGORY
           jobTable[tableIndex][tDescription].toString().toUpperCase(),          // DESCRIPTION
           jobTable[tableIndex][tUom].toString().toUpperCase(),                  // UOM
@@ -1035,7 +1052,7 @@ class ExportPage extends StatelessWidget{
     String finalTxt = "";
     for(int i = 0; i < job.stocktake.length; i++){
       finalTxt += "S    ";
-      int tableIndex = int.parse(job.stocktake[i][sIndex]);
+      int tableIndex = int.parse(job.stocktake[i][iIndex]);
 
       int barcodeIndex = int.parse(job.stocktake[i][sBcodeIndex]);
       String bcode = jobTable[tableIndex][tBarcode].toString().split(",").toList()[barcodeIndex];
@@ -1092,7 +1109,7 @@ class ExportPage extends StatelessWidget{
       finalTxt += "$locationNum,";
 
       // Barcode (16 chars)
-      int tableIndex = int.parse(job.stocktake[i][sIndex]);
+      int tableIndex = int.parse(job.stocktake[i][iIndex]);
       int barcodeIndex = int.parse(job.stocktake[i][sBcodeIndex]);
       String bcode = jobTable[tableIndex][tBarcode].toString().split(",").toList()[barcodeIndex];
 
@@ -1127,23 +1144,23 @@ class ExportPage extends StatelessWidget{
     for(int i = 0; i < job.stocktake.length; i++) {
       // Barcodes (22 characters)
       // Using first barcode since barcodes can be multiline
-      int tableIndex = int.parse(job.stocktake[i][sIndex]);
+      int tableIndex = int.parse(job.stocktake[i][iIndex]);
       int barcodeIndex = int.parse(job.stocktake[i][sBcodeIndex]);
       List<String> bcodeList = jobTable[tableIndex][tBarcode].toString().split(",").toList();
-      String bcode = "";
+      String barcode = "";
 
       if(bcodeList.isEmpty){
-        bcode = "NULL";
+        barcode = "NULL";
       }
       else{
-        bcode = bcodeList[barcodeIndex];
+        barcode = bcodeList[barcodeIndex];
       }
 
-      while(bcode.length < 22){
-        bcode += " ";
+      while(barcode.length < 22){
+        barcode += " ";
       }
 
-      finalTxt += "$bcode,";
+      finalTxt += "$barcode,";
 
       double dblCount = double.tryParse(job.stocktake[i][sCount]) ?? 0;
       finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
@@ -1163,32 +1180,31 @@ class ExportPage extends StatelessWidget{
     for(int i = 0; i < job.stocktake.length; i++) {
 
       // Barcodes (22 characters) Using first barcode since barcodes can be multiline
-      int tableIndex = int.parse(job.stocktake[i][sIndex]);
+      int tableIndex = int.parse(job.stocktake[i][iIndex]);
       int ordercodeIndex = int.parse(job.stocktake[i][sOcodeIndex]); // Prints specific barcode
       List<String> ocodeList = jobTable[tableIndex][tOrdercode].toString().split(",").toList();
 
-      String ocode = "";
+      String ordercode = "";
 
       if(ocodeList.isEmpty){
-        ocode = "NULL";
+        ordercode = "NULL";
       }
       else{
-        ocode = ocodeList[ordercodeIndex];
+        ordercode = ocodeList[ordercodeIndex];
       }
 
-      if(ocode.isEmpty){
-        ocode = "NULL";
+      if(ordercode.isEmpty){
+        ordercode = "NULL";
       }
 
-      while(ocode.length < 22){
-        ocode += " ";
+      while(ordercode.length < 22){
+        ordercode += " ";
       }
 
-      finalTxt += "$ocode,";
+      finalTxt += "$ordercode,";
 
       double dblCount = double.tryParse(job.stocktake[i][sCount].toString()) ?? 0;
       finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
-
       finalTxt += "\n";
     }
 
@@ -1230,7 +1246,7 @@ class ExportPage extends StatelessWidget{
                                 child: Text('XLSX', style: whiteText),
                                 onPressed: () {
                                   _exportXLSX();
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/stocktake_${job.id}_[num].xlsx\n", Colors.orange);
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/stocktake_${job.id}.xlsx", Colors.orange);
                                 },
                               )
                           ),
@@ -1285,7 +1301,7 @@ class ExportPage extends StatelessWidget{
                                   String shortMonth = monthNames[DateTime.now().month - 1];
                                   String shortYear = DateTime.now().year.toString().substring(2);
                                   String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt", Colors.orange);
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt\n", Colors.orange);
                                 },
                               )
                           ),
@@ -1312,17 +1328,13 @@ class _GridView extends State<GridView> {
   // String locationText = "";
   String descriptionText = "";
   String priceText = "";
-
   TextEditingController barcodeCtrl = TextEditingController();
   TextEditingController ordercodeCtrl = TextEditingController();
   TextEditingController countCtrl = TextEditingController();
   TextEditingController searchCtrl = TextEditingController();
-
   List<List<dynamic>> filterList = List.empty();
-
   List<String> barcodeList = List.empty();
   List<String> ordercodeList = List.empty();
-
   Color colorMode = colorOk;
   String categoryValue = "MISC";
   double keyboardHeight = 20.0;
@@ -1331,10 +1343,10 @@ class _GridView extends State<GridView> {
   int addBarcodeIndex = 0;
   int addOrdercodeIndex = 0;
 
-  final int searchDescription = 0;
-  final int scanBothCodes = 1;
-  final int scanBarcode = 2;
-  final int scanOrdercode = 3;
+  static const int searchDescription = 0;
+  static const int scanBothCodes = 1;
+  static const int scanBarcode = 2;
+  static const int scanOrdercode = 3;
 
   FocusNode deviceFocus = FocusNode();
 
@@ -1529,18 +1541,19 @@ class _GridView extends State<GridView> {
         return "Assign Ordercode";
 
       case ActionType.add:
-        if(scanType == searchDescription ){
-          return "Search Description";
+        switch(scanType){
+          case searchDescription:
+            return "Search Description";
+          case scanBothCodes:
+            return "Scan Barcode & Ordercode";
+          case scanBarcode:
+            return "Scan Barcode";
+          case scanOrdercode:
+            return "Scan Ordercode";
+          default:
+            break;
         }
-        else if(scanType == scanBothCodes){
-          return "Scan Barcode & Ordercode";
-        }
-        else if(scanType == scanBarcode ){
-          return "Scan Barcode";
-        }
-        else{
-          return "Scan Ordercode";
-        }
+        break;
 
       case ActionType.edit:
         return "Edit Stock";
@@ -1592,7 +1605,7 @@ class _GridView extends State<GridView> {
     ordercodeIndex = 0;
     ordercodeList = List.empty(growable: true);
 
-    final int tableIndex = int.parse(filterList[index][tIndex]);
+    final int tableIndex = int.parse(filterList[index][iIndex]);
 
     barcodeList += jobTable[tableIndex][tBarcode].toString().toUpperCase().split(",").toList();
     if(barcodeList.isNotEmpty){
@@ -1616,7 +1629,61 @@ class _GridView extends State<GridView> {
     priceText = double.parse(jobTable[tableIndex][tPrice]).toStringAsFixed(2);
   }
 
+  _getFilterList(){
+    // List to search through
+    filterList = widget.action == ActionType.add ? List.of(jobTable) :
+      widget.action == ActionType.assignBarcode ? List.of(job.nof) :
+      widget.action == ActionType.assignOrdercode ? List.of(job.nof) :
+      widget.action == ActionType.edit ? List.of(job.stocktake) :
+      List.empty();
+  }
+
+  _emptyFilterList(){
+    // List to return if search query is not found
+    filterList = widget.action == ActionType.add ? List.empty() :
+      widget.action == ActionType.assignBarcode ? List.of(job.nof) :
+      widget.action == ActionType.assignBarcode ? List.of(job.nof) :
+      widget.action == ActionType.edit ? List.of(job.stocktake) :
+      List.empty();
+  }
+
   _searchWords() {
+    searchList(String searchText){
+      bool found = false;
+      List<String> searchWords = searchText.toUpperCase().split(' ').where((String s) => s.isNotEmpty).toList();
+      for (int i = 0; i < searchWords.length; i++) {
+        if (!found) {
+          List<List<dynamic>> first = widget.action == ActionType.edit ?
+            filterList.where((List<dynamic> column) =>
+                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+            filterList.where((List<dynamic> column) =>
+                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+
+          if(first.isNotEmpty){
+            filterList = List.of(first);
+            //filterList = List.of(first)..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+            found = true;
+          }
+        }
+        else {
+          List<List<dynamic>> refined = widget.action == ActionType.edit ?
+            filterList.where((List<dynamic> column) =>
+                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+            filterList.where((List<dynamic> column) =>
+                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+
+          if(refined.isNotEmpty){
+            filterList = List.of(refined);
+            //filterList = List.of(refined)..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+          }
+        }
+      }
+
+      if(!found){
+        filterList = List.empty();
+      }
+    }
+
     return Card(
       shadowColor: Colors.black38,
       child: ListTile(
@@ -1624,88 +1691,23 @@ class _GridView extends State<GridView> {
           icon: const Icon(Icons.cancel),
           onPressed: () {
             searchCtrl.text = "";
-
-            if (widget.action == ActionType.add){
-              filterList = List.empty();
-            }
-            else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-              filterList = List.of(job.nof);
-            }
-            else{
-              filterList = List.of(job.stocktake);
-            }
-
+            _emptyFilterList();
             setState(() {});
           },
         ),
 
         title: TextField(
             controller: searchCtrl,
-            // focusNode: textFocus,
             decoration: const InputDecoration(hintText: 'Enter search text', border: InputBorder.none),
             onChanged: (String value) {
-              if (value.isEmpty || value == "") {
-                if(widget.action == ActionType.add){
-                  filterList = List.empty();
-                  setState(() {});
-                }
-                else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-                  filterList = List.of(job.nof);
-                  setState(() {});
-                }
-                else{
-                  filterList = List.of(job.stocktake);
-                  setState(() {});
-                }
+              if(value.isEmpty) {
+                _emptyFilterList();
+                setState(() {});
                 return;
               }
 
-              filterList = widget.action == ActionType.add ? List.of(jobTable) :
-              widget.action == ActionType.assignBarcode ? List.of(job.nof) :
-              widget.action == ActionType.assignOrdercode ? List.of(job.nof) :
-              widget.action == ActionType.edit ? List.of(job.stocktake) : List.empty();
-
-              bool found = false;
-              List<String> searchWords = value.toUpperCase().split(' ').where((String s) => s.isNotEmpty).toList();
-              for (int i = 0; i < searchWords.length; i++) {
-                if (!found) {
-                  List<List<dynamic>> first = List.empty();
-                  if(widget.action == ActionType.edit){
-                    first = filterList.where((List<dynamic> column) =>
-                        jobTable[int.parse(column[tIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                  }
-                  else{
-                    first = filterList.where((List<dynamic> column) =>
-                        column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                  }
-
-                  if (first.isNotEmpty) {
-                    filterList = List.of(first);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
-                    found = true;
-                  }
-                }
-                else {
-                  List<List<dynamic>> refined = List.empty();
-
-                  if(widget.action == ActionType.edit){
-                    refined = filterList.where((List<dynamic> column) =>
-                        jobTable[int.parse(column[tIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                  }
-                  else{
-                    refined = filterList.where((List<dynamic> column) =>
-                        column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                  }
-
-                  // Check if any remaining search words are inside the filtered list and sort list by description names
-                  if(refined.isNotEmpty){
-                    filterList = List.of(refined);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
-                  }
-                }
-              }
-
-              if (!found){
-                filterList = List.empty();
-              }
+              _getFilterList();
+              searchList(value);
 
               setState(() {});
             }
@@ -1715,66 +1717,39 @@ class _GridView extends State<GridView> {
   }
 
   _searchCodes(){
-    scanList(String value){
-      if(value.isEmpty){
-        if(widget.action == ActionType.edit){
-          filterList = List.of(job.stocktake);
+    searchList(String searchText){
+      if(widget.action == ActionType.edit){
+        if(scanType == scanBarcode){
+          filterList = filterList.where((List<dynamic> column) =>
+              jobTable[int.parse(column[iIndex])][tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
-        else if (widget.action == ActionType.assignBarcode || widget.action == ActionType.assignBarcode){
-          filterList = List.of(job.nof);
+        else if(scanType == scanOrdercode){
+          filterList = filterList.where((List<dynamic> column) =>
+              jobTable[int.parse(column[iIndex])][tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
-        else{
-          filterList = List.empty();
-        }
-
-        setState(() {});
-        return;
-      }
-
-      // TODO: CLEAN THIS UP THIS IS DISGUSTING!!
-      List<List<dynamic>> searchList = widget.action == ActionType.add ? jobTable :
-      widget.action == ActionType.assignBarcode ? job.nof :
-      widget.action == ActionType.assignOrdercode ? job.nof :
-      widget.action == ActionType.edit ? job.stocktake : List.empty();
-
-      if(scanType == scanBarcode){
-        if(widget.action == ActionType.edit){
-          filterList = searchList.where((List<dynamic> column) =>
-              jobTable[int.parse(column[tIndex])][tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
-        }
-        else{
-          filterList = searchList.where((List<dynamic> column) =>
-              column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+        else if(scanType == scanBothCodes){
+          filterList = filterList.where((List<dynamic> column) =>
+              jobTable[int.parse(column[iIndex])][tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
+          filterList += filterList.where((List<dynamic> column) =>
+              jobTable[int.parse(column[iIndex])][tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
       }
-      else if(scanType == scanOrdercode){
-        if(widget.action == ActionType.edit){
-          filterList = searchList.where((List<dynamic> column) =>
-              jobTable[int.parse(column[tIndex])][tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+      else {
+        if(scanType == scanBarcode){
+          filterList = filterList.where((List<dynamic> column) =>
+              column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
-        else{
-          filterList = searchList.where((List<dynamic> column) =>
-              column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+        else if(scanType == scanOrdercode){
+          filterList = filterList.where((List<dynamic> column) =>
+              column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
-      }
-      else if (scanType == scanBothCodes){
-        if(widget.action == ActionType.edit){
-          filterList = searchList.where((List<dynamic> column) =>
-              jobTable[int.parse(column[tIndex])][tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
-          filterList += searchList.where((List<dynamic> column) =>
-              jobTable[int.parse(column[tIndex])][tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
-        }
-        else{
-          filterList = searchList.where((List<dynamic> column) =>
-              column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
-          filterList += searchList.where((List<dynamic> column) =>
-              column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(value.trim())).toList();
+        else if(scanType == scanBothCodes){
+          filterList = filterList.where((List<dynamic> column) =>
+              column[tBarcode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
+          filterList += filterList.where((List<dynamic> column) =>
+              column[tOrdercode].toString().split(',').where((s) => s.isNotEmpty).toList().contains(searchText.trim())).toList();
         }
       }
-
-      // if(filterList.isNotEmpty){
-      //   filterList = filterList..sort((x, y) => (x[tDescription]![0] as dynamic).compareTo((y[tDescription][0] as dynamic)));
-      // }
     }
 
     return Card(
@@ -1787,7 +1762,15 @@ class _GridView extends State<GridView> {
             if (event.physicalKey == PhysicalKeyboardKey.enter) {
               searchCtrl.text = scanText;
               scanText = '';
-              scanList(searchCtrl.text);
+
+              if(searchCtrl.text.isEmpty){
+                _emptyFilterList();
+                setState(() {});
+                return;
+              }
+
+              _getFilterList();
+              searchList(searchCtrl.text);
 
               // Automatically show item add popup if one item is found
               // Duplicate barcodes are not allowed so it should always only return one item for barcode scanning
@@ -1797,7 +1780,7 @@ class _GridView extends State<GridView> {
                     Decimal c = Decimal.parse(addCount.toStringAsFixed(3));
 
                     job.stocktake.add(<String>[
-                      filterList[0][tIndex],
+                      filterList[0][iIndex],
                       c.toString(),
                       job.location,
                       addBarcodeIndex.toString(),
@@ -1809,10 +1792,11 @@ class _GridView extends State<GridView> {
                     showNotification(context, colorWarning, whiteText, "Added $shortDescript --> $c");
                     job.calcTotal();
 
-                    writeJob(job, true);
+                    writeJob(job);
                   }
                 });
               }
+
               setState(() {});
             } else {
               scanText += event.data.keyLabel;
@@ -1821,6 +1805,14 @@ class _GridView extends State<GridView> {
         },
 
         child: ListTile(
+          trailing: IconButton(
+            icon: const Icon(Icons.cancel),
+            onPressed: (){
+              searchCtrl.text = "";
+              _emptyFilterList();
+              setState(() {});
+            },
+          ),
           title: TextField(
             decoration: const InputDecoration(hintText: 'Enter scancode', border: InputBorder.none),
             controller: searchCtrl,
@@ -1832,21 +1824,15 @@ class _GridView extends State<GridView> {
               deviceFocus.requestFocus();
             },
             onChanged: (String value){
-              scanList(searchCtrl.text);
-              setState(() {});
-            },
-          ),
+              if(value.isEmpty){
+                _emptyFilterList();
+                setState(() {});
+                return;
+              }
 
-          trailing: IconButton(
-            icon: const Icon(Icons.cancel),
-            onPressed: (){
-              if(widget.action == ActionType.edit){
-                filterList = List.of(job.stocktake);
-              }
-              else{
-                filterList = List.empty();
-              }
-              searchCtrl.text = "";
+              _getFilterList();
+              searchList(value);
+
               setState(() {});
             },
           ),
@@ -1855,8 +1841,147 @@ class _GridView extends State<GridView> {
     );
   }
 
+  _confirmNOF(int index) async {
+    String msg = "";
+    if(widget.action == ActionType.edit){
+      msg = "Confirm changes to NOF item?";
+    }
+    else if (widget.action == ActionType.add){
+      msg = "Confirm Add NOF to stocktake?\n-> $descriptionText";
+    }
+    await confirmDialog(context, msg).then((bool value) async {
+      if (value) {
+        int itemIndex;
+        int nofIndex;
+
+        // NEW NOF
+        if (index == -1){
+          itemIndex = -1;
+          nofIndex = jobTable.length;
+        }
+        else{
+          itemIndex = int.parse(filterList[index][iIndex]);
+          nofIndex = itemIndex - mainTable.length;
+        }
+
+        bool nofError = false;
+
+        String finalBarcode = "";
+        if(descriptionText.isEmpty){
+          nofError = true;
+          showAlert(context, "ERROR:", "NOF description must not be empty!", colorWarning);
+        }
+        else if(barcodeList.isEmpty){
+          nofError = true;
+          showAlert(context, "ERROR:", "NOF barcode(s) must not be empty!", colorWarning);
+        }
+        else if(barcodeList.length == 1 && barcodeList[0].isEmpty){
+          nofError = true;
+          showAlert(context, "ERROR:", "NOF barcode(s) must not be empty!", colorWarning);
+        }
+
+        if(!nofError) {
+          for(int i = 0; i < barcodeList.length; i++){
+            if(barcodeList[i].length > 22){
+              nofError = true;
+              showAlert(context, "ERROR:", "Barcode is too long: ${barcodeList[i]}\n\nBarcode exceeds char limit (22).", colorWarning);
+              break;
+            }
+
+            if(_barcodeExists(barcodeList[i], itemIndex)){
+              nofError = true;
+              showAlert(context, "ERROR:", "* NOF contains duplicate barcode: ${barcodeList[i]}!\n\n* Remove this barcode or get a new one (contact Andy?).", colorWarning);
+              break;
+            }
+
+            if(i > 0){
+              finalBarcode += ",${barcodeList[i]}";
+            }
+            else{
+              // first barcode in barcodeList should not have a comma
+              finalBarcode += barcodeList[i];
+            }
+          }
+        }
+
+        if(!nofError){
+          String finalOrdercode = "";
+          for(int i = 0; i < ordercodeList.length; i++){
+            if(i > 0){
+              finalOrdercode += ",${ordercodeList[i]}";
+            }
+            else{
+              finalOrdercode += ordercodeList[i];
+            }
+          }
+
+          if(index == -1){
+            // NEW NOF
+            job.nof.add([
+              jobTable.length.toString(),
+              finalBarcode,
+              categoryValue,
+              descriptionText.toUpperCase(),
+              "EACH", //uomCtrl.text;
+              Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString(),//Decimal.parse(priceText),
+              "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
+              finalOrdercode,
+              true.toString(),
+            ]);
+
+            // ADD NEW NOF TO STOCKTAKE IF COUNT IS GOOD
+            double addCount = double.tryParse(countCtrl.text) ?? 0.0;
+            if(addCount > 0){
+              job.stocktake.add(<String>[
+                nofIndex.toString(),
+                Decimal.parse(double.parse(addCount.toString()).toStringAsFixed(3)).toString(), // Decimal.parse(addCount.toString()),
+                job.location,
+                '0', // Use first barcode in barcode list by default
+                '0', // Use first ordercode in ordercode list by default
+              ]);
+
+              job.calcTotal();
+            }
+          }
+          else{
+            // EDIT NOF
+            job.nof[nofIndex][nBarcode] = finalBarcode;
+            job.nof[nofIndex][nCategory] = categoryValue;
+            job.nof[nofIndex][nDescript] = descriptionText.toUpperCase();
+            job.nof[nofIndex][nUom] = "EACH";
+            job.nof[nofIndex][nPrice] = Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString();
+            job.nof[nofIndex][nDate] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+            job.nof[nofIndex][nOrdercode] = finalOrdercode;
+            job.nof[nofIndex][nNof] = true.toString();
+          }
+
+          // Refresh jobTable
+          jobTable = mainTable + job.nof;
+          if(widget.action != ActionType.edit){
+            filterList = List.empty();
+          }
+          searchCtrl.text = "";
+          await writeJob(job).then((value){
+            Navigator.pop(context);
+          });
+        }
+      }
+    });
+
+    setState(() {});
+  }
+
+  _popBack(){
+    if(widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
+      goToPage(context, const GridView(action: ActionType.add));
+    }
+    else{
+      goToPage(context, const Stocktake());
+    }
+  }
+
   Widget _assignGridCard(int pIndex) {
-    int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
+    int tableIndex = int.parse(filterList[pIndex][iIndex].toString());
     String descript = jobTable[tableIndex][tDescription].toString();
     return Card(
         shadowColor: Colors.white.withOpacity(0.0),
@@ -1883,7 +2008,7 @@ class _GridView extends State<GridView> {
                     jobTable = mainTable + job.nof;
                     copyCode = "";
                     setState(() {});
-                    await writeJob(job, true).then((value){
+                    await writeJob(job).then((value){
                       goToPage(context, const GridView(action: ActionType.add));
                     });
                   }
@@ -1895,7 +2020,7 @@ class _GridView extends State<GridView> {
   }
 
   Widget _addGridCard(int pIndex){
-    int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
+    int tableIndex = int.parse(filterList[pIndex][iIndex].toString());
     String descript = "";
     descript = filterList[pIndex][tDescription];
 
@@ -1931,7 +2056,7 @@ class _GridView extends State<GridView> {
             await _counterConfirm(context, filterList[pIndex][tDescription], 1.0, false).then((double addCount) async{
               if(addCount != -1){
                 job.stocktake.add(<String>[
-                  int.parse(filterList[pIndex][tIndex].toString()).toString(),
+                  int.parse(filterList[pIndex][iIndex].toString()).toString(),
                   Decimal.parse(addCount.toStringAsFixed(3)).toString(),
                   job.location,
                   addBarcodeIndex.toString(),
@@ -1943,7 +2068,7 @@ class _GridView extends State<GridView> {
                 showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $addCount");
 
                 job.calcTotal();
-                writeJob(job, true);
+                writeJob(job);
               }
               setState(() {});
             });
@@ -1958,62 +2083,63 @@ class _GridView extends State<GridView> {
   }
 
   Widget _stocktakeGridCard(int pIndex){
-    int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
+    int tableIndex = int.parse(filterList[pIndex][iIndex].toString());
     bool nofItem = tableIndex >= mainTable.length;
     return Row(
         children: [
-          Card(
-              shadowColor: Colors.white.withOpacity(0.0),
-              child: SizedBox(
-                height: 150.0,
-                width: MediaQuery.of(context).size.width * 0.75,
+          Flexible(
+            child: Card(
+                shadowColor: Colors.white.withOpacity(0.0),
+                child: SizedBox(
+                  height: 150.0,
+                  width: MediaQuery.of(context).size.width * 0.75,
 
-                child: ListTile(
-                  title: Text(jobTable[tableIndex][tDescription].toString(), softWrap: true, maxLines: 2, overflow: TextOverflow.fade,),
-                  subtitle: Text("Loc: ${filterList[pIndex][sLocation]}", maxLines: 1, overflow: TextOverflow.fade),
-                  trailing: nofItem ? const Icon(Icons.fiber_new, color: Colors.black,) : null,
-                  onTap: () async {
-                    if(nofItem){
-                      // Edit Nof details
-                      _setNOFText(pIndex);
-                      await showGeneralDialog(
-                        context: context,
-                        barrierColor: Colors.black12,
-                        barrierDismissible: false,
-                        barrierLabel: '',
-                        transitionDuration: const Duration(milliseconds: 100),
-                        pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
-                          return _editNOFPopup(pIndex);
-                        },
-                      );
-                      setState(() {});
-                    }
-                    else{
-                      // Show item details
-                      int tableIndex = int.parse(filterList[pIndex][tIndex].toString());
-                      String date = jobTable[tableIndex][tDatetime].toString();
-                      date = getDateString(date);
+                  child: ListTile(
+                    title: Text(jobTable[tableIndex][tDescription].toString(), softWrap: true, maxLines: 2, overflow: TextOverflow.fade,),
+                    subtitle: Text("Loc: ${filterList[pIndex][sLocation]}", maxLines: 1, overflow: TextOverflow.fade),
+                    trailing: nofItem ? const Icon(Icons.fiber_new, color: Colors.black,) : null,
+                    onTap: () async {
+                      if(nofItem){
+                        // Edit Nof details
+                        _setNOFText(pIndex);
+                        await showGeneralDialog(
+                          context: context,
+                          barrierColor: Colors.black12,
+                          barrierDismissible: false,
+                          barrierLabel: '',
+                          transitionDuration: const Duration(milliseconds: 100),
+                          pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
+                            return _editNOFPopup(pIndex);
+                          },
+                        );
+                        setState(() {});
+                      }
+                      else{
+                        // Show item details
+                        int tableIndex = int.parse(filterList[pIndex][iIndex].toString());
+                        String date = jobTable[tableIndex][tDatetime].toString();
+                        date = getDateString(date);
 
-                      showAlert(
-                          context,
-                          jobTable[tableIndex][tDescription],
-                          "Table Index: $tableIndex\n"
-                              "Category: ${jobTable[tableIndex][tCategory]}\n"
-                              "Price: ${jobTable[tableIndex][tPrice]}\n"
-                              "DateTime: $date",
-                          colorOk
-                      );
-                    }
-                  },
+                        showAlert(
+                            context,
+                            jobTable[tableIndex][tDescription],
+                            "Table Index: $tableIndex\n"
+                                "Category: ${jobTable[tableIndex][tCategory]}\n"
+                                "Price: ${jobTable[tableIndex][tPrice]}\n"
+                                "DateTime: $date",
+                            colorOk
+                        );
+                      }
+                    },
 
-                  onLongPress: (){
-                    copyIndex = tableIndex;
-                    showNotification(context, colorWarning, whiteText, "Item copied @[$pIndex]");
-                  },
-                ),
-              )
+                    onLongPress: (){
+                      copyIndex = tableIndex;
+                      showNotification(context, colorWarning, whiteText, "Item copied @[$pIndex]");
+                    },
+                  ),
+                )
+            ),
           ),
-
           Card(
               color: Colors.white60,
               child: SizedBox(
@@ -2032,7 +2158,7 @@ class _GridView extends State<GridView> {
                           copyIndex = -1;
                         }
                         job.calcTotal();
-                        writeJob(job, true);
+                        writeJob(job);
                         filterList.removeAt(pIndex);
                         setState(() {});
                       }
@@ -2040,7 +2166,7 @@ class _GridView extends State<GridView> {
                         String decimalCount = Decimal.parse(newCount.toStringAsFixed(3)).toString();
                         job.stocktake[pIndex][sCount] = decimalCount;
                         job.calcTotal();
-                        writeJob(job, true);
+                        writeJob(job);
                         filterList[pIndex][sCount] = decimalCount; // Manually update the filter list item instead of updating the entire list
                         setState(() {});
                       }
@@ -2054,7 +2180,7 @@ class _GridView extends State<GridView> {
   }
 
   Widget _editNOFPopup(int index) {
-    final List<String> masterCategory = <String>["CATERING", "CHEMICALS", "CONSUMABLES", "INVOICE", "MISC"];
+    //final List<String> masterCategory = <String>["CATERING", "CHEMICALS", "CONSUMABLES", "INVOICE", "MISC"];
     return StatefulBuilder(
       builder: (context, setState){
         return GestureDetector(
@@ -2350,145 +2476,6 @@ class _GridView extends State<GridView> {
     );
   }
 
-  _confirmNOF(int index) async {
-    String msg = "";
-    if(widget.action == ActionType.edit){
-      msg = "Confirm changes to NOF item?";
-    }
-    else if (widget.action == ActionType.add){
-      msg = "Confirm Add NOF to stocktake?\n-> $descriptionText";
-    }
-    await confirmDialog(context, msg).then((bool value) async {
-      if (value) {
-        int itemIndex;
-        int nofIndex;
-
-        // NEW NOF
-        if (index == -1){
-          itemIndex = -1;
-          nofIndex = jobTable.length;
-        }
-        else{
-          itemIndex = int.parse(filterList[index][tIndex]);
-          nofIndex = itemIndex - mainTable.length;
-        }
-
-        bool nofError = false;
-
-        String finalBarcode = "";
-        if(descriptionText.isEmpty){
-          nofError = true;
-          showAlert(context, "ERROR:", "* NOF description must not be empty!", colorWarning);
-        }
-        else if(barcodeList.isEmpty){
-          nofError = true;
-          showAlert(context, "ERROR:", "* NOF barcode(s) must not be empty!", colorWarning);
-        }
-        else if(barcodeList.length == 1 && barcodeList[0].isEmpty){
-          nofError = true;
-          showAlert(context, "ERROR:", "* NOF barcode(s) must not be empty!", colorWarning);
-        }
-
-        if(!nofError) {
-          for(int i = 0; i < barcodeList.length; i++){
-            if(barcodeList[i].length > 22){
-              nofError = true;
-              showAlert(context, "ERROR:", "* Barcode is too long: ${barcodeList[i]}\n\n* Barcode exceeds char limit (22).", colorWarning);
-              break;
-            }
-
-            if(_barcodeExists(barcodeList[i], itemIndex)){
-              nofError = true;
-              showAlert(context, "ERROR:", "* NOF contains duplicate barcode: ${barcodeList[i]}!\n\n* Remove this barcode or get a new one (contact Andy?).", colorWarning);
-              break;
-            }
-
-            if(i > 0){
-              finalBarcode += ",${barcodeList[i]}";
-            }
-            else{
-              // first barcode in barcodeList should not have a comma
-              finalBarcode += barcodeList[i];
-            }
-          }
-        }
-
-        if(!nofError){
-          String finalOrdercode = "";
-          for(int i = 0; i < ordercodeList.length; i++){
-            if(i > 0){
-              finalOrdercode += ",${ordercodeList[i]}";
-            }
-            else{
-              finalOrdercode += ordercodeList[i];
-            }
-          }
-
-          if(index == -1){
-            // NEW NOF
-            job.nof.add([
-              jobTable.length.toString(),
-              finalBarcode,
-              categoryValue,
-              descriptionText.toUpperCase(),
-              "EACH", //uomCtrl.text;
-              Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString(),//Decimal.parse(priceText),
-              "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
-              finalOrdercode,
-              true.toString(),
-            ]);
-
-            // ADD NEW NOF TO STOCKTAKE IF COUNT IS GOOD
-            double addCount = double.tryParse(countCtrl.text) ?? 0.0;
-            if(addCount > 0){
-              job.stocktake.add(<String>[
-                nofIndex.toString(),
-                Decimal.parse(double.parse(addCount.toString()).toStringAsFixed(3)).toString(), // Decimal.parse(addCount.toString()),
-                job.location,
-                '0', // Use first barcode in barcode list
-                '0', // Use first ordercode in ordercode list
-              ]);
-
-              job.calcTotal();
-            }
-          }
-          else{
-            // EDIT NOF
-            job.nof[nofIndex][nBarcode] = finalBarcode;
-            job.nof[nofIndex][nCategory] = categoryValue;
-            job.nof[nofIndex][nDescript] = descriptionText.toUpperCase();
-            job.nof[nofIndex][nUom] = "EACH";
-            job.nof[nofIndex][nPrice] = Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString();
-            job.nof[nofIndex][nDate] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-            job.nof[nofIndex][nOrdercode] = finalOrdercode;
-            job.nof[nofIndex][nNof] = true.toString();
-          }
-
-          // Refresh jobTable
-          jobTable = mainTable + job.nof;
-          if(widget.action != ActionType.edit){
-            filterList = List.empty();
-          }
-          searchCtrl.text = "";
-          await writeJob(job, true).then((value){
-            Navigator.pop(context);
-          });
-        }
-      }
-    });
-
-    setState(() {});
-  }
-
-  _popBack(){
-    if(widget.action == ActionType.assignBarcode || widget.action == ActionType.assignOrdercode){
-      goToPage(context, const GridView(action: ActionType.add));
-    }
-    else{
-      goToPage(context, const Stocktake());
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     keyboardHeight = MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).size.height/4.0;
@@ -2681,9 +2668,9 @@ class _GridView extends State<GridView> {
                               child: Text('Assign Barcode to Item', style: whiteText),
                               onPressed: () async {
                                 if(_barcodeExists(searchCtrl.text, -1)){
-                                  showNotification(context, colorWarning, whiteText, "* BARCODE ALREADY EXISTS!\n* Cannot add duplicate barcodes!");
+                                  //showNotification(context, colorWarning, whiteText, "* BARCODE ALREADY EXISTS!\n* Cannot add duplicate barcodes!");
 
-                                  //showAlert(context, "WARNING:", "* Barcode already exists within the stocktake!\n\n* Try a new barcode.", colorWarning);
+                                  showAlert(context, "WARNING:", "Barcode already exists within the stocktake list!\n\nTry a new barcode.", colorWarning);
                                 }
                                 else{
                                   // prevScanType = scanType;
@@ -2728,27 +2715,39 @@ class _GridView extends State<GridView> {
   }
 }
 
+getAppDir() async{
+  final directory = await getApplicationDocumentsDirectory();
+  appDir = directory.path;
+}
+
 String getDateString(String d){
-  // If date contains '/' , '-' or 'T' it is asssumed correct
-  if(d.contains("T")){
-    return d.substring(0, d.indexOf("T")).toString();
-  }
-  else if(d.contains("/") || d.contains("-")){
-    return d;
-  }
+  // // If date contains '/' , '-' or 'T' it is asssumed correct
+  // if(d.contains("T")){
+  //   return d.substring(0, d.indexOf("T")).toString();
+  // }
+  // else if(d.contains("/") || d.contains("-")){
+  //   return d;
+  // }
 
   String newDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
 
   if(d.isNotEmpty) {
-    int timestamp = int.tryParse(d) ?? -1;
-    if(timestamp != -1){
-      const gsDateBase = 2209161600 / 86400;
-      const gsDateFactor = 86400000;
-      final millis = (timestamp - gsDateBase) * gsDateFactor;
-      String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
-      date = date.substring(0, 10);
-      List<String> dateSplit = date.split("-");
-      newDate = "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+    try{
+      int timestamp = int.tryParse(d) ?? -1;
+      if(timestamp != -1){
+        const gsDateBase = 2209161600 / 86400;
+        const gsDateFactor = 86400000;
+        final millis = (timestamp - gsDateBase) * gsDateFactor;
+        String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
+        date = date.substring(0, 10);
+        List<String> dateSplit = date.split("-");
+        newDate = "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+      }
+    }
+    catch (e){
+      errorString = "$e";
+      writeErrLog(errorString, "getDateString()");
+      return newDate;
     }
   }
 
@@ -2782,75 +2781,6 @@ Widget rBox(BuildContext context, Color color, Widget widget) {
       child: widget,
     ),
   );
-}
-
-Future<bool> passConfirm(BuildContext context, String pass) async {
-  bool confirmed = false;
-  String userInput = "";
-
-  await showDialog(
-      useSafeArea: true,
-      context: context,
-      barrierDismissible: false,
-      barrierColor: colorOk.withOpacity(0.8),
-      builder: (context){
-        return WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              alignment: Alignment.center,
-              actionsAlignment: MainAxisAlignment.spaceAround,
-              title: const Text("Enter passcode", overflow: TextOverflow.fade, softWrap: true, maxLines: 2,),
-              content: GestureDetector(
-                onTap: () {
-                  FocusScopeNode currentFocus = FocusScope.of(context);
-                  if (!currentFocus.hasPrimaryFocus) {
-                    currentFocus.unfocus();
-                  }
-                },
-                child: SingleChildScrollView(
-                    child: Column(
-                        children: <Widget>[
-                          TextFormField(
-                            autofocus: true,
-                            textAlign: TextAlign.center,
-                            keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                            onChanged: (String value) {
-                              userInput = value;
-                            }
-                          )
-                        ]
-                    )
-                ),
-              ),
-              actions: <Widget>[
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-                  onPressed: () async {
-                    if(userInput == pass){
-                      confirmed = true;
-                      Navigator.pop(context);
-                    }
-                    else{
-                      showAlert(context, "ERROR", "Incorrect passcode", Colors.red);
-                    }
-                  },
-
-                  child: const Text("Confirm"),
-                ),
-              ],
-            )
-        );
-      }
-  );
-
-  return confirmed;
 }
 
 Future<bool> confirmDialog(BuildContext context, String str) async {
@@ -2890,50 +2820,64 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   return confirmation;
 }
 
-Future<void> loadMasterSheet(String filePath) async {
+Future<bool> grantAccess() async{
+  return await storageType.isGranted;
+}
+
+Future<void> prepareStorage() async {
+  var path = '/storage/emulated/0';//!isEmulating ? '/storage/emulated/0' : 'sdcard';
+  rootDir = Directory(path);
+  var storage = await storageType.status;
+  if (storage != PermissionStatus.granted) {
+    await storageType.request();
+  }
+}
+
+Future<void> loadSpreadSheet(String filePath) async {
   Uint8List bytes;
   mainTable = List.empty(growable: true);
 
-  if(!filePath.toUpperCase().endsWith(".XLSX")){
-    errorString = "* Invalid spreadsheet format!\n\n* The file you are trying to load is not an XLSX\n\n* Only XLSX documents are accepted.";
+  if(!filePath.toLowerCase().endsWith(".xlsx")){
+    errorString = "INVALID SPREADSHEET FORMAT!\nThe file you are trying to load is not an XLSX\nOnly XLSX documents are accepted.";
     return;
   }
 
   if(!File(filePath).existsSync()){
-    // LOAD DEFAULT SPREADSHEET INTO APPLICATIONS DIRECTORY IF IT DOES NOT EXIST
-    if(filePath.endsWith("MASTERFILE.xlsx")){
-      ByteData data = await rootBundle.load("assets/MASTERFILE.xlsx");
-      bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      await File(filePath).writeAsBytes(bytes);
-    }
-    else{
-      errorString = "FAILED TO LOAD SPREADSHEET: filepath does not exist => $filePath";
-      return;
-    }
+    errorString = "FAILED TO LOAD SPREADSHEET!\nThe filepath does not exist: -> $filePath";
+    return;
   }
-  else{
-    File file = File(filePath);
-    bytes = file.readAsBytesSync();
-  }
+
+  File file = File(filePath);
+  bytes = file.readAsBytesSync();
 
   try{
     var decoder = SpreadsheetDecoder.decodeBytes(bytes);
     var sheets = decoder.tables.keys.toList();
     SpreadsheetTable? table = decoder.tables[sheets[0]];
-    table?.rows.removeAt(0); // Remove header row
-    //mainTable = table!.rows;
 
-    if(table!.rows.isEmpty){
-      errorString = "Spreadsheet was not loaded!\nThe selected spreadsheet is empty.\n";
+    // Get custom categories (if they exist)
+    var header = table!.rows[0];
+    masterCategory = <String>["CATERING", "CHEMICALS", "CONSUMABLES", "INVOICE", "MISC"];
+    var cIndex = -1;
+    for(int j = 0; j < header.length; j++){
+      if(header[j].toString().toUpperCase() == "CATEGORY" || header[j].toString().toUpperCase() == "CATEGORIES") {
+        cIndex = j;
+        masterCategory = List<String>.empty(growable: true);
+        break;
+      }
+    }
+
+    if(table.rows.length < 2){
+      errorString = "Spreadsheet was not loaded!\nThe spreadsheet is empty!";
       return;
     }
 
     if(table.rows[0].length != 8){
-      errorString = "Spreadsheet was not loaded!\nThe spreadsheet does not cotain the correct number of rows.\n";
+      errorString = "Spreadsheet was not loaded!\nThe spreadsheet does not cotain the correct number of rows.";
       return;
     }
 
-    for(int t = 0; t < table.rows.length; t++) {
+    for(int t = 1; t < table.rows.length; t++) {
       mainTable.add([
         table.rows[t][0].toString(),
         table.rows[t][1].toString(),
@@ -2944,28 +2888,33 @@ Future<void> loadMasterSheet(String filePath) async {
         table.rows[t][6].toString(),
         table.rows[t][7].toString()
       ]);
+
+      // Add item's category to master category
+      if(cIndex != -1){
+        var row = table.rows[t].toList();
+        masterCategory.add(row[cIndex].toString().toUpperCase());
+      }
+      // Remove duplicate categories
+      masterCategory = masterCategory.toSet().toList();
     }
 
+    // Check if indices are valid
     const int maxCheck = 4;
     for(int i = 0; i < mainTable.length; i++){
       if(i >= maxCheck){
         break;
       }
 
-      int indexCheck = int.tryParse(mainTable[i][tIndex]) ?? -1;
+      int indexCheck = int.tryParse(mainTable[i][iIndex]) ?? -1;
       if(i != indexCheck){
         mainTable = List.empty(growable: true);
-        errorString = "Spreadsheet was not loaded!\nThe index column contains non-sequential numbers!\n";
+        errorString = "Spreadsheet was not loaded!\nThe index column contains non-sequential numbers!";
         return;
       }
     }
   }
   catch (e){
-    errorString = "Spreadsheet was not loaded!\n$e";
-
-    // errorString = "FAILED TO LOAD SPREADSHEET: ${e.toString()}";
-    // writeToErrLog(errorString);
-    // errorString += "\n\n[ Check 'ERR_LOG_${job.id}' for details ]";
+    errorString = "$e";
   }
 }
 
@@ -3081,11 +3030,11 @@ setLocation(BuildContext context1){
                                               job.allLocations = job.allLocations.toSet().toList();
                                             }
                                             else {
-                                              showAlert(context, "ERROR: ", "Location text cannot be empty", Colors.red);
+                                              showAlert(context, "ERROR: ", "Location text cannot be empty.", Colors.red);
                                             }
                                           });
 
-                                          await writeJob(job, true).then((value){
+                                          await writeJob(job).then((value){
                                             setState((){});
                                           });
                                         },
@@ -3100,7 +3049,7 @@ setLocation(BuildContext context1){
                                           }
                                           job.allLocations.removeAt(index);
 
-                                          await writeJob(job, true).then((value){
+                                          await writeJob(job).then((value){
                                             setState((){});
                                           });
                                         }
@@ -3121,7 +3070,7 @@ setLocation(BuildContext context1){
                                       await textEditDialog(context, "").then((value) async {
                                         if(value.isNotEmpty && !job.allLocations.contains(value)){
                                           job.allLocations.add(value);
-                                          await writeJob(job, true).then((value){
+                                          await writeJob(job).then((value){
                                             setState((){});
                                           });
                                         }
@@ -3169,22 +3118,6 @@ showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, Str
   );
 }
 
-showLoading(BuildContext context){
-  AlertDialog alert=AlertDialog(
-    content: Row(
-      children: [
-        const CircularProgressIndicator(),
-        Container(margin: const EdgeInsets.only(left: 5), child: const Text("Loading" )),
-      ],),
-  );
-  showDialog(barrierDismissible: false,
-    context:context,
-    builder:(BuildContext context){
-      return alert;
-    },
-  );
-}
-
 showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   return showDialog(
       barrierDismissible: false,
@@ -3210,10 +3143,10 @@ showAlert(BuildContext context, String txtTitle, String txtContent, Color c) {
   );
 }
 
-writeJob(StockJob job, bool overwrite) async {
+writeJob(StockJob job) async {
   String filePath = '/storage/emulated/0/Documents/${job.id}/';
 
-  // If "/Documents/${job.id}" folder does not exist, make it!
+  // If job folder does not exist, make it!
   await Directory(filePath).exists().then((value){
     if(!value){
       Directory(filePath).create().then((Directory directory) {
@@ -3223,116 +3156,155 @@ writeJob(StockJob job, bool overwrite) async {
   });
 
   filePath += 'ASJob_${job.id}';
-  //filePath = '/storage/emulated/0/Documents/${job.id}/$jobStartStr${job.id}_0';
-
-  // // Check if file exists and create new
-  // if(!overwrite){
-  //   String num = '0';
-  //   bool readyWrite = false;
-  //
-  //   while(!readyWrite){
-  //     await File(filePath).exists().then((value){
-  //       if(value){
-  //         // Add iterable value at end of file
-  //         num = (int.parse(num) + 1).toString();
-  //         filePath = '/storage/emulated/0/Documents/${job.id}/ASJob_${job.id}';
-  //       }
-  //       else{
-  //         readyWrite = true;
-  //       }
-  //     });
-  //   }
-  // }
-
   var jobFile = File(filePath);
   Map<String, dynamic> jMap = job.toJson();
   var jString = jsonEncode(jMap);
-  jobFile.writeAsString(jString);
+  jobFile.writeAsString(jString, mode: FileMode.writeOnly);
+}
+
+loadSessionFile() async {
+  errorString = "";
+  var filePath = File('$appDir/session_file');
+  if(!await filePath.exists()) {
+    // Create new session file
+    sFile = {
+      "uid" : "",
+      "fontScale" : 16.0,
+      "permission" : "${Permission.manageExternalStorage}",
+    };
+
+    storageType = Permission.manageExternalStorage;
+    await writeSession();
+  }
+  else{
+    try{
+      // Load existing session file
+      String fileContent = await filePath.readAsString();
+      var jsn = json.decode(fileContent);
+      sFile = {
+        "uid" : "", //(jsn['uid'] == null || jsn["uid"].isEmpty || jsn) ? "USER1" : jsn['uid'].toString(),
+        "fontScale" : jsn["fontScale"] == null ? 16.0 : jsn['fontScale'] as double,
+        "permission" : jsn["permission"] == null ? "Permission.manageExternalStorage" : jsn['permission'].toString(), // == null ? 0 : jsn['permission'] as int,
+      };
+
+      // Set storage permissions
+      if(sFile["permission"] == "Permission.manageExternalStorage"){
+        storageType = Permission.manageExternalStorage;
+      }
+      else if(sFile["permission"] == "Permission.storage"){
+        storageType = Permission.storage;
+      }
+      else{
+        storageType = Permission.manageExternalStorage;
+      }
+    }
+    catch(e){
+      errorString = "$e";
+      writeErrLog("$e", "getSession()");
+    }
+  }
+}
+
+loadDefMastersheet() async {
+  // Copy MASTERFILE into App Directory
+  if(!File("$appDir/MASTERFILE.xlsx").existsSync()){
+    ByteData data = await rootBundle.load("assets/MASTERFILE.xlsx"); // Copy MASTERFILE from assets folder
+    var bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    await File("$appDir/MASTERFILE.xlsx").writeAsBytes(bytes); // Write MASTERFILE to App Directory
+  }
 }
 
 writeSession() async {
+  errorString = "";
   Map<String, dynamic> jMap = {
-    "uid" : "",
+    "uid" : sFile["uid"],
     'fontScale' : sFile["fontScale"],
-    'dropScale' : sFile["dropScale"],
+    'permission' : sFile["permission"],
   };
 
-  final jString = jsonEncode(jMap);
-  final directory = await getApplicationDocumentsDirectory();
-  final path = directory.path;
-  //final path = await _localPath;
-  final filePath = File('$path/session_file');
-  filePath.writeAsString(jString, mode: FileMode.writeOnly);
-}
-
-getSession() async {
-  final directory = await getApplicationDocumentsDirectory();
-  final path = directory.path;
-  //final path = await _localPath;
-
-  var filePath = File('$path/session_file');
-
-  if(!await filePath.exists()) {
-    // Make new session file
-    sFile = {
-      "uid" : "",
-      'fontScale' : 12.0,
-      'dropScale' : 50.0,
-    };
-    writeSession();
-    return true;
+  try{
+    final jString = jsonEncode(jMap);
+    final filePath = File('$appDir/session_file');
+    filePath.writeAsString(jString, mode: FileMode.writeOnly);
   }
-  else{
-    // Load session file
-    String fileContent = await filePath.readAsString();
-    var jsn = json.decode(fileContent);
-
-    sFile = {
-      // "uid" : jsn['uid'] == null || jsn["uid"].isEmpty ? "USER" :  jsn['uid'] as String,
-      "fontScale" : jsn['fontScale'] == null ? 20.0 : jsn['fontScale'] as double,
-      // "dropScale" : jsn['dropScale'] == null ? 50.0 : jsn['dropScale'] as double
-    };
-    return false;
+  catch (e){
+   errorString = "$e";
+   writeErrLog("$e", "writeSession()");
   }
 }
 
 writeErrLog(String err, String id) async {
-  // Construct error line entry
+  // Construct new error line entry
   String errLine = "[ ERROR @ ${DateTime.now()} ]\n";
-  errLine += "ID : $id\n";
-  errLine += " --> $err\n";
+  errLine += "ID: $id\n";
+  errLine += "ERROR: $err\n";
   errLine += "[ END ]\n\n";
 
-  // Get error log file from app directory
-  final directory = await getApplicationDocumentsDirectory();
-  final path = directory.path;
+  // Create new error log if it does not exist
+  if(!File("$appDir/fd_err_log.txt").existsSync()){
+    String newLog = "++ FD APP ERROR LOG ++\n\n";
+    newLog = "[ ERROR @ START_OF_ERROR_LOG";
+    newLog += "ID: Test Error\n";
+    newLog += "ERROR: THIS IS A TEST ERROR AND CAN BE IGNORED\n";
+    newLog += "[ END ]\n\n";
 
+    // Add error line to new file lines
+    errLine = newLog + errLine;
 
-  // Create new file if lines exceed 5000
-  if(File('$path/fd_err_log.txt').existsSync()){
-    final file = File('$path/fd_err_log.txt');
-    List<String> fl = file.readAsLines() as List<String>;
-    if(fl.length > 50000) {
-      file.writeAsString("++ FD APP ERROR LOG ++\n\n$errLine", mode: FileMode.writeOnly);
-    }
-    else{
-      file.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
-    }
+    final errFile = File('$appDir/fd_err_log.txt');
+    errFile.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
   }
-  else { // Append error line entry to error log
-    final file = File('$path/fd_err_log.txt');
-    file.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
+  else {
+    final errFile = File('$appDir/fd_err_log.txt');
+    var s = await errFile.readAsLines();
+
+    if(s.length < 10000) {
+      errFile.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
+    }
+    else {
+      // Create new file if current file lines exceed 10000
+      String newLog = "++ FD APP ERROR LOG ++\n\n";
+      newLog = "[ ERROR @ START_OF_ERROR_LOG";
+      newLog += "ID: Test Error\n";
+      newLog += "ERROR: THIS IS A TEST ERROR AND CAN BE IGNORED\n";
+      newLog += "[ END ]\n\n";
+      errLine = newLog + errLine;
+
+      // Overwrite file and add error line
+      errFile.writeAsString(errLine, mode: FileMode.writeOnly);
+    }
   }
 }
 
 copyErrLog() async {
-  final directory = await getApplicationDocumentsDirectory();
-  final path = directory.path;
-  var filePath = File('$path/fd_err_log.txt');
+  // final directory = await getAppplicationDocumentsDirectory();
+  // final path = directory.path;
+
+  var filePath = File('$appDir/fd_err_log.txt');
   String fileContent = await filePath.readAsString();
   String copyPath = '/storage/emulated/0/Documents/fd_err_log.txt';
   var errFile = File(copyPath);
   errFile.writeAsString(fileContent, mode: FileMode.writeOnly);
+}
+
+resetAppDir() async{
+  try{
+    if(File("$appDir/MASTERFILE.xlsx").existsSync()){
+      final masterFile = File("$appDir/MASTERFILE.xlsx");
+      await masterFile.delete();
+    }
+    if(File("$appDir/session_file").existsSync()){
+      final sessionFile = File("$appDir/session_file");
+      await sessionFile.delete();
+    }
+    if(File("$appDir/fd_err_log.txt").existsSync()){
+      final errLog = File("$appDir/fd_err_log.txt");
+      await errLog.delete();
+    }
+  }
+  catch (e){
+    return;
+  }
 }
 
 class StockJob {
@@ -3359,7 +3331,10 @@ class StockJob {
   });
 
   factory StockJob.fromJson(dynamic json) {
-    StockJob job = StockJob(id: json['id'] as String, name: json['name'] as String);
+    StockJob job = StockJob(
+        id: json['id'] as String,
+        name: json['name'] as String
+    );
 
     job.date = json.containsKey("date") ? json['date'] as String : "";
 
@@ -3367,7 +3342,7 @@ class StockJob {
     if(json.containsKey("stocktake") && json['stocktake'] != null){
       for(final map in jsonDecode(json['stocktake'])){
         job.stocktake.add(<String>[
-          map[tIndex].toString(),
+          map[iIndex].toString(),
           map[sCount].toString(),
           map[sLocation].toString(),
           map[sBcodeIndex] == null ? "0" : map[sBcodeIndex].toString(),
@@ -3381,7 +3356,7 @@ class StockJob {
       for(final map in jsonDecode(json['nof'])){
         job.nof.add(
             [
-              map[tIndex].toString(),
+              map[iIndex].toString(),
               map[nBarcode].toString(),
               map[nCategory].toString(),
               map[nDescript].toString(),
