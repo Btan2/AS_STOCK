@@ -9,7 +9,7 @@ BUILD NAME CONVENTIONS:
  version.year.month+build
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=2 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=3 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -35,7 +35,7 @@ List<List<String>> mainTable = List.empty();
 Map<String, dynamic> sFile = {};
 String appDir = "";
 Directory? rootDir;
-const String versionStr = "0.23.06+2";
+const String versionStr = "0.23.06+3";
 
 // GridView vars
 int scanType = 0;
@@ -1655,9 +1655,9 @@ class _GridView extends State<GridView> {
         if (!found) {
           List<List<dynamic>> first = widget.action == ActionType.edit ?
             filterList.where((List<dynamic> column) =>
-                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+                jobTable[int.parse(column[iIndex])][tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
             filterList.where((List<dynamic> column) =>
-                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+                column[tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
 
           if(first.isNotEmpty){
             filterList = List.of(first);
@@ -1668,9 +1668,9 @@ class _GridView extends State<GridView> {
         else {
           List<List<dynamic>> refined = widget.action == ActionType.edit ?
             filterList.where((List<dynamic> column) =>
-                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+                jobTable[int.parse(column[iIndex])][tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
             filterList.where((List<dynamic> column) =>
-                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+                column[tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
 
           if(refined.isNotEmpty){
             filterList = List.of(refined);
