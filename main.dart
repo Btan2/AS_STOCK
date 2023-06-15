@@ -9,7 +9,7 @@ BUILD NAME CONVENTIONS:
  version.year.month+build
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=3 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.06 --build-number=4 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -35,7 +35,7 @@ List<List<String>> mainTable = List.empty();
 Map<String, dynamic> sFile = {};
 String appDir = "";
 Directory? rootDir;
-const String versionStr = "0.23.06+3";
+const String versionStr = "0.23.06+4";
 
 // GridView vars
 int scanType = 0;
@@ -1629,7 +1629,7 @@ class _GridView extends State<GridView> {
     priceText = double.parse(jobTable[tableIndex][tPrice]).toStringAsFixed(2);
   }
 
-  _getFilterList(){
+  _setFilterList(){
     // List to search through
     filterList = widget.action == ActionType.add ? List.of(jobTable) :
       widget.action == ActionType.assignBarcode ? List.of(job.nof) :
@@ -1648,16 +1648,16 @@ class _GridView extends State<GridView> {
   }
 
   _searchWords() {
-    searchList(String searchText){
+    searchString(String searchText){
       bool found = false;
-      List<String> searchWords = searchText.toUpperCase().split(' ').where((String s) => s.isNotEmpty).toList();
+      List<String> searchWords = searchText.split(' ').where((String s) => s.isNotEmpty).toList();
       for (int i = 0; i < searchWords.length; i++) {
         if (!found) {
           List<List<dynamic>> first = widget.action == ActionType.edit ?
             filterList.where((List<dynamic> column) =>
-                jobTable[int.parse(column[iIndex])][tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
             filterList.where((List<dynamic> column) =>
-                column[tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
 
           if(first.isNotEmpty){
             filterList = List.of(first);
@@ -1668,9 +1668,9 @@ class _GridView extends State<GridView> {
         else {
           List<List<dynamic>> refined = widget.action == ActionType.edit ?
             filterList.where((List<dynamic> column) =>
-                jobTable[int.parse(column[iIndex])][tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+                jobTable[int.parse(column[iIndex])][tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
             filterList.where((List<dynamic> column) =>
-                column[tDescription].toUpperCase().toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+                column[tDescription].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
 
           if(refined.isNotEmpty){
             filterList = List.of(refined);
@@ -1706,8 +1706,8 @@ class _GridView extends State<GridView> {
                 return;
               }
 
-              _getFilterList();
-              searchList(value);
+              _setFilterList();
+              searchString(value.toUpperCase());
 
               setState(() {});
             }
@@ -1717,7 +1717,7 @@ class _GridView extends State<GridView> {
   }
 
   _searchCodes(){
-    searchList(String searchText){
+    searchCodeString(String searchText){
       if(widget.action == ActionType.edit){
         if(scanType == scanBarcode){
           filterList = filterList.where((List<dynamic> column) =>
@@ -1769,8 +1769,8 @@ class _GridView extends State<GridView> {
                 return;
               }
 
-              _getFilterList();
-              searchList(searchCtrl.text);
+              _setFilterList();
+              searchCodeString(searchCtrl.text.toUpperCase());
 
               // Automatically show item add popup if one item is found
               // Duplicate barcodes are not allowed so it should always only return one item for barcode scanning
@@ -1830,8 +1830,8 @@ class _GridView extends State<GridView> {
                 return;
               }
 
-              _getFilterList();
-              searchList(value);
+              _setFilterList();
+              searchCodeString(value.toUpperCase());
 
               setState(() {});
             },
@@ -2879,14 +2879,14 @@ Future<void> loadSpreadSheet(String filePath) async {
 
     for(int t = 1; t < table.rows.length; t++) {
       mainTable.add([
-        table.rows[t][0].toString(),
-        table.rows[t][1].toString(),
-        table.rows[t][2].toString(),
-        table.rows[t][3].toString(),
-        table.rows[t][4].toString(),
-        table.rows[t][5].toString(),
-        table.rows[t][6].toString(),
-        table.rows[t][7].toString()
+        table.rows[t][0].toUpperCase().toString(),
+        table.rows[t][1].toUpperCase().toString(),
+        table.rows[t][2].toUpperCase().toString(),
+        table.rows[t][3].toUpperCase().toString(),
+        table.rows[t][4].toUpperCase().toString(),
+        table.rows[t][5].toUpperCase().toString(),
+        table.rows[t][6].toUpperCase().toString(),
+        table.rows[t][7].toUpperCase().toString()
       ]);
 
       // Add item's category to master category
