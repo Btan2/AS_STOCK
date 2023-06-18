@@ -47,7 +47,6 @@ final Color colorOk = Colors.blue.shade400;
 final Color colorWarning = Colors.deepPurple.shade200;
 const Color colorEdit = Colors.blueGrey;
 const Color colorBack = Colors.redAccent;
-
 TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["fontScale"]);}
 TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 TextStyle get blackText{ return TextStyle(color: Colors.black, fontSize: sFile["fontScale"]);}
@@ -391,6 +390,10 @@ class _JobsPage extends State<JobsPage> {
       showAlert(context, "ERROR", "Failed to read job file => $e", Colors.red);
     }
 
+    if(!jobPageList.contains(path)){
+      jobPageList.add(path);
+    }
+
     setState(() {});
   }
 
@@ -495,10 +498,6 @@ class _JobsPage extends State<JobsPage> {
 
                                       await _copyJobFile(path);
                                       await _readJob(path);
-
-                                      if(!jobPageList.contains(path)){
-                                        jobPageList.add("/storage/emulated/0/Documents/${job.id}");
-                                      }
 
                                       await loadSpreadSheet(job.sheet).then((value) async{
                                         if(mainTable.isNotEmpty){
@@ -795,6 +794,7 @@ class Stocktake extends StatelessWidget {
               onPressed: () async {
                 mainTable = List.empty();
                 jobTable = List.empty();
+                masterCategory = List.empty();
                 copyIndex = -1;
                 goToPage(context, const JobsPage());
               },
@@ -2776,23 +2776,19 @@ Future<void> loadSpreadSheet(String filePath) async {
       return;
     }
 
-    SpreadsheetTable? table = decoder.tables[sheets.first];
+    SpreadsheetTable? table = decoder.tables[sheets.first]!;
 
-    if(table!.rows.isEmpty){
+    if(table.rows.isEmpty){
+      errorString = "Spreadsheet was not loaded!\nThe spreadsheet is empty!";
+      return;
+    }
+    else if(table.rows[0].length < 8){
+      errorString = "Spreadsheet was not loaded!\nThe spreadsheet does not cotain the correct number of rows.";
+      return;
     }
 
     //masterCategory = <String>["CATERING", "CHEMICALS", "CONSUMABLES", "INVOICE", "MISC"];
     masterCategory = List<String>.empty(growable: true);
-
-    if(table.rows.length < 2){
-      errorString = "Spreadsheet was not loaded!\nThe spreadsheet is empty!";
-      return;
-    }
-
-    if(table.rows[0].length != 8){
-      errorString = "Spreadsheet was not loaded!\nThe spreadsheet does not cotain the correct number of rows.";
-      return;
-    }
 
     // Start from 1 to ignore header row
     for(int t = 1; t < table.rows.length; t++) {
@@ -2802,7 +2798,7 @@ Future<void> loadSpreadSheet(String filePath) async {
         table.rows[t][Index.category].toString().toUpperCase(),
         table.rows[t][Index.description].toString().toUpperCase(),
         (table.rows[t][Index.uom] ?? "EACH").toString().toUpperCase(),
-        table.rows[t][Index.price].toString().toUpperCase(),
+        table.rows[t][Index.price].toString(),
         table.rows[t][Index.datetime].toString().toUpperCase(),
         (table.rows[t][Index.ordercode] ?? "").toString().toUpperCase()
       ]);
