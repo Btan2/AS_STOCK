@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
-enum Action{blank, edit, view, upload}
+enum Action{blank, edit, view, compare, upload}
 enum CellFormat{words, datetime, decimals, integers, multiline}
 
 String versionStr = "0.23.06+1";
 
-List<List<String>> oldTable = [];
-List<List<String>> mainTable = [];
+List<List<String>> jobTable = [];
+List<List<String>> bkpTable = [];
+List<List<String>> masterTable = [];
+List<String> jobCategory = [];
 List<String> masterCategory = [];
-List<Map<String, dynamic>> headerRow = [{}];
+List<Map<String, dynamic>> jobHeader = [{}];
+List<Map<String, dynamic>> masterHeader = [{}];
 
 TextStyle get whiteText{ return const TextStyle(color: Colors.white, fontSize: 20.0);}
 TextStyle get blackText{ return const TextStyle(color: Colors.black, fontSize: 20.0);}
@@ -109,8 +112,8 @@ class _LoginPage extends State<LoginPage>{
                     SizedBox(
                       height: MediaQuery.of(context).size.height/40.0,
                     ),
-                    GestureDetector(
-                      onTap: () async{
+                    TapRegion(
+                      onTapInside: (value) async{
                         if(pass == "pass" && username == "andy"){
                           setState(() {
                             splashColor = Colors.green;
@@ -151,13 +154,24 @@ class MainPage extends StatefulWidget{
 }
 class _MainPage extends State<MainPage>{
   Action action = Action.blank;
-  bool isLoading = false;
-  int activeRow = -1;
-  int activeCell = -1;
-  TextEditingController searchCtrl = TextEditingController();
-  List<List<String>> filterList = [[]];
+  TextEditingController masterSearchCtrl = TextEditingController();
+  TextEditingController jobSearchCtrl = TextEditingController();
+
+  List<List<String>> jobFilterList = [[]];
+  List<List<String>> masterFilterList = [[]];
+
+  List<String> masterEdit = [];
+  List<String> jobEdit = [];
+
+  String loadingMsg = "Loading...";
+  int masterRow = -1;
+  int masterCell = -1;
+
+  int jobRow = -1;
+  int jobCell = -1;
 
   int searchColumn = 0;
+  bool isLoading = false;
 
   @override
   void initState() {
@@ -166,94 +180,22 @@ class _MainPage extends State<MainPage>{
 
   @override
   void dispose(){
-    searchCtrl.dispose();
+    masterSearchCtrl.dispose();
+    jobSearchCtrl.dispose();
     super.dispose();
   }
 
-  ListView _drawerMenu(){
-    return ListView(
-      children: <Widget>[
-        const SizedBox(height: 5),
-        ListTile(
-          leading: const Icon( Icons.arrow_back_outlined, color: Colors.white),
-          hoverColor: Colors.white70,
-          onTap: (){
-            Navigator.pop(context);
-          },
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: const Icon( Icons.cloud_download, color: Colors.white),
-          title: const Text("View Master File", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-          hoverColor: Colors.white70,
-          onTap: (){
-            setState(() {
-              isLoading = true;
-            });
-
-            // Pull masterfile from server
-            _startFilePicker();
-            action = Action.view;
-            setState(() {});
-            Navigator.pop(context);
-          },
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: const Icon( Icons.open_in_browser, color: Colors.white),
-          title: const Text("Open XLSX File", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-          hoverColor: Colors.white70,
-          onTap: () {
-            setState(() {
-              isLoading = true;
-            });
-
-            _startFilePicker();
-            action = Action.view;
-            setState(() {});
-            Navigator.pop(context);
-          },
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: Icon( Icons.cloud_upload, color: Colors.red.shade50),
-          title: const Text("Upload changes to Masterfile", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-          hoverColor: Colors.white70,
-          onTap: () {
-            action = Action.upload;
-            setState(() {});
-            Navigator.pop(context);
-          },
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: const Icon(Icons.logout_outlined, color: Colors.white),
-          title: const Text("LOGOUT", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-          hoverColor: Colors.white70,
-          onTap: () async {
-            await confirmDialog(context, "End session and logout?").then((value){
-              if(value){
-                Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) => const LoginPage()));
-              }
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  void _startFilePicker() {
+  void _filePicker({bool? job}) {
+    // Load xlsx from file browser
     FileUploadInputElement uploadInput = FileUploadInputElement();
     uploadInput.click();
 
     uploadInput.onAbort.listen((e){
-        mainTable = List.empty();
-        setState(() {
-          isLoading = false;
-        });
-        return;
-      }
-    );
+      setState(() {
+        isLoading = false;
+      });
+      return;
+    });
 
     uploadInput.onChange.listen((e) {
       // read file content as dataURL
@@ -266,7 +208,6 @@ class _MainPage extends State<MainPage>{
       reader.readAsArrayBuffer(file);
 
       reader.onAbort.listen((e) {
-        mainTable = List.empty();
         setState(() {
           isLoading = false;
         });
@@ -277,10 +218,13 @@ class _MainPage extends State<MainPage>{
         return;
       });
 
-      reader.onLoadEnd.listen((e) async{
-        await loadSpreadSheet(reader.result as List<int>).then((value){
+      reader.onLoadEnd.listen((e) async {
+        bool master = (job ?? false) == false;
+        // Pull masterfile from server
+        await loadSpreadSheet(bytes: reader.result as List<int>, master: master).then((value){
           setState(() {
-            filterList = List.of(mainTable);
+            masterFilterList = List.of(masterTable);
+            jobFilterList = List.of(jobTable);
             isLoading = false;
           });
         });
@@ -288,7 +232,103 @@ class _MainPage extends State<MainPage>{
     });
   }
 
-  Widget _blank(double height){
+  Future<void> loadSpreadSheet({required List<int> bytes, required bool master}) async{
+    if(bytes.isEmpty){
+      loadingMsg = "...";
+      return;
+    }
+
+    if(!master){
+      jobTable = List.empty();
+    }
+    else{
+      masterTable = List.empty();
+    }
+
+    setState((){
+      loadingMsg = "Decoding spreadsheet...";
+    });
+    await Future.delayed(const Duration(seconds: 1));
+
+    try{
+      var decoder = SpreadsheetDecoder.decodeBytes(bytes);
+      var sheets = decoder.tables.keys.toList();
+      if(sheets.isEmpty){
+        return;
+      }
+
+      SpreadsheetTable? table = decoder.tables[sheets.first];
+      if(table!.rows.isEmpty || table.rows[0].length != 8){
+        return;
+      }
+
+      setState((){
+        loadingMsg = "Creating header row...";
+      });
+      await Future.delayed(const Duration(milliseconds:500));
+
+      if(!master){
+        jobHeader = List.generate(
+            table.rows[0].length, (index) => <String, dynamic>{"text" : table.rows[0][index].toString().toUpperCase(), "format" : CellFormat.words}
+        );
+      }
+      else{
+        masterHeader = List.generate(
+            table.rows[0].length, (index) => <String, dynamic>{"text" : table.rows[0][index].toString().toUpperCase(), "format" : CellFormat.words}
+        );
+        jobHeader = List.of(masterHeader);
+      }
+
+      setState((){
+        loadingMsg = "Creating categories...";
+      });
+      await Future.delayed(const Duration(milliseconds:500));
+
+      if(!master){
+        jobCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][2].toString().toUpperCase()).toSet().toList();
+      }
+      else{
+        masterCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][2].toString().toUpperCase()).toSet().toList();
+        jobCategory = List.of(masterCategory);
+      }
+
+      setState((){
+        loadingMsg = "Creating table...";
+      });
+      await Future.delayed(const Duration(milliseconds:500));
+
+      if(!master){
+        jobTable = List.generate(table.rows.length, (index) => List<String>.generate(jobHeader.length, (index2) => table.rows[index][index2].toString().toUpperCase()));
+        jobTable.removeAt(0); // Remove header from main
+      }
+      else{
+        masterTable = List.generate(table.rows.length, (index) => List<String>.generate(masterHeader.length, (index2) => table.rows[index][index2].toString().toUpperCase()));
+        masterTable.removeAt(0); // Remove header from main
+
+        setState((){
+          loadingMsg = "Creating backup table...";
+        });
+        await Future.delayed(const Duration(milliseconds:500));
+        bkpTable = List.of(masterTable); // Copy loaded masterTable for later use
+        jobTable = List.of(masterTable);
+      }
+
+      setState((){
+        loadingMsg = "The spreadsheet was imported.";
+      });
+
+      //return;
+    }
+    catch (e){
+      debugPrint("The Spreadsheet has errors:\n ---> $e");
+      isLoading = false;
+      loadingMsg = "The Spreadsheet has errors:\n ---> $e";
+      //return;
+    }
+  }
+
+  Widget _blank(){
+    double height = MediaQuery.of(context).size.height;
     return SizedBox(
       height: height,
       child: SvgPicture.asset("AS_logo_symbol.svg", width: height/2)
@@ -319,104 +359,189 @@ class _MainPage extends State<MainPage>{
     );
   }
 
-  Widget _searchBar(double width){
-    searchWords(String searchText){
-      bool found = false;
-      List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-      List<List<String>> refined = [[]];
-
-      for (int i = 0; i < searchWords.length; i++) {
-        if (!found) {
-          filterList = mainTable.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-
-          found = filterList.isNotEmpty;
-        }
-        else {
-          refined = filterList.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-
-          if(refined.isNotEmpty){
-            filterList = List.of(refined);
-          }
-        }
-      }
-
-      if(!found){
-        filterList = List.empty();
-      }
-    }
-
-    return Container(
-        width: width,
-        decoration: BoxDecoration(
-          color: colorOk,
-          border: Border.all(
-            color: colorOk,
-            style: BorderStyle.solid,
-            width: 2.0,
-          ),
-          borderRadius: BorderRadius.circular(20.0),
-        ),
-
-        child: ListTile(
-          leading: PopupMenuButton(
-              icon: const Icon(Icons.manage_search, color: Colors.white),
-              itemBuilder: (context) {
-                return List.generate(headerRow.length, (index) =>
-                    PopupMenuItem<int> (
-                      value: index,
-                      child: ListTile(
-                        title: Text("Search ${headerRow[index]["text"]}"),
-                        trailing: index == searchColumn ? const Icon(Icons.check) : null,
-                      ),
-                    )
-                );
-              },
-              onSelected: (value) async {
-                setState((){
-                  searchColumn = value;
-                });
-              }
-          ),
-
-          title: TextFormField(
-            controller: searchCtrl,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white,
-              hintText: "Search ${headerRow[searchColumn]["text"].toLowerCase()}...",
-              border: InputBorder.none,
+  Widget _comparePage(){
+    return Column(
+      children: [
+        Row(
+          children:[
+            Expanded(
+                child: _tableView(
+                    header: jobHeader,
+                    table: jobTable,
+                    width: MediaQuery.of(context).size.width * 0.5,
+                    height: MediaQuery.of(context).size.height/1.8,
+                    padding: 10.0,
+                    filterList: List.of(jobFilterList),
+                    searchCtrl: jobSearchCtrl,
+                    activeCell: jobCell,
+                    activeRow: jobRow,
+                    editItem: jobEdit,
+                    job: true
+              )
             ),
-
-            onChanged: (String value){
-              if(value.isNotEmpty){
-                searchWords(value.toUpperCase());
-              }
-              else{
-                filterList = List.of(mainTable);
-              }
-
-              setState(() {});
-            },
-          ),
-
-          trailing: IconButton(
-            icon: const Icon(Icons.clear, color: Colors.white),
-            onPressed: () {
-              searchCtrl.clear();
-              filterList = List.of(mainTable);
-              setState(() {});
-            },
-          ),
+            Expanded(
+                child: _tableView(
+                    header: masterHeader,
+                    table: masterTable,
+                    width: MediaQuery.of(context).size.width * 0.5,
+                    height: MediaQuery.of(context).size.height/1.8,
+                    padding: 10.0,
+                    filterList: List.of(masterFilterList),
+                    searchCtrl: masterSearchCtrl,
+                    activeRow: masterRow,
+                    activeCell: masterCell,
+                    editItem: masterEdit
+                )
+            ),
+          ]
         )
+      ],
     );
   }
 
-  Column _listTable({required double width, required double height}){
+  Widget _tableView({
+    bool? job,
+    required List<Map<String, dynamic>> header,
+    required List<List<String>> table,
+    required List<List<String>> filterList,
+    required double width,
+    required double height,
+    required double padding,
+    required TextEditingController searchCtrl,
+    required List<String> editItem,
+    required activeRow,
+    required activeCell,
+  }){
+
+    bool isJob = job ?? false;
+
     double cellHeight = height/8;
+
+    setTableState(){
+      setState((){
+        if(isJob){
+          jobSearchCtrl = searchCtrl;
+          jobFilterList = filterList;
+          jobRow = activeRow;
+          jobCell = activeCell;
+          jobEdit = editItem;
+        }
+        else{
+          masterSearchCtrl = searchCtrl;
+          masterFilterList = filterList;
+          masterRow = activeRow;
+          masterCell = activeCell;
+          masterEdit = editItem;
+        }
+      });
+    }
+
+    confirmEdit(int index){
+      setState((){
+        if(isJob){
+          jobTable[index] = List.of(editItem);
+        }
+        else{
+          masterTable[index] = List.of(editItem);
+        }
+      });
+    }
+
+    Widget searchBar(double width){
+      searchWords(String searchText){
+        bool found = false;
+        List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
+        List<List<String>> refined = [[]];
+
+        for (int i = 0; i < searchWords.length; i++) {
+          if (!found) {
+              filterList = table.where((row) => row[searchColumn].contains(searchWords[i])).toList();
+              found = filterList.isNotEmpty;
+          }
+          else {
+              refined = filterList.where((row) => row[searchColumn].contains(searchWords[i])).toList();
+              if(refined.isNotEmpty){
+                filterList = List.of(refined);
+              }
+          }
+        }
+
+        if(!found){
+            filterList = List.empty();
+        }
+      }
+
+      return Container(
+          width: width,
+          decoration: BoxDecoration(
+            color: colorOk,
+            border: Border.all(
+              color: colorOk,
+              style: BorderStyle.solid,
+              width: 2.0,
+            ),
+            borderRadius: BorderRadius.circular(20.0),
+          ),
+
+          child: ListTile(
+            leading: PopupMenuButton(
+                icon: const Icon(Icons.manage_search, color: Colors.white),
+                itemBuilder: (context) {
+                  return List.generate(header.length, (index) =>
+                      PopupMenuItem<int> (
+                        value: index,
+                        child: ListTile(
+                          title: Text("Search ${header[index]["text"]}"),
+                          trailing: index == searchColumn ? const Icon(Icons.check) : null,
+                        ),
+                      )
+                  );
+                },
+                onSelected: (value) async {
+                  setState((){
+                    searchColumn = value;
+                  });
+                }
+            ),
+
+            title: TextFormField(
+              controller: searchCtrl,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.white,
+                hintText: "Search ${header[searchColumn]["text"].toLowerCase()}...",
+                border: InputBorder.none,
+              ),
+
+              onChanged: (String value){
+                activeRow = -1;
+
+                if(value.isNotEmpty){
+                  searchWords(value.toUpperCase());
+                }
+                else{
+                    filterList = List.of(table);
+                }
+
+                setTableState();
+              },
+            ),
+
+            trailing: IconButton(
+              icon: const Icon(Icons.clear, color: Colors.white),
+              onPressed: () {
+                  searchCtrl.clear();
+                  filterList = table;
+                  setTableState();
+              },
+            ),
+          )
+      );
+    }
 
     Widget tableHeader(){
       return Row(
-        children: List.generate(headerRow.length, (index) => Expanded(
+        children: List.generate(header.length, (index) => Expanded(
           child: Container(
               height: cellHeight,
               decoration: BoxDecoration(
@@ -428,20 +553,20 @@ class _MainPage extends State<MainPage>{
                   width: 1.0,
                 ),
               ),
-              child: GestureDetector(
+              child: TapRegion(
                 child: Center(
                     child: Text(
-                      headerRow[index]["text"],
+                      header[index]["text"],
                       softWrap: true,
                       maxLines: 3,
                       overflow: TextOverflow.fade,
                       style: cellText
                   )
               ),
-              onTap: (){
+              onTapInside: (value){
                 showAlert(
                     context: context,
-                    text: "Cell Text: ${headerRow[index]["text"]}\n\nCell Format: ${headerRow[index]["format"]}"
+                    text: Text("Cell Text: ${header[index]["text"]}\n\nCell Format: ${header[index]["format"]}")
                 );
               },
             )
@@ -452,7 +577,7 @@ class _MainPage extends State<MainPage>{
 
     Widget editRow(){
       return Row(
-          children: List.generate(headerRow.length, (index) => Expanded(
+          children: List.generate(header.length, (index) => Expanded(
               child: Container(
                 height: cellHeight,
                 width: index == 3 ? 150 : 50,
@@ -465,35 +590,36 @@ class _MainPage extends State<MainPage>{
                     width: 2.0,
                   ),
                 ),
-                child: GestureDetector(
-                  onTap:(){
-                    setState((){
-                      activeCell = index;
-                    });
+                child: TapRegion(
+                  onTapInside:(value) {
+                    activeCell = index;
+                    setTableState();
                   },
+
                   child: activeCell == index ? TextFormField(
                     autofocus: true,
-                    initialValue: activeRow < 0 ? "" : mainTable[activeRow][index],
+                    initialValue: activeRow < 0 ? "" :  table[activeRow][index],
                     textAlign: TextAlign.center,
                     maxLines: 4,
                     onTapOutside: (value){
-                      setState((){
-                        // Disable text edit on tap outside
-                        activeCell = -1;
-                      });
+                      activeCell = -1; // Disable text edit on tap outside
+                      //editItem[index] = value as String;
+                      setTableState();
+                      // setState((){
+                      //   activeCell = -1;
+                      // });q
                     },
                     onChanged: (String value){
-                      setState(() {
-                          mainTable[activeRow][index] = value;
-                      });
-                      },
+                      editItem[index] = value;
+                      setTableState();
+                    },
                   ) : Text(
-                    activeRow < 0 ? "" : mainTable[activeRow][index],
+                    activeRow < 0 ? "" : editItem[index],
                     textAlign: TextAlign.center,
                     maxLines: 4,
                     softWrap: true,
                   ),
-              )
+                )
               )
           )
           )
@@ -501,15 +627,15 @@ class _MainPage extends State<MainPage>{
     }
 
     Widget getRow(int tableIndex){
-      return GestureDetector(
-          onTap: () {
-            setState(() {
-              activeRow = tableIndex;
-              //debugPrint(mainTable[activeRow].toString());
-            });
+      int tableLength = table[tableIndex].length;//isJob ? jobTable[tableIndex].length : masterTable[tableIndex].length;
+      return TapRegion(
+          onTapInside: (value) {
+            activeRow = tableIndex;
+            editItem = List.of(table[tableIndex]);
+            setTableState();
           },
           child: Row(
-              children: List.generate(mainTable[tableIndex].length, (index) => Expanded(
+              children: List.generate(tableLength, (index) => Expanded(
                   child: Container(
                     height: cellHeight,
                     decoration: BoxDecoration(
@@ -522,7 +648,7 @@ class _MainPage extends State<MainPage>{
                       ),
                     ),
                     child: Text(
-                      mainTable[tableIndex][index],
+                      table[tableIndex][index],
                       textAlign: TextAlign.center,
                       maxLines: 4,
                       softWrap: true,
@@ -534,91 +660,241 @@ class _MainPage extends State<MainPage>{
       );
     }
 
-    return Column(
-        children:[
-          SizedBox(
-            width: width,
-            child: tableHeader(),
-          ),
-          Container(  // Main Scrollable list
-              width: width,
-              height: height,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Colors.black.withOpacity(0.5),
-                  style: BorderStyle.solid,
-                  width: 1.0,
-                ),
-              ),
-              child: filterList.isNotEmpty ? ListView.builder(
-                  itemCount: filterList.length,
-                  prototypeItem: getRow(int.parse(filterList.first[0])),
-                  itemBuilder: (context, index) {
-                    final int tableIndex = int.parse(filterList[index][0]);
-                    return getRow(tableIndex);
-                  },
-                ) :
-              Row(
-                  children: [
-                    Expanded(child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,))
-                  ]
-              ),
-          ),
-          const SizedBox(
-            height: 5.0,
-          ),
-          _searchBar(width),
-          const SizedBox(
-            height: 5.0,
-          ),
-          Container(
-            width: width,
-            color: colorOk,
-            child: Text("Edit Row", textAlign: TextAlign.center, style: whiteText)
-          ),
-          SizedBox(
-            width: width,
-            child: editRow(),
-          ),
-        ]
+    return Padding(
+        padding: EdgeInsets.all(padding),
+        child: TapRegion(
+            onTapOutside: (value){
+              setState(() {
+                // if(activeCell < 0){
+                //   activeRow = -1;
+                // }
+              });
+            },
+
+            child: Column(
+                children:[
+                  SizedBox(
+                    width: width,
+                    child: tableHeader(),
+                  ),
+                  Container(  // Main Scrollable list
+                    width: width,
+                    height: height,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.black.withOpacity(0.5),
+                        style: BorderStyle.solid,
+                        width: 1.0,
+                      ),
+                    ),
+                    child: filterList.isNotEmpty ? ListView.builder(
+                      itemCount: filterList.length,
+                      prototypeItem: getRow(int.parse(filterList.first[0])),
+                      itemBuilder: (context, index) {
+                        final int tableIndex = int.parse(filterList[index][0]);
+                        return getRow(tableIndex);
+                      },
+                    ) :
+                    Row(
+                        children: [
+                          Expanded(child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,))
+                        ]
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 5.0,
+                  ),
+                  searchBar(width),
+                  const SizedBox(
+                    height: 5.0,
+                  ),
+                  Container(
+                      width: width,
+                      color: colorOk,
+                      child: Text("Edit Row", textAlign: TextAlign.center, style: whiteText)
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: editRow(),
+                  ),
+                  const SizedBox(
+                    height: 5.0,
+                  ),
+                  Row(
+                    children:[
+                      Center(
+                          child: ElevatedButton(
+                              onPressed: () {
+                                  activeRow = -1;
+                                  activeCell = -1;
+                                  setTableState();
+                              },
+                              child: const Text("CLEAR")
+                          )
+                      ),
+                      Center(
+                          child: ElevatedButton(
+                              onPressed: () {
+                                int i = int.tryParse(editItem[0]) ?? -1;
+                                if(i>- 0){
+                                  confirmEdit(i);
+                                }
+                              },
+                              child: const Text("SAVE EDIT")
+                          )
+                      ),
+                    ]
+                  )
+                ]
+            )
+        )
+    );
+
+  }
+
+  ListView _drawerMenu(){
+    return ListView(
+      children: <Widget>[
+        const SizedBox(height: 5),
+        ListTile(
+          leading: const Icon( Icons.arrow_back_outlined, color: Colors.white),
+          hoverColor: Colors.white70,
+          onTap: (){
+            Navigator.pop(context);
+          },
+        ),
+        const SizedBox(height: 20),
+        ListTile(
+          leading: const Icon( Icons.cloud_download, color: Colors.white),
+          title: const Text("Get Master File", style: TextStyle(color: Colors.white, fontSize: 20.0)),
+          hoverColor: Colors.white70,
+          onTap: () async {
+            setState(() {
+              loadingMsg = "Waiting for file...";
+              isLoading = true;
+              action = Action.view;
+            });
+
+            _filePicker();
+
+            Navigator.pop(context);
+          },
+        ),
+        const SizedBox(height: 20),
+        ListTile(
+          leading: Icon( Icons.open_in_browser, color: masterTable.isNotEmpty ? Colors.white : Colors.grey),
+          title: const Text("Upload Job File & Edit", style: TextStyle(color: Colors.white, fontSize: 20.0)),
+          hoverColor: Colors.white70,
+          onTap: () async {
+            if(masterTable.isNotEmpty){
+              setState(() {
+                loadingMsg = "Waiting for file...";
+                //isLoading = true;
+                action = Action.compare;
+              });
+
+              //_filePicker(job: true);
+              Navigator.pop(context);
+            }
+            else{
+              showAlert(context: context, text: const Text("MASTER table is empty.", textAlign: TextAlign.center,));
+              //Show pop up
+            }
+          }
+        ),
+        const SizedBox(height: 20),
+        ListTile(
+          leading: Icon( Icons.cloud_upload, color: Colors.red.shade50),
+          title: const Text("Upload changes to Masterfile", style: TextStyle(color: Colors.white, fontSize: 20.0)),
+          hoverColor: Colors.white70,
+          onTap: () {
+            action = Action.upload;
+            setState(() {});
+            Navigator.pop(context);
+          },
+        ),
+        const SizedBox(height: 20),
+        ListTile(
+          leading: const Icon(Icons.logout_outlined, color: Colors.white),
+          title: const Text("LOGOUT", style: TextStyle(color: Colors.white, fontSize: 20.0)),
+          hoverColor: Colors.white70,
+          onTap: () async {
+            await confirmDialog(context, "End session and logout?").then((value){
+              if(value){
+                masterTable = List.empty();
+                jobTable = List.empty();
+                jobHeader = List.empty();
+                masterHeader = List.empty();
+                masterCategory = List.empty();
+                jobCategory = List.empty();
+                bkpTable = List.empty();
+                
+                Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) => const LoginPage()));
+              }
+            });
+          },
+        ),
+      ],
     );
   }
 
   Widget _getMainBody(){
     double mediaHeight = MediaQuery.of(context).size.height;
-    // Show blank page
+
     if(action == Action.blank){
-      mainTable = List.empty();
-      return _blank(mediaHeight);
+      masterTable = List.empty();
+      return _blank();
     }
     else if(action == Action.upload){
       return _uploadPage();
+    }
+    else if(action == Action.compare){
+      if(isLoading){
+        return Column(
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height/3),
+              Text(loadingMsg, textAlign: TextAlign.center, style: blackText),
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
+              )
+            ]
+        );
+      }
+      else if(masterTable.isNotEmpty){
+        return _comparePage();
+      }
     }
     else if(action == Action.view){
       if(isLoading){
         return Column(
             children: [
-               SizedBox(height: mediaHeight/3),
-               Text("Loading...", textAlign: TextAlign.center, style: blackText),
-               Padding(
-                 padding: const EdgeInsets.all(20.0),
-                 child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-               )
-             ]
+              SizedBox(height: MediaQuery.of(context).size.height/3),
+              Text(loadingMsg, textAlign: TextAlign.center, style: blackText),
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
+              )
+            ]
         );
       }
-      else if(mainTable.isNotEmpty){
-        return Padding(
-            padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 8.0, bottom: 8.0),
-            child: _listTable(
-              width: MediaQuery.of(context).size.width/1.5,
-              height: mediaHeight /2,
-            )
+      else if(masterTable.isNotEmpty){
+        return _tableView(
+          header: masterHeader,
+            table: masterTable,
+            width: MediaQuery.of(context).size.width/1.5,
+            height: mediaHeight /2,
+            padding: 8.0,
+            filterList: masterFilterList,
+            searchCtrl: masterSearchCtrl,
+            activeRow: masterRow,
+            activeCell: masterCell,
+            editItem: masterEdit
         );
       }
     }
 
-    return _blank(mediaHeight);
+    return _blank();
   }
 
   @override
@@ -662,7 +938,7 @@ rBox({required double width, required Widget child}){
   );
 }
 
-showAlert({required BuildContext context, required String text, Color? color}) {
+showAlert({required BuildContext context, required Text text, Color? color}) {
   return showDialog(
       barrierDismissible: false,
       context: context,
@@ -675,7 +951,7 @@ showAlert({required BuildContext context, required String text, Color? color}) {
                   child: Center(
                     child: AlertDialog(
                       actionsPadding: const EdgeInsets.all(20.0),
-                      content: Text(text),
+                      content: text,
                       actions: [
                         ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: colorOk),
@@ -714,36 +990,6 @@ String getDateString(String d){
   }
 
   return newDate;
-}
-
-Future<void> loadSpreadSheet(List<int> bytes) async{
-  try{
-    var decoder = SpreadsheetDecoder.decodeBytes(bytes);
-    var sheets = decoder.tables.keys.toList();
-    if(sheets.isEmpty){
-      return;
-    }
-
-    SpreadsheetTable? table = decoder.tables[sheets.first];
-    if(table!.rows.isEmpty || table.rows[0].length != 8){
-      return;
-    }
-
-    headerRow = List.generate(
-        table.rows[0].length, (index) => <String, dynamic>{"text" : table.rows[0][index].toString().toUpperCase(), "format" : CellFormat.words}
-    );
-
-    mainTable = List.generate(table.rows.length, (index) => List.generate(headerRow.length, (index2) => table.rows[index][index2].toString().toUpperCase()));
-    mainTable.removeAt(0); // Remove header from main
-    oldTable = List.of(mainTable); // Copy loaded maintable for later use
-
-    masterCategory = List.generate(table.rows.length, (index) => table.rows[index][2].toString().toUpperCase()).toSet().toList();
-    return;
-  }
-  catch (e){
-    //debugPrint("The Spreadsheet has errors and was not loaded!\n--> $e");
-    return;
-  }
 }
 
 Future<bool> confirmDialog(BuildContext context, String str) async {
