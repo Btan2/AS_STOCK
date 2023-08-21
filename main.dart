@@ -9,7 +9,7 @@ BUILD NAMING CONVENTIONS:
    version.year.month+build
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.08 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.08 --build-number=2 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -25,7 +25,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:decimal/decimal.dart';
 
-const String versionStr = "0.23.08+1";
+const String versionStr = "0.23.08+2";
 
 Permission storageType = Permission.manageExternalStorage; //Permission.storage;
 List<String> jobPageList = [];
@@ -34,7 +34,7 @@ Map<String, dynamic> sFile = {};
 
 Directory? rootDir;
 enum Action {add, edit, addBarcode, addOrdercode}
-int searchColumn = 0;
+int searchColumn = 3; // Start search column on description
 int copyIndex = -1;
 
 String copyCode = "";
@@ -73,7 +73,12 @@ class Index{
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await getAppDir();
+
+  await getApplicationDocumentsDirectory().then((Directory value){
+    appDir = value.path;
+  });
+  //await getAppDir();
+
   await loadDefMastersheet();
   await loadSessionFile();
   runApp(
@@ -135,7 +140,8 @@ class HomePage extends StatelessWidget{
                                   prepareStorage();
                                 }
 
-                                await grantAccess().then((value){
+                                //await grantAccess().then((value){
+                                await storageType.isGranted.then((value){
                                   if(value){
                                     Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
                                   }
@@ -288,7 +294,9 @@ class _AppSettings extends State<AppSettings> {
 
                                     // Inform the user storage can be accessed
                                     prepareStorage();
-                                    await grantAccess().then((value){
+
+                                    // await grantAccess().then((value){
+                                    await storageType.isGranted.then((value){
                                       if(value){
                                         showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
                                       }
@@ -769,7 +777,6 @@ class _Stocktake extends State<Stocktake> {
 
   Future<void> loadSpreadSheet(String filePath) async {
     Uint8List bytes;
-
     if(!File(filePath).existsSync()){
       errorString = "FAILED TO LOAD SPREADSHEET!\nThe filepath does not exist: -> $filePath";
       return;
@@ -778,6 +785,7 @@ class _Stocktake extends State<Stocktake> {
     setState((){
       loadingMsg = "Decoding spreadsheet...";
     });
+
     await Future.delayed(const Duration(seconds: 1));
 
     try{
@@ -827,19 +835,11 @@ class _Stocktake extends State<Stocktake> {
         growable: true
       );
 
-      debugPrint(job.table[5].toString());
-
-      // // Add nof column -> all nofs should be false if loading from MASTERFILE
-      // for(int i = 0; i < job.table.length; i++){
-      //   job.table[i] = job.table[i] + ["false"];
-      // }
-
       job.table.removeAt(0); // Remove header row
 
       masterCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][2].toString().toUpperCase());
       masterCategory.removeAt(0); // Remove header row
       masterCategory = masterCategory.toSet().toList(); // Remove duplicates
-
     }
     catch (e){
       errorString = "$e";
@@ -847,10 +847,8 @@ class _Stocktake extends State<Stocktake> {
   }
 
   _getTable() async {
-
     if(job.table.isNotEmpty){
       await Future.delayed(const Duration(seconds: 1));
-
       setState(() {
         isLoading = false;
       });
@@ -888,8 +886,6 @@ class _Stocktake extends State<Stocktake> {
 
   _popBack(){
     if(!isLoading){
-      //job.table = List.empty();
-      //job.table = List.empty();
       //headerRow = List.empty();
       job = StockJob(id: "EMPTY");//, name: "EMPTY");
       masterCategory = List.empty();
@@ -926,7 +922,6 @@ class _Stocktake extends State<Stocktake> {
                   Card(
                     child: ListTile(
                       title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
-                      //subtitle: Text("\n${job.date}\n${job.sheet.split("/").last}\n\nTOTAL: ${job.total}", style: blackText),
                       subtitle: Text("\n${job.date}\n\nTOTAL: ${job.total}", style: blackText),
                     ),
                   ),
@@ -934,8 +929,9 @@ class _Stocktake extends State<Stocktake> {
                   headerPadding("Current Location:", TextAlign.left),
                   Card(
                     child: ListTile(
-                      title: job.location.isEmpty ? Text("Tap to select a location...", style: greyText) : Text(job.location, textAlign: TextAlign.center),
+                      title: job.location.isEmpty ? Text("Tap to select a location...", style: greyText) : Text(job.location, textAlign: TextAlign.center, softWrap: true, maxLines: 1, overflow: TextOverflow.ellipsis),
                       leading: job.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
+                      trailing: job.location.isNotEmpty ?  const Icon(Icons.playlist_add, color: colorEdit) : null,
                       onTap: () {
                         setLocation(context);
                       },
@@ -993,379 +989,6 @@ class _Stocktake extends State<Stocktake> {
   }
 }
 
-class ExportPage extends StatelessWidget{
-  ExportPage({super.key});
-
-  // Shortened Month names
-  final List<String> monthNames = ["what", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  _exportXLSX() async {
-    List<List<dynamic>> finalSheet = [];
-
-    for(int i = 0; i < job.stocktake.length; i++){
-      bool skip = false;
-      int tableIndex = int.parse(job.stocktake[i][Index.index]);
-
-      for(int j = 0; j < finalSheet.length; j++) {
-        // Check if item already exists
-        skip = int.parse(finalSheet[j][Index.index].toString()) == tableIndex;
-
-        // Add QTY and TOTAL COST to existing item
-        if(skip){
-          Decimal quantity = Decimal.parse(finalSheet[j][4].toString()) + Decimal.parse(job.stocktake[i][Index.stockCount]);
-          finalSheet[j][4] = quantity.toString();
-          //Decimal cost = quantity * Decimal.parse(jobTable[tableIndex][Index.price]);
-          //finalSheet[j][5] = (cost).toStringAsFixed(2);
-          break;
-        }
-      }
-
-      // Item doesn't exist, so add new item to the sheet
-      if(!skip){
-        Decimal quantity = Decimal.parse(job.stocktake[i][Index.stockCount].toString());
-        Decimal price = Decimal.parse(job.table[tableIndex][Index.price]);
-        //Decimal cost = quantity * Decimal.parse(jobTable[tableIndex][Index.price]);
-
-        String barcode = job.table[tableIndex][Index.barcode].toString();
-        if(barcode == "null") {
-          barcode = "";
-        }
-
-        String ordercode = job.table[tableIndex][Index.ordercode].toString();
-        if(ordercode == "null"){
-          ordercode = "";
-        }
-
-        finalSheet.add([
-          job.table[tableIndex][Index.index].toString(),                             // INDEX
-          job.table[tableIndex][Index.category].toString().toUpperCase(),            // CATEGORY
-          job.table[tableIndex][Index.description].toString().toUpperCase(),         // DESCRIPTION
-          job.table[tableIndex][Index.uom].toString().toUpperCase(),                 // UOM
-          quantity.toString(),                                                      // QTY
-          (price).toStringAsFixed(2),                                               // UNIT PRICE
-          barcode,                                                                  // BARCODES
-          job.table[tableIndex][Index.nof].toUpperCase() == "TRUE",                  // NOF
-          getDateString(job.table[tableIndex][Index.datetime].toString()),           // DATETIME
-          ordercode,                                                                // ORDERCODE
-        ]);
-      }
-    }
-
-    var excel = Excel.createExcel();
-    var sheetObject = excel['Sheet1'];
-    sheetObject.isRTL = false;
-
-    // Add header row
-    sheetObject.insertRowIterables(["Master Index", "Category", "Description", "UOM", 'QTY', "Unit Price", "Barcode", "NOF", "Datetime", "Ordercode"], 0,);
-    for(int i = 0; i < finalSheet.length; i++){
-      sheetObject.insertRowIterables(
-          <String> [
-            finalSheet[i][0], // INDEX
-            finalSheet[i][1], // CATEGORY
-            finalSheet[i][2], // DESCRIPTION
-            finalSheet[i][3], // UOM
-            finalSheet[i][4], // QTY
-            finalSheet[i][5], // UNIT PRICE
-            finalSheet[i][6], // BARCODES
-            finalSheet[i][7].toString(), // NOF
-            finalSheet[i][8], // DATETIME
-            finalSheet[i][9], // ORDERCODE
-          ],
-          i+1
-      );
-
-      int yearThen = int.parse(finalSheet[i][8].split("/").last);
-      // Get last two year digits using mod
-      int diff = (DateTime.now().year % 100) - (yearThen % 100);
-      // Color code cell if date is older than 1 year
-      if(diff > 0){
-        var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
-        cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
-      }
-    }
-
-    // Set column widths
-    sheetObject.setColWidth(0, 15.0); // INDEX
-    sheetObject.setColWidth(1, 25.0); // CATEGORY
-    sheetObject.setColWidth(2, 75.0); // DESCRIPTION
-    sheetObject.setColWidth(3, 25.0); // UOM
-    sheetObject.setColWidth(4, 15.0); // QTY
-    sheetObject.setColWidth(5, 25.0); // COST EX GST
-    sheetObject.setColWidth(6, 25.0); // BARCODES
-    sheetObject.setColWidth(7, 15.0); // NOF
-
-    String filePath = "/storage/emulated/0/Documents/${job.id}/stocktake_${job.id}.xlsx";
-
-    var fileBytes = excel.save();
-    File(filePath)..createSync(recursive: true)..writeAsBytesSync(fileBytes!);
-  }
-
-  _gunDataTXT(){
-    String finalTxt = "";
-    for(int i = 0; i < job.stocktake.length; i++){
-      finalTxt += "S    ";
-      int tableIndex = int.parse(job.stocktake[i][Index.index]);
-
-      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
-      String bcode = job.table[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
-      while(bcode.length < 22){
-        bcode += " ";
-      }
-
-      finalTxt += bcode;
-
-      // Count (4 characters)
-      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
-      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
-
-      while(count.length < 4) {
-        count += " ";
-      }
-
-      finalTxt += count;
-
-      // Location (25 characters)
-      String stockLocation = job.stocktake[i][Index.stockLocation].toString();
-      if(stockLocation.length > 25){
-        stockLocation.substring(0,25);
-      }
-
-      while(stockLocation.length < 25){
-        stockLocation += " ";
-      }
-
-      finalTxt += stockLocation;
-      finalTxt += "\n";
-    }
-
-    String date = job.date.toString().replaceAll("/", "-");
-    var path = '/storage/emulated/0/Documents/${job.id}/$date-${job.id}-fdapp.txt';
-    var jobFile = File(path);
-    jobFile.writeAsString(finalTxt);
-  }
-
-  _exportHL(){
-    String finalTxt = "";
-    String shortYear = DateTime.now().year.toString().substring(2);
-    String shortMonth = monthNames[DateTime.now().month];
-
-    String dateTime = "${DateTime.now().day}/${DateTime.now().month}/$shortYear${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second}";
-    for(int i = 0; i < job.stocktake.length; i++) {
-      // Location (4 chars)
-      String locationIndex = job.stocktake[i][Index.stockLocation];
-      String locationNum = (job.allLocations.indexOf(locationIndex) + 1).toString();
-
-      while(locationNum.length < 4){
-        locationNum = "0$locationNum";
-      }
-      finalTxt += "$locationNum,";
-
-      // Barcode (16 chars)
-      int tableIndex = int.parse(job.stocktake[i][Index.index]);
-      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
-      String bcode = job.table[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
-
-//      String bcode = jt[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
-
-      while(bcode.length < 16){
-        bcode += " ";
-      }
-      finalTxt += "$bcode,";
-
-      // Qty (5 chars + 1 whitespace)
-      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
-      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
-
-      while(count.length < 5){
-        count = "0$count";
-      }
-      finalTxt += "$count ,";
-
-      finalTxt += dateTime;
-      finalTxt += "\n";
-    }
-
-    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-    var path = '/storage/emulated/0/Documents/${job.id}/IMPORT_${job.id}_$dateOutput.txt';
-    var jobFile = File(path);
-    jobFile.writeAsString(finalTxt);
-  }
-
-  _exportbarcodeQty(){
-    String finalTxt = "";
-    for(int i = 0; i < job.stocktake.length; i++) {
-      // Barcodes (22 characters)
-      // Using first barcode since barcodes can be multiline
-      int tableIndex = int.parse(job.stocktake[i][Index.index]);
-      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
-      List<String> bcodeList = job.table[tableIndex][Index.barcode].toString().split(",").toList();
-      String barcode = "";
-
-      if(bcodeList.isEmpty){
-        barcode = "NULL";
-      }
-      else{
-        barcode = bcodeList[barcodeIndex];
-      }
-
-      while(barcode.length < 22){
-        barcode += " ";
-      }
-
-      finalTxt += "$barcode,";
-
-      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
-      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
-      finalTxt += "\n";
-    }
-
-    String shortMonth = monthNames[DateTime.now().month];
-    String shortYear = DateTime.now().year.toString().substring(2);
-    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-    var path = '/storage/emulated/0/Documents/${job.id}/BARCODEQTY_${job.id}_$dateOutput.txt';
-    var jobFile = File(path);
-    jobFile.writeAsString(finalTxt);
-  }
-
-  _exportOrdercodeQty(){
-    String finalTxt = "";
-    for(int i = 0; i < job.stocktake.length; i++) {
-
-      // Barcodes (22 characters) Using first barcode since barcodes can be multiline
-      int tableIndex = int.parse(job.stocktake[i][Index.index]);
-      int ordercodeIndex = int.parse(job.stocktake[i][Index.stockOrdercodes]); // Prints specific barcode
-      List<String> ocodeList = job.table[tableIndex][Index.ordercode].toString().split(",").toList();
-
-      String ordercode = "";
-
-      if(ocodeList.isEmpty){
-        ordercode = "NULL";
-      }
-      else{
-        ordercode = ocodeList[ordercodeIndex];
-      }
-
-      if(ordercode.isEmpty){
-        ordercode = "NULL";
-      }
-
-      while(ordercode.length < 22){
-        ordercode += " ";
-      }
-
-      finalTxt += "$ordercode,";
-
-      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount].toString()) ?? 0;
-      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
-      finalTxt += "\n";
-    }
-
-    String shortMonth = monthNames[DateTime.now().month];
-    String shortYear = DateTime.now().year.toString().substring(2);
-    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-    var path = '/storage/emulated/0/Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt';
-    var jobFile = File(path);
-    jobFile.writeAsString(finalTxt);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-        onWillPop: () async => goToPage(context, const Stocktake()),
-        child: Scaffold(
-            appBar: AppBar(
-              automaticallyImplyLeading: false,
-              centerTitle: true,
-              title: const Text("Export Stocktake"),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: (){
-                  goToPage(context, const Stocktake());
-                },
-              ),
-            ),
-            body: SingleChildScrollView(
-                child: Center(
-                    child: Column(
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height / 20.0,
-                          ),
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('XLSX', style: whiteText),
-                                onPressed: () {
-                                  _exportXLSX();
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/stocktake_${job.id}.xlsx", Colors.orange);
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('SCANDATA (.TXT)', style: whiteText),
-                                onPressed: () {
-                                  _gunDataTXT();
-                                  String date = job.date.toString().replaceAll("_", "-");
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/$date-${job.id}-fdapp.txt", Colors.orange);
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('H&L (POS)', style: whiteText),
-                                onPressed: () {
-                                  _exportHL();
-                                  String shortMonth = monthNames[DateTime.now().month];
-                                  String shortYear = DateTime.now().year.toString().substring(2);
-                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-                                  showAlert(context, "Job Data Exported!", '../Documents/${job.id}/IMPORT_${job.id}_$dateOutput.txt', Colors.orange);
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('Barcode / Qty', style: whiteText),
-                                onPressed: () {
-                                  _exportbarcodeQty();
-                                  String shortMonth = monthNames[DateTime.now().month - 1];
-                                  String shortYear = DateTime.now().year.toString().substring(2);
-                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/BARCODEQTY_${job.id}_$dateOutput.txt", Colors.orange);
-                                },
-                              )
-                          ),
-                          rBox(
-                              context,
-                              colorOk,
-                              TextButton(
-                                child: Text('Ordercode / Qty', style: whiteText),
-                                onPressed: () {
-                                  _exportOrdercodeQty();
-
-                                  String shortMonth = monthNames[DateTime.now().month];
-                                  String shortYear = DateTime.now().year.toString().substring(2);
-                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
-                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt\n", Colors.orange);
-                                },
-                              )
-                          ),
-                        ]
-                    )
-                )
-            )
-        )
-    );
-  }
-}
-
 class GridView extends StatefulWidget {
   final Action action;
   const GridView({
@@ -1377,6 +1000,8 @@ class GridView extends StatefulWidget {
   State<GridView>  createState() => _GridView();
 }
 class _GridView extends State<GridView> {
+  TextEditingController descriptCtrl = TextEditingController();
+  TextEditingController priceCtrl = TextEditingController();
   TextEditingController barcodeCtrl = TextEditingController();
   TextEditingController ordercodeCtrl = TextEditingController();
   TextEditingController countCtrl = TextEditingController();
@@ -1389,9 +1014,6 @@ class _GridView extends State<GridView> {
   List<String> ordercodeList = List.empty();
   Color colorMode = colorOk;
 
-  // String locationText = "";
-  String descriptionText = "";
-  String priceText = "";
   String categoryValue = "MISC";
   String scanText = '';
   int barcodeIndex = 0;
@@ -1434,6 +1056,8 @@ class _GridView extends State<GridView> {
       currentFocus.unfocus();
     }
 
+    descriptCtrl.dispose();
+    priceCtrl.dispose();
     barcodeCtrl.dispose();
     ordercodeCtrl.dispose();
     countCtrl.dispose();
@@ -1671,11 +1295,14 @@ class _GridView extends State<GridView> {
   }
 
   void _setEmptyText(String barcode, String ordercode){
+    // locationText = job.location;
+    // descriptionText = "";
+    // priceText = "0.0";
+
     categoryValue = "MISC";
     countCtrl.text = "0.0";
-    descriptionText = "";
-    // locationText = job.location;
-    priceText = "0.0";
+    descriptCtrl.text = "";
+    priceCtrl.text = "0.0";
     barcodeIndex = 0;
     barcodeList = List.empty(growable: true);
     barcodeList.add(barcode);
@@ -1709,9 +1336,11 @@ class _GridView extends State<GridView> {
       }
 
       categoryValue = job.table[tableIndex][Index.category];
-      descriptionText = job.table[tableIndex][Index.description];
+      descriptCtrl.text = job.table[tableIndex][Index.description];
+      priceCtrl.text = double.parse(job.table[tableIndex][Index.price]).toStringAsFixed(2);
+      //descriptionText =
       // locationText = filterList[index][iLocation].toString();
-      priceText = double.parse(job.table[tableIndex][Index.price]).toStringAsFixed(2);
+      // priceText =
   }
 
   Widget _searchBar(){
@@ -2010,7 +1639,6 @@ class _GridView extends State<GridView> {
               setState(() {});
             },
 
-
               child: Container(
                 height: cellHeight,
                 decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
@@ -2023,7 +1651,7 @@ class _GridView extends State<GridView> {
 
           TapRegion(
             onTapInside: (value) async {
-              await textEditDialog(context, "").then((value){
+              await textEditDialog(context, job.stocktake[pIndex][Index.stockLocation]).then((value){
                 String editStr = value.toUpperCase();
                 if(!job.allLocations.contains(editStr)){
                   job.allLocations.add(editStr);
@@ -2033,10 +1661,6 @@ class _GridView extends State<GridView> {
 
                 writeJob(job);
               });
-
-              //setLocation(context);
-              //editLocation(job.table[tableIndex][Index.stockLocation], tableIndex);
-              //debugPrint("BITCH NUGGETS");
             },
             child:  Container(
               width: 100.0,
@@ -2090,19 +1714,15 @@ class _GridView extends State<GridView> {
   Widget _rowAdd(int pIndex, double cellHeight){
     int tableIndex = int.parse(filterList[pIndex][Index.index].toString());
     String descript = job.table[tableIndex][Index.description];
-
     String lastCell = "";
+
     if(searchColumn != Index.index && searchColumn != Index.description){
       lastCell = job.table[tableIndex][searchColumn];
     }
 
     return GestureDetector(
       onLongPress: () async {
-        await longPressSelect(context, tableIndex);//.then((value) async{
-          //if(value){
-
-          //}
-        //});
+        await longPressSelect(context, tableIndex);
       },
 
       onTap: () async {
@@ -2168,29 +1788,26 @@ class _GridView extends State<GridView> {
 
   Widget _editPopup(int index) {
     bool newItem = index == -1;
-
     confirmEdit() async {
       String msg = "";
       if(newItem){
-        msg = "Add NOF to stocktake?\n-> $descriptionText";
+        msg = "Add NOF to stocktake?\n-> ${descriptCtrl.text}";
       }
       else {
-        msg = "Confirm changes to NOF item?";
+        msg = "Confirm changes?";
       }
 
       await confirmDialog(context, msg).then((bool value) async {
         if (value) {
           bool editError = false;
           bool barcodeIsEmpty = false;
-
           String finalBarcode = "";
-          if(descriptionText.isEmpty){
+          if(descriptCtrl.text.isEmpty){
             editError = true;
             showAlert(context, "ERROR:", "Description text must not be empty!", colorWarning);
           }
 
           barcodeIsEmpty = barcodeList.isEmpty || (barcodeList.length == 1 && barcodeList[0].isEmpty);
-
           if(!barcodeIsEmpty) {
             for(int i = 0; i < barcodeList.length; i++){
               if(i > 0){
@@ -2218,20 +1835,21 @@ class _GridView extends State<GridView> {
               // ADD NEW ITEM TO STOCKTAKE IF COUNT IS GOOD
               double addCount = double.tryParse(countCtrl.text) ?? 0.0;
               if(addCount > 0){
+                int newIndex = job.table.length;
                 job.table.add(<String>[
-                  job.table.length.toString(),
+                  newIndex.toString(),
                   finalBarcode,
                   categoryValue,
-                  descriptionText.toUpperCase(),
+                  descriptCtrl.text.toUpperCase(),
                   "EACH",
-                  Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString(),
+                  Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString(),
                   "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
                   finalOrdercode,
                   true.toString()
                 ]);
 
                 job.stocktake.add(<String>[
-                  job.table.length.toString(),
+                  newIndex.toString(),
                   Decimal.parse(double.parse(addCount.toString()).toStringAsFixed(3)).toString(), // Decimal.parse(addCount.toString()),
                   job.location,
                   '0', // Use first barcode in barcode list by default
@@ -2246,12 +1864,11 @@ class _GridView extends State<GridView> {
               int tableIndex = int.parse(filterList[index][Index.index]);
               job.table[tableIndex][Index.barcode] = finalBarcode;
               job.table[tableIndex][Index.category] = categoryValue;
-              job.table[tableIndex][Index.description] = descriptionText.toUpperCase();
+              job.table[tableIndex][Index.description] = descriptCtrl.text.toUpperCase();
               //job.table[tableIndex][Index.uom] = "EACH";
-              job.table[tableIndex][Index.price] = Decimal.parse(double.parse(priceText).toStringAsFixed(2)).toString();
+              job.table[tableIndex][Index.price] = Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString();
               job.table[tableIndex][Index.datetime] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
               job.table[tableIndex][Index.ordercode] = finalOrdercode;
-              //job.table[tableIndex][Index.nof] = true.toString();
             }
 
             setState(() {});
@@ -2307,9 +1924,10 @@ class _GridView extends State<GridView> {
                     },
                     onSelected: (value) async {
                       if(copyIndex != -1){
-                        descriptionText = job.table[copyIndex][Index.description];
+                        descriptCtrl.text = job.table[copyIndex][Index.description];
+                        // descriptionText =
                         categoryValue = job.table[copyIndex][Index.category];
-                        priceText = double.parse(job.table[copyIndex][Index.price]).toStringAsFixed(2);
+                        priceCtrl.text = double.parse(job.table[copyIndex][Index.price]).toStringAsFixed(2);
                       }
                       setState((){});
                     }
@@ -2326,19 +1944,94 @@ class _GridView extends State<GridView> {
                         child: Card(
                           child: ListTile(
                             title: TextFormField(
-                              initialValue: descriptionText,
+                              controller: descriptCtrl,
                               scrollPadding: EdgeInsets.symmetric(vertical: keyboardHeight/2),
                               textAlign: TextAlign.center,
                               keyboardType: TextInputType.name,
-                              onChanged: (String s) {
-                                descriptionText = s;
-                                setState((){});
-                              },
+                              //initialValue: descriptionText,
+                              // onChanged: (String s) {
+                              //   descriptionText = s;
+                              //   setState((){});
+                              // },
                             ),
                           ),
                         )
                     ),
+                    titlePadding("Category:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                        child: DropdownButton<String>(
+                          value: categoryValue,
+                          isExpanded: true,
+                          menuMaxHeight: MediaQuery.of(context).size.height / 2.0,
+                          icon: const Icon(Icons.keyboard_arrow_down),
+                          onChanged:((value) {
+                            setState(() {
+                              categoryValue = value!;
+                            });
+                          }),
+                          items: masterCategory.map((String value) {
+                            return DropdownMenuItem(
+                              value: value,
+                              child: Center(
+                                  child: Text(value, textAlign: TextAlign.center,)
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
 
+                    titlePadding("Price:", TextAlign.left),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                      child: Card(
+                          child: ListTile(
+                            title: TextFormField(
+                              controller: priceCtrl,
+                              textAlign: TextAlign.center,
+                              scrollPadding:  EdgeInsets.symmetric(vertical: keyboardHeight/2),
+                              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                              //initialValue: priceText,
+                              // onChanged: (String s) {
+                              //   priceText = s;
+                              //   setState((){});
+                              // }
+                            ),
+                          )
+                      ),
+                    ),
+
+                    index == -1 ? titlePadding("Add to Stocktake:", TextAlign.left) : Container(),
+                    index == -1 ? Padding(
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                        child: Card(
+                            child: ListTile(
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: () {
+                                  double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
+                                  countCtrl.text = count.toString();
+                                  setState((){});
+                                },
+                              ),
+                              title: TextField(
+                                controller: countCtrl,
+                                textAlign: TextAlign.center,
+                                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                              ),
+                              leading: IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: () {
+                                  double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
+                                  countCtrl.text = max(count, 0.0).toString();
+                                  setState((){});
+                                },
+                              ),
+                            )
+                        )
+                    ) : Container(),
                     titlePadding("Barcode:", TextAlign.left),
                     Padding(
                         padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 10, bottom: 5),
@@ -2469,81 +2162,6 @@ class _GridView extends State<GridView> {
                             )
                         )
                     ),
-
-                    titlePadding("Category:", TextAlign.left),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                      child: Card(
-                        child: DropdownButton<String>(
-                          value: categoryValue,
-                          isExpanded: true,
-                          menuMaxHeight: MediaQuery.of(context).size.height / 2.0,
-                          icon: const Icon(Icons.keyboard_arrow_down),
-                          onChanged:((value) {
-                            setState(() {
-                              categoryValue = value!;
-                            });
-                          }),
-                          items: masterCategory.map((String value) {
-                            return DropdownMenuItem(
-                              value: value,
-                              child: Center(
-                                  child: Text(value, textAlign: TextAlign.center,)
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-
-                    titlePadding("Price:", TextAlign.left),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                      child: Card(
-                          child: ListTile(
-                            title: TextFormField(
-                                initialValue: priceText,
-                                textAlign: TextAlign.center,
-                                scrollPadding:  EdgeInsets.symmetric(vertical: keyboardHeight/2),
-                                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                onChanged: (String s) {
-                                  priceText = s;
-                                  setState((){});
-                                }
-                            ),
-                          )
-                      ),
-                    ),
-
-                    index == -1 ? titlePadding("Add to Stocktake:", TextAlign.left) : Container(),
-                    index == -1 ? Padding(
-                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                        child: Card(
-                            child: ListTile(
-                              trailing: IconButton(
-                                icon: const Icon(Icons.add_circle_outline),
-                                onPressed: () {
-                                  double count = (double.tryParse(countCtrl.text) ?? 0.0)+ 1;
-                                  countCtrl.text = count.toString();
-                                  setState((){});
-                                },
-                              ),
-                              title: TextField(
-                                controller: countCtrl,
-                                textAlign: TextAlign.center,
-                                keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                              ),
-                              leading: IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
-                                onPressed: () {
-                                  double count = (double.tryParse(countCtrl.text) ?? 0.0) - 1.0;
-                                  countCtrl.text = max(count, 0.0).toString();
-                                  setState((){});
-                                },
-                              ),
-                            )
-                        )
-                    ) : Container(),
                   ],
                 )
             ),
@@ -2555,8 +2173,11 @@ class _GridView extends State<GridView> {
                           rBox(context, colorOk,
                               TextButton(
                                 child: Text('Confirm', style: whiteText),
-                                onPressed: () async{
-                                  lastCategory = categoryValue;
+                                onPressed: () async {
+                                  setState((){
+                                    lastCategory = categoryValue;
+                                  });
+
                                   confirmEdit();
                                 },
                               )
@@ -2652,7 +2273,7 @@ class _GridView extends State<GridView> {
                           childAspectRatio: itemAspectRatio,
                         ),
                         delegate: SliverChildBuilderDelegate( (BuildContext context, int pIndex) {
-                          if (pIndex >= filterList.length){
+                          if (pIndex >= filterList.length - 1){
                             return null;
                           }
                           return Container(
@@ -2772,43 +2393,405 @@ class _GridView extends State<GridView> {
   }
 }
 
-getAppDir() async{
-  final directory = await getApplicationDocumentsDirectory();
-  appDir = directory.path;
-}
+class ExportPage extends StatelessWidget{
+  ExportPage({super.key});
+  // Shortened Month names
+  final List<String> monthNames = ["what", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-String getDateString(String d){
-  // // If date contains '/' , '-' or 'T' it is asssumed correct
-  // if(d.contains("T")){
-  //   return d.substring(0, d.indexOf("T")).toString();
-  // }
-  // else if(d.contains("/") || d.contains("-")){
-  //   return d;
-  // }
-
-  String newDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-
-  if(d.isNotEmpty) {
-    try{
-      int timestamp = int.tryParse(d) ?? -1;
-      if(timestamp != -1){
-        const gsDateBase = 2209161600 / 86400;
-        const gsDateFactor = 86400000;
-        final millis = (timestamp - gsDateBase) * gsDateFactor;
-        String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
-        date = date.substring(0, 10);
-        List<String> dateSplit = date.split("-");
-        newDate = "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+  String _getDateString(String d){
+    // // If date contains '/' , '-' or 'T' it is asssumed correct
+    // if(d.contains("T")){
+    //   return d.substring(0, d.indexOf("T")).toString();
+    // }
+    // else if(d.contains("/") || d.contains("-")){
+    //   return d;
+    // }
+    String todayDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+    if(d.isNotEmpty) {
+      try{
+        int timestamp = int.tryParse(d) ?? -1;
+        if(timestamp != -1){
+          const gsDateBase = 2209161600 / 86400;
+          const gsDateFactor = 86400000;
+          final millis = (timestamp - gsDateBase) * gsDateFactor;
+          String date = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true).toString();
+          date = date.substring(0, 10);
+          List<String> dateSplit = date.split("-");
+          todayDate = "${dateSplit[2]}/${dateSplit[1]}/${dateSplit[0]}";
+        }
+      }
+      catch (e){
+        errorString = "$e";
+        writeErrLog(errorString, "_getDateString()");
+        return todayDate;
       }
     }
-    catch (e){
-      errorString = "$e";
-      writeErrLog(errorString, "getDateString()");
-      return newDate;
-    }
+    return todayDate;
   }
 
-  return newDate;
+  _exportXLSX() async {
+    List<List<dynamic>> finalSheet = [];
+
+    for(int i = 0; i < job.stocktake.length; i++){
+      bool skip = false;
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+
+      for(int j = 0; j < finalSheet.length; j++) {
+        // Check if item already exists
+        skip = int.parse(finalSheet[j][Index.index].toString()) == tableIndex;
+
+        // Add QTY and TOTAL COST to existing item
+        if(skip){
+          Decimal quantity = Decimal.parse(finalSheet[j][4].toString()) + Decimal.parse(job.stocktake[i][Index.stockCount]);
+          finalSheet[j][4] = quantity.toString();
+          //Decimal cost = quantity * Decimal.parse(jobTable[tableIndex][Index.price]);
+          //finalSheet[j][5] = (cost).toStringAsFixed(2);
+          break;
+        }
+      }
+
+      // Item doesn't exist, so add new item to the sheet
+      if(!skip){
+        Decimal quantity = Decimal.parse(job.stocktake[i][Index.stockCount].toString());
+        Decimal price = Decimal.parse(job.table[tableIndex][Index.price]);
+        //Decimal cost = quantity * Decimal.parse(jobTable[tableIndex][Index.price]);
+
+        String barcode = job.table[tableIndex][Index.barcode].toString();
+        if(barcode == "null") {
+          barcode = "";
+        }
+
+        String ordercode = job.table[tableIndex][Index.ordercode].toString();
+        if(ordercode == "null"){
+          ordercode = "";
+        }
+
+        finalSheet.add([
+          job.table[tableIndex][Index.index].toString(),                             // INDEX
+          job.table[tableIndex][Index.category].toString().toUpperCase(),            // CATEGORY
+          job.table[tableIndex][Index.description].toString().toUpperCase(),         // DESCRIPTION
+          job.table[tableIndex][Index.uom].toString().toUpperCase(),                 // UOM
+          quantity.toString(),                                                      // QTY
+          (price).toStringAsFixed(2),                                               // UNIT PRICE
+          barcode,                                                                  // BARCODES
+          job.table[tableIndex][Index.nof].toUpperCase() == "TRUE",                  // NOF
+          _getDateString(job.table[tableIndex][Index.datetime].toString()),           // DATETIME
+          ordercode,                                                                // ORDERCODE
+        ]);
+      }
+    }
+
+    var excel = Excel.createExcel();
+    var sheetObject = excel['Sheet1'];
+    sheetObject.isRTL = false;
+
+    // Add header row
+    sheetObject.insertRowIterables(["Master Index", "Category", "Description", "UOM", 'QTY', "Unit Price", "Barcode", "NOF", "Datetime", "Ordercode"], 0,);
+    for(int i = 0; i < finalSheet.length; i++){
+      sheetObject.insertRowIterables(
+          <String> [
+            finalSheet[i][0], // INDEX
+            finalSheet[i][1], // CATEGORY
+            finalSheet[i][2], // DESCRIPTION
+            finalSheet[i][3], // UOM
+            finalSheet[i][4], // QTY
+            finalSheet[i][5], // UNIT PRICE
+            finalSheet[i][6], // BARCODES
+            finalSheet[i][7].toString(), // NOF
+            finalSheet[i][8], // DATETIME
+            finalSheet[i][9], // ORDERCODE
+          ],
+          i+1
+      );
+
+      int yearThen = int.parse(finalSheet[i][8].split("/").last);
+      // Get last two year digits using mod
+      int diff = (DateTime.now().year % 100) - (yearThen % 100);
+      // Color code cell if date is older than 1 year
+      if(diff > 0){
+        var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
+        cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
+      }
+    }
+
+    // Set column widths
+    sheetObject.setColWidth(0, 15.0); // INDEX
+    sheetObject.setColWidth(1, 25.0); // CATEGORY
+    sheetObject.setColWidth(2, 75.0); // DESCRIPTION
+    sheetObject.setColWidth(3, 25.0); // UOM
+    sheetObject.setColWidth(4, 15.0); // QTY
+    sheetObject.setColWidth(5, 25.0); // COST EX GST
+    sheetObject.setColWidth(6, 25.0); // BARCODES
+    sheetObject.setColWidth(7, 15.0); // NOF
+
+    String filePath = "/storage/emulated/0/Documents/${job.id}/stocktake_${job.id}.xlsx";
+
+    var fileBytes = excel.save();
+    File(filePath)..createSync(recursive: true)..writeAsBytesSync(fileBytes!);
+  }
+
+  _gunDataTXT(){
+    String finalTxt = "";
+    for(int i = 0; i < job.stocktake.length; i++){
+      finalTxt += "S    ";
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+
+      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
+      String bcode = job.table[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
+      while(bcode.length < 22){
+        bcode += " ";
+      }
+
+      finalTxt += bcode;
+
+      // Count (4 characters)
+      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
+      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
+
+      while(count.length < 4) {
+        count += " ";
+      }
+
+      finalTxt += count;
+
+      // Location (25 characters)
+      String stockLocation = job.stocktake[i][Index.stockLocation].toString();
+      if(stockLocation.length > 25){
+        stockLocation.substring(0,25);
+      }
+
+      while(stockLocation.length < 25){
+        stockLocation += " ";
+      }
+
+      finalTxt += stockLocation;
+      finalTxt += "\n";
+    }
+
+    String date = job.date.toString().replaceAll("/", "-");
+    var path = '/storage/emulated/0/Documents/${job.id}/$date-${job.id}-fdapp.txt';
+    var jobFile = File(path);
+    jobFile.writeAsString(finalTxt);
+  }
+
+  _exportHL(){
+    String finalTxt = "";
+    String shortYear = DateTime.now().year.toString().substring(2);
+    String shortMonth = monthNames[DateTime.now().month];
+
+    String dateTime = "${DateTime.now().day}/${DateTime.now().month}/$shortYear${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second}";
+    for(int i = 0; i < job.stocktake.length; i++) {
+      // Location (4 chars)
+      String locationIndex = job.stocktake[i][Index.stockLocation];
+      String locationNum = (job.allLocations.indexOf(locationIndex) + 1).toString();
+
+      while(locationNum.length < 4){
+        locationNum = "0$locationNum";
+      }
+      finalTxt += "$locationNum,";
+
+      // Barcode (16 chars)
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
+      String bcode = job.table[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
+      // String bcode = jt[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
+
+      while(bcode.length < 16){
+        bcode += " ";
+      }
+      finalTxt += "$bcode,";
+
+      // Qty (5 chars + 1 whitespace)
+      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
+      String count = Decimal.parse(dblCount.toStringAsFixed(3)).toString();
+
+      while(count.length < 5){
+        count = "0$count";
+      }
+
+      finalTxt += "$count ,";
+      finalTxt += dateTime;
+      finalTxt += "\n";
+    }
+
+    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+    var path = '/storage/emulated/0/Documents/${job.id}/IMPORT_${job.id}_$dateOutput.txt';
+    var jobFile = File(path);
+    jobFile.writeAsString(finalTxt);
+  }
+
+  _exportbarcodeQty(){
+    String finalTxt = "";
+    for(int i = 0; i < job.stocktake.length; i++) {
+      // Barcodes (22 characters)
+      // Using first barcode since barcodes can be multiline
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+      int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
+      List<String> bcodeList = job.table[tableIndex][Index.barcode].toString().split(",").toList();
+      String barcode = "";
+
+      if(bcodeList.isEmpty){
+        barcode = "NULL";
+      }
+      else{
+        barcode = bcodeList[barcodeIndex];
+      }
+
+      while(barcode.length < 22){
+        barcode += " ";
+      }
+
+      finalTxt += "$barcode,";
+
+      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount]) ?? 0;
+      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
+      finalTxt += "\n";
+    }
+
+    String shortMonth = monthNames[DateTime.now().month];
+    String shortYear = DateTime.now().year.toString().substring(2);
+    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+    var path = '/storage/emulated/0/Documents/${job.id}/BARCODEQTY_${job.id}_$dateOutput.txt';
+    var jobFile = File(path);
+    jobFile.writeAsString(finalTxt);
+  }
+
+  _exportOrdercodeQty(){
+    String finalTxt = "";
+    for(int i = 0; i < job.stocktake.length; i++) {
+
+      // Barcodes (22 characters) Using first barcode since barcodes can be multiline
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+      int ordercodeIndex = int.parse(job.stocktake[i][Index.stockOrdercodes]); // Prints specific barcode
+      List<String> ocodeList = job.table[tableIndex][Index.ordercode].toString().split(",").toList();
+
+      String ordercode = "";
+
+      if(ocodeList.isEmpty){
+        ordercode = "NULL";
+      }
+      else{
+        ordercode = ocodeList[ordercodeIndex];
+      }
+
+      if(ordercode.isEmpty){
+        ordercode = "NULL";
+      }
+
+      while(ordercode.length < 22){
+        ordercode += " ";
+      }
+
+      finalTxt += "$ordercode,";
+
+      double dblCount = double.tryParse(job.stocktake[i][Index.stockCount].toString()) ?? 0;
+      finalTxt += Decimal.parse(dblCount.toStringAsFixed(3)).toString();
+      finalTxt += "\n";
+    }
+
+    String shortMonth = monthNames[DateTime.now().month];
+    String shortYear = DateTime.now().year.toString().substring(2);
+    String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+    var path = '/storage/emulated/0/Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt';
+    var jobFile = File(path);
+    jobFile.writeAsString(finalTxt);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+        onWillPop: () async => goToPage(context, const Stocktake()),
+        child: Scaffold(
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              centerTitle: true,
+              title: const Text("Export Stocktake"),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: (){
+                  goToPage(context, const Stocktake());
+                },
+              ),
+            ),
+            body: SingleChildScrollView(
+                child: Center(
+                    child: Column(
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height / 20.0,
+                          ),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('XLSX', style: whiteText),
+                                onPressed: () {
+                                  _exportXLSX();
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/stocktake_${job.id}.xlsx", Colors.orange);
+                                },
+                              )
+                          ),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('SCANDATA (.TXT)', style: whiteText),
+                                onPressed: () {
+                                  _gunDataTXT();
+                                  String date = job.date.toString().replaceAll("_", "-");
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/$date-${job.id}-fdapp.txt", Colors.orange);
+                                },
+                              )
+                          ),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('H&L (POS)', style: whiteText),
+                                onPressed: () {
+                                  _exportHL();
+                                  String shortMonth = monthNames[DateTime.now().month];
+                                  String shortYear = DateTime.now().year.toString().substring(2);
+                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+                                  showAlert(context, "Job Data Exported!", '../Documents/${job.id}/IMPORT_${job.id}_$dateOutput.txt', Colors.orange);
+                                },
+                              )
+                          ),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('Barcode / Qty', style: whiteText),
+                                onPressed: () {
+                                  _exportbarcodeQty();
+                                  String shortMonth = monthNames[DateTime.now().month - 1];
+                                  String shortYear = DateTime.now().year.toString().substring(2);
+                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/BARCODEQTY_${job.id}_$dateOutput.txt", Colors.orange);
+                                },
+                              )
+                          ),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('Ordercode / Qty', style: whiteText),
+                                onPressed: () {
+                                  _exportOrdercodeQty();
+                                  String shortMonth = monthNames[DateTime.now().month];
+                                  String shortYear = DateTime.now().year.toString().substring(2);
+                                  String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
+                                  showAlert(context, "Job Data Exported!", "../Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt\n", Colors.orange);
+                                },
+                              )
+                          ),
+                        ]
+                    )
+                )
+            )
+        )
+    );
+  }
 }
 
 Widget headerPadding(String title, TextAlign l){
@@ -2873,12 +2856,7 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
               )
           )
   );
-
   return confirmation;
-}
-
-Future<bool> grantAccess() async{
-  return await storageType.isGranted;
 }
 
 Future<void> prepareStorage() async {
@@ -2888,50 +2866,6 @@ Future<void> prepareStorage() async {
   if (storage != PermissionStatus.granted) {
     await storageType.request();
   }
-}
-
-editLocation(String original, int index){
-  String newLoc = original;
-  return AlertDialog(
-    actionsAlignment: MainAxisAlignment.spaceAround,
-    title: const Text("Job Locations"),
-    content: Card(
-        child: ListTile(
-          title: TextFormField(
-            initialValue: original,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: '', border: InputBorder.none),
-            keyboardType: TextInputType.name,
-            onChanged: (value) {
-              newLoc = value.toUpperCase();
-            },
-          ),
-        )
-    ),
-    actions: <Widget>[
-      ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-        onPressed: () {
-          return;
-          // newText = originalText;
-          // setState((){});
-          // Navigator.pop(context);
-        },
-        child: const Text("Cancel"),
-      ),
-      ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-        onPressed: () {
-          job.stocktake[index][Index.stockLocation] = newLoc;
-          if(!job.allLocations.contains(newLoc)){
-            job.allLocations.add(newLoc);
-            return;
-          }
-        },
-        child: const Text("Confirm"),
-      ),
-    ],
-  );
 }
 
 Future<String> textEditDialog(BuildContext context, String str) async{
@@ -2996,7 +2930,6 @@ Future<String> textEditDialog(BuildContext context, String str) async{
         );
       }
   );
-
   return newText;
 }
 
@@ -3032,7 +2965,7 @@ setLocation(BuildContext context1){
                               Column(
                                 children: job.allLocations.isEmpty ? List.empty() : List.generate(job.allLocations.length, (index) => Card(
                                     child: ListTile(
-                                      title: Text(job.allLocations[index], textAlign: TextAlign.justify),
+                                      title: Text(job.allLocations[index], textAlign: TextAlign.justify, softWrap: true, maxLines: 1, overflow: TextOverflow.ellipsis),
                                       selected: job.allLocations[index] == job.location,
                                       selectedColor: Colors.black,
                                       selectedTileColor: Colors.greenAccent.withOpacity(0.4),
@@ -3061,7 +2994,12 @@ setLocation(BuildContext context1){
                                         bool b = await confirmDialog(context, "Delete location '${job.allLocations[index]}'?");
                                         if(b){
                                           if(job.location == job.allLocations[index]) {
-                                            job.location = "";
+                                            if(job.allLocations.isNotEmpty){
+                                              job.location = job.allLocations[0];
+                                            }
+                                            else{
+                                              job.location = "";
+                                            }
                                           }
 
                                           // Clear deleted location from stocktake items
@@ -3301,9 +3239,6 @@ writeErrLog(String err, String id) async {
 }
 
 copyErrLog() async {
-  // final directory = await getAppplicationDocumentsDirectory();
-  // final path = directory.path;
-
   var filePath = File('$appDir/fd_err_log.txt');
   String fileContent = await filePath.readAsString();
   String copyPath = '/storage/emulated/0/Documents/fd_err_log.txt';
@@ -3393,4 +3328,3 @@ class StockJob {
     }
   }
 }
-
