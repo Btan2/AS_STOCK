@@ -26,23 +26,19 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:decimal/decimal.dart';
 
 const String versionStr = "0.23.08+2";
-
 Permission storageType = Permission.manageExternalStorage; //Permission.storage;
 List<String> jobPageList = [];
 List<String> masterCategory = [];
 Map<String, dynamic> sFile = {};
-
 Directory? rootDir;
 enum Action {add, edit, addBarcode, addOrdercode}
 int searchColumn = 3; // Start search column on description
 int copyIndex = -1;
-
 String copyCode = "";
 String errorString = "";
 String sheetPath = "";
 String appDir = "";
 String lastCategory = "MISC";
-
 StockJob job = StockJob(id: "EMPTY");
 
 // Colors & Text Style
@@ -50,7 +46,6 @@ final Color colorOk = Colors.blue.shade400;
 final Color colorWarning = Colors.deepPurple.shade200;
 const Color colorEdit = Colors.blueGrey;
 const Color colorBack = Colors.redAccent;
-
 TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["fontScale"]);}
 TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
 TextStyle get blackText{ return TextStyle(color: Colors.black, fontSize: sFile["fontScale"]);}
@@ -336,8 +331,6 @@ class JobsPage extends StatefulWidget {
 class _JobsPage extends State<JobsPage> {
   @override
   void initState() {
-    //jobTable = List.empty();
-    //mainTable = List.empty();
     super.initState();
   }
 
@@ -552,10 +545,6 @@ class _NewJob extends State<NewJob>{
   }
 
   _getDefaultMastersheet() {
-
-    //final directory = await getApppplicationDocumentsDirectory();
-    //final path = directory.path;
-    // final defPath = ;
     masterfileStr = "$appDir/MASTERFILE.xlsx";
     setState(() {});
   }
@@ -710,7 +699,7 @@ class _NewJob extends State<NewJob>{
                                     onPressed: () async {
                                       String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
                                       if(File(jobFilePath).existsSync()){
-                                        showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job before proceeding.", colorWarning);
+                                        showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job ID or delete the job file which already exists.", colorWarning);
                                         return;
                                       }
 
@@ -732,18 +721,14 @@ class _NewJob extends State<NewJob>{
                                       StockJob newJob = StockJob(id: idStr);
                                       newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
                                       sheetPath = masterfileStr;
-                                      //newJob.sheet =
-                                      //newJob.table = List.of(mainTable);
 
                                       // User must rename jobID if it already exists
                                       await writeJob(newJob).then((value){
                                         job = newJob;
                                         job.calcTotal();
-
                                         if (!jobPageList.contains(jobFilePath)) {
                                           jobPageList.add(jobFilePath);
                                         }
-
                                         copyIndex = -1;
                                         goToPage(context, const Stocktake());
                                       });
@@ -804,7 +789,6 @@ class _Stocktake extends State<Stocktake> {
       await Future.delayed(const Duration(milliseconds: 500));
 
       SpreadsheetTable? table = decoder.tables[sheets.first]!;
-
       if(table.rows.isEmpty) {
         errorString = "Spreadsheet was not loaded!\nThe spreadsheet is empty!";
         return;
@@ -922,7 +906,7 @@ class _Stocktake extends State<Stocktake> {
                   Card(
                     child: ListTile(
                       title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
-                      subtitle: Text("\n${job.date}\n\nTOTAL: ${job.total}", style: blackText),
+                      subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}", style: blackText),
                     ),
                   ),
 
@@ -1007,21 +991,18 @@ class _GridView extends State<GridView> {
   TextEditingController countCtrl = TextEditingController();
   TextEditingController searchCtrl = TextEditingController();
   TextEditingController totalCost = TextEditingController();
-
   FocusNode scanDeviceFocus = FocusNode();
   List<List<dynamic>> filterList = List.empty();
   List<String> barcodeList = List.empty();
   List<String> ordercodeList = List.empty();
   Color colorMode = colorOk;
-
   String categoryValue = "MISC";
   String scanText = '';
   int barcodeIndex = 0;
   int ordercodeIndex = 0;
   int addBarcodeIndex = 0;
   int addOrdercodeIndex = 0;
-
-  int prevColumn = -1;
+  int assignSearchColumn = Index.description;
   double keyboardHeight = 20.0;
 
   @override
@@ -1030,10 +1011,7 @@ class _GridView extends State<GridView> {
 
     // Set filter list and GridView color
     if(widget.action == Action.add){
-      if(prevColumn != -1){
-        searchColumn = prevColumn;
-        prevColumn = -1;
-      }
+      //assignSearchColumn = searchColumn;
 
       filterList = List.empty();
       colorMode = colorOk;
@@ -1233,7 +1211,7 @@ class _GridView extends State<GridView> {
     return confirmed ? addCount : (delete ? -2 : -1);
   }
 
-  Future<bool> longPressSelect(BuildContext context, int index) async {
+  Future<bool> _longPressSelect(BuildContext context, int index) async {
     bool edit = false;
     await showDialog(
         context: context,
@@ -1257,7 +1235,7 @@ class _GridView extends State<GridView> {
                           transitionDuration: const Duration(milliseconds: 100),
                           pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                             _setEditText(index);
-                            return _editPopup(index);
+                            return _itemEdit(index);
                           },
                         ).then((value){
                           setState(() {});
@@ -1344,20 +1322,25 @@ class _GridView extends State<GridView> {
   }
 
   Widget _searchBar(){
+    bool assignMode = widget.action == Action.addBarcode || widget.action == Action.addOrdercode;
+
     void defaultSearchList(){
       // List to return if search query is not found
       filterList = widget.action == Action.add ? List.empty() :
-      widget.action == Action.addBarcode ? List.of(job.table) :
-      widget.action == Action.addOrdercode ? List.of(job.table) :
-      widget.action == Action.edit ? List.of(job.stocktake) :
+          assignMode ? List.of(job.table) :
+          widget.action == Action.edit ? List.of(job.stocktake) :
       List.empty();
     }
 
     void searchString(String searchText){
+      int column = searchColumn;
+      if(assignMode){
+        column = assignSearchColumn;
+      }
+
       // Set list to search through
       filterList = widget.action == Action.add ? List.of(job.table) :
-        widget.action == Action.addBarcode ? List.of(job.table) :
-        widget.action == Action.addOrdercode ? List.of(job.table) :
+        assignMode ? List.of(job.table) :
         widget.action == Action.edit ? List.of(job.stocktake) :
         List.empty();
 
@@ -1367,13 +1350,11 @@ class _GridView extends State<GridView> {
         if (!found) {
           List<List<dynamic>> first = widget.action == Action.edit ?
           filterList.where((row) =>
-              job.table[int.parse(row[Index.index])][searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+              job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
           filterList.where((row) =>
-              row[searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-
+              row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
           //filterList.where((row) => jobTable[int.parse(row[Index.index])][searchColumn].contains(searchWords[i])).toList() :
           //filterList.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-
           if(first.isNotEmpty){
             filterList = List.of(first);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
             found = true;
@@ -1382,13 +1363,11 @@ class _GridView extends State<GridView> {
         else {
           List<List<dynamic>> refined = widget.action == Action.edit ?
           filterList.where((row) =>
-              job.table[int.parse(row[Index.index])][searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+              job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
           filterList.where((row) =>
-              row[searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-
+              row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
           // filterList.where((row) => jobTable[int.parse(row[Index.index])][searchColumn].contains(searchWords[i])).toList() :
           // filterList.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-
           if(refined.isNotEmpty){
             filterList = List.of(refined);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
           }
@@ -1408,13 +1387,11 @@ class _GridView extends State<GridView> {
           if (event.physicalKey == PhysicalKeyboardKey.enter) {
             searchCtrl.text = scanText;
             scanText = '';
-
             if(searchCtrl.text.isEmpty){
               defaultSearchList();
               setState(() {});
               return;
             }
-
             searchString(searchCtrl.text.toUpperCase());
 
             // Automatically show item add popup if one item is found
@@ -1488,86 +1465,83 @@ class _GridView extends State<GridView> {
     );
   }
 
-  Widget editHeader(){
-    return FlexibleSpaceBar(
-        collapseMode: CollapseMode.none,
-        centerTitle: true,
-        titlePadding: const EdgeInsets.only(top: kTextTabBarHeight),
-        title: ListView(
-            children: [
-              _searchBar(),
-              const SizedBox(height:10.0),
-              Row(
-                  children: [
-                    Expanded(
-                        child: Container(
-                            height: 25.0, // 25.0
-                            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                            child: Center(
-                                child: Text("Description", textAlign: TextAlign.center, style: blackText)
-                            )
-                        )
-                    ),
-                    Container(
-                        width: 100.0,
-                        height: 25.0,
-                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                        child: Center(
-                            child: Text("Location", textAlign: TextAlign.center, style: blackText)
-                        )
-                    ),
-                    Container(
-                        width: 75.0,
-                        height: 25.0,
-                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                        child:  Center(
-                            child: Text("Count", textAlign: TextAlign.center, style: blackText)
-                        )
-                    )
-                  ]
-              ),
-            ]
-        )
-    );
-  }
-
-  Widget addHeader(){
-    // Why is this necessary?
-    bool lastCell = searchColumn != Index.index && searchColumn != Index.description;
-
-    return FlexibleSpaceBar(
-        collapseMode: CollapseMode.none,
-        centerTitle: true,
-        titlePadding: const EdgeInsets.only(top: kTextTabBarHeight),
-        title: ListView(
-          children: [
-            _searchBar(),
-            const SizedBox(height:10.0),
-            Row(
-                children: [
-                  Expanded(
-                      child: Container(
+  Widget _getHeader(){
+    if(widget.action == Action.edit){
+      return FlexibleSpaceBar(
+          collapseMode: CollapseMode.none,
+          centerTitle: true,
+          titlePadding: const EdgeInsets.only(top: kTextTabBarHeight),
+          title: ListView(
+              children: [
+                _searchBar(),
+                const SizedBox(height:10.0),
+                Row(
+                    children: [
+                      Expanded(
+                          child: Container(
+                              height: 25.0, // 25.0
+                              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+                              child: Center(
+                                  child: Text("Description", textAlign: TextAlign.center, style: blackText)
+                              )
+                          )
+                      ),
+                      Container(
+                          width: 100.0,
                           height: 25.0,
                           decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
                           child: Center(
-                              child: Text(job.headerRow[Index.description], textAlign: TextAlign.center, style: blackText)
+                              child: Text("Location", textAlign: TextAlign.center, style: blackText)
+                          )
+                      ),
+                      Container(
+                          width: 75.0,
+                          height: 25.0,
+                          decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+                          child:  Center(
+                              child: Text("Count", textAlign: TextAlign.center, style: blackText)
                           )
                       )
-                  ),
-
-                  lastCell ? Container(
-                      width: 100.0,
-                      height:25.0,
-                      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                      child: Center(
-                          child: Text(job.headerRow[searchColumn], textAlign: TextAlign.center, style: blackText)
-                      )
-                  ) : Container()
-                ]
-            )
-          ]
-        )
-    );
+                    ]
+                ),
+              ]
+          )
+      );
+    }
+    else{
+      return FlexibleSpaceBar(
+          collapseMode: CollapseMode.none,
+          centerTitle: true,
+          titlePadding: const EdgeInsets.only(top: kTextTabBarHeight),
+          title: ListView(
+              children: [
+                _searchBar(),
+                const SizedBox(height:10.0),
+                Row(
+                    children: [
+                      Expanded(
+                          child: Container(
+                              height: 25.0,
+                              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+                              child: Center(
+                                  child: Text(job.headerRow[Index.description], textAlign: TextAlign.center, style: blackText)
+                              )
+                          )
+                      ),
+                      // (searchColumn == Index.barcode || searchColumn == Index.ordercode) ? Container(
+                      //     width: 100.0,
+                      //     height:25.0,
+                      //     decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+                      //     child: Center(
+                      //         child: Text(job.headerRow[searchColumn], textAlign: TextAlign.center, style: blackText)
+                      //     )
+                      // ) : Container()
+                    ]
+                )
+              ]
+          )
+      );
+    }
   }
 
   Widget _rowAssign(int pIndex) {
@@ -1577,7 +1551,9 @@ class _GridView extends State<GridView> {
         onTap: () async {
           await confirmDialog(context, "Assign $copyCode to $descript?").then((value) async {
             if (value) {
+              // Make sure we add barcode/ordercode to the correct column
               int codeColumn = widget.action == Action.addBarcode ? Index.barcode : Index.ordercode;
+
               String s = job.table[tableIndex][codeColumn].toString();
               if(s.isEmpty || s == "NULL" || s == "null") {
                 job.table[tableIndex][codeColumn] = copyCode;
@@ -1585,7 +1561,6 @@ class _GridView extends State<GridView> {
               else {
                 job.table[tableIndex][codeColumn] += ",$copyCode";
               }
-
               copyCode = "";
               setState(() {});
               await writeJob(job).then((value){
@@ -1600,16 +1575,16 @@ class _GridView extends State<GridView> {
                 child: Container(
                   height: 150,
                   decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                  child: Text("\n${filterList[pIndex][Index.category].toString()}", textAlign: TextAlign.center, softWrap: true, overflow: TextOverflow.fade),
+                  child: Text(descript, textAlign: TextAlign.center, softWrap: true, overflow: TextOverflow.fade),
                 )
             ),
-            Expanded(
-              child: Container(
-                height: 150,
-                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                child: Text(descript + (job.table[tableIndex][Index.nof].toUpperCase() == "TRUE"? " *NEW*" : "") , textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.fade,)
-              )
-            ),
+            // Expanded(
+            //   child: Container(
+            //     height: 150,
+            //     decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+            //     child: Text(job.table[tableIndex][searchColumn], textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.fade,)
+            //   )
+            // ),
           ],
         )
     );
@@ -1619,7 +1594,8 @@ class _GridView extends State<GridView> {
     int tableIndex = int.parse(filterList[pIndex][Index.index].toString());
     return Row(
         children: [
-        Expanded(child:GestureDetector(
+        Expanded(
+          child:GestureDetector(
             onLongPress: (){
               copyIndex = tableIndex;
               showNotification(context, colorWarning, whiteText, "Item copied @[$pIndex]");
@@ -1633,7 +1609,7 @@ class _GridView extends State<GridView> {
                 transitionDuration: const Duration(milliseconds: 100),
                 pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                   _setEditText(pIndex);
-                  return _editPopup(pIndex);
+                  return _itemEdit(pIndex);
                 },
               );
               setState(() {});
@@ -1643,7 +1619,10 @@ class _GridView extends State<GridView> {
                 height: cellHeight,
                 decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
                 child: Center(
-                    child: Text(job.table[tableIndex][Index.description], textAlign: TextAlign.center,)
+                    child: Text(
+                      job.table[tableIndex][Index.description],
+                      textAlign: TextAlign.center,
+                    )
                 ),
               ),
             ),
@@ -1651,14 +1630,13 @@ class _GridView extends State<GridView> {
 
           TapRegion(
             onTapInside: (value) async {
-              await textEditDialog(context, job.stocktake[pIndex][Index.stockLocation]).then((value){
+              await textEditDialog(context, "Edit Location", job.stocktake[pIndex][Index.stockLocation]).then((value){
                 String editStr = value.toUpperCase();
                 if(!job.allLocations.contains(editStr)){
                   job.allLocations.add(editStr);
                 }
                 job.stocktake[pIndex][Index.stockLocation] = editStr;
                 filterList[pIndex][Index.stockLocation] = editStr;
-
                 writeJob(job);
               });
             },
@@ -1692,6 +1670,7 @@ class _GridView extends State<GridView> {
                     job.stocktake[pIndex][Index.stockCount] = decimalCount;
                     job.calcTotal();
                     writeJob(job);
+
                     // Manually update the filter list item instead of updating the entire list
                     filterList[pIndex][Index.stockCount] = decimalCount;
                     setState(() {});
@@ -1703,7 +1682,7 @@ class _GridView extends State<GridView> {
                 height: cellHeight,
                 decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
                 child: Center(
-                    child: Text( filterList[pIndex][Index.stockCount] )
+                    child: Text(filterList[pIndex][Index.stockCount])
                 ),
               )
           )
@@ -1722,7 +1701,7 @@ class _GridView extends State<GridView> {
 
     return GestureDetector(
       onLongPress: () async {
-        await longPressSelect(context, tableIndex);
+        await _longPressSelect(context, tableIndex);
       },
 
       onTap: () async {
@@ -1733,7 +1712,6 @@ class _GridView extends State<GridView> {
         if(searchColumn == Index.barcode){
           List<String> codeList = filterList[pIndex][searchColumn].split(",").toList();
           for(int i = 0; i < codeList.length; i++){
-            //if(searchCtrl.text == codeList[i]){
             if(codeList[i].contains(searchCtrl.text)){
               addBarcodeIndex = i;
               break;
@@ -1755,7 +1733,6 @@ class _GridView extends State<GridView> {
             String shortDescript = filterList[pIndex][Index.description].toString();
             shortDescript.substring(0, min(shortDescript.length, 14));
             showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $addCount");
-
             job.calcTotal();
             writeJob(job);
           }
@@ -1786,8 +1763,9 @@ class _GridView extends State<GridView> {
     );
   }
 
-  Widget _editPopup(int index) {
+  Widget _itemEdit(int index) {
     bool newItem = index == -1;
+
     confirmEdit() async {
       String msg = "";
       if(newItem){
@@ -1811,7 +1789,10 @@ class _GridView extends State<GridView> {
           if(!barcodeIsEmpty) {
             for(int i = 0; i < barcodeList.length; i++){
               if(i > 0){
-                finalBarcode += ",${barcodeList[i]}";
+                // Do not add empty barcodes
+                if(barcodeList[i].isNotEmpty){
+                  finalBarcode += ",${barcodeList[i]}";
+                }
               }
               else{
                 // first barcode in barcodeList should not have a comma
@@ -1824,7 +1805,10 @@ class _GridView extends State<GridView> {
             String finalOrdercode = "";
             for(int i = 0; i < ordercodeList.length; i++){
               if(i > 0){
-                finalOrdercode += ",${ordercodeList[i]}";
+                // Do not add empty ordercodes
+                if(ordercodeList[i].isNotEmpty){
+                  finalOrdercode += ",${ordercodeList[i]}";
+                }
               }
               else{
                 finalOrdercode += ordercodeList[i];
@@ -2217,6 +2201,8 @@ class _GridView extends State<GridView> {
     itemAspectRatio /= (MediaQuery.of(context).size.height - kToolbarHeight - 24) / 2;
     itemAspectRatio *= 8;
 
+    bool assignMode = widget.action == Action.addOrdercode || widget.action == Action.addBarcode;
+
     return WillPopScope(
         onWillPop: () async => _popBack(),
         child: GestureDetector(
@@ -2253,19 +2239,25 @@ class _GridView extends State<GridView> {
                                         value: index,
                                         child: ListTile(
                                           title: Text("Search ${job.headerRow[index]}"),
-                                          trailing: index == searchColumn ? const Icon(Icons.check) : null,
+                                          trailing: assignMode && index == assignSearchColumn ? const Icon(Icons.check) :
+                                            !assignMode && index == searchColumn ? const Icon(Icons.check) :
+                                            null,
                                         ),
                                       )
                                   );
                                 },
                                 onSelected: (value) async {
                                   setState((){
-                                    searchColumn = value;
+                                    if(assignMode){
+                                      assignSearchColumn = value;
+                                    } else {
+                                      searchColumn = value;
+                                    }
                                   });
                                 }
                             ),
                           ],
-                          flexibleSpace: widget.action == Action.edit ? editHeader() : addHeader(),
+                          flexibleSpace: _getHeader(),
                       ),
                       filterList.isNotEmpty ? SliverGrid(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -2273,7 +2265,7 @@ class _GridView extends State<GridView> {
                           childAspectRatio: itemAspectRatio,
                         ),
                         delegate: SliverChildBuilderDelegate( (BuildContext context, int pIndex) {
-                          if (pIndex >= filterList.length - 1){
+                          if (pIndex >= filterList.length){
                             return null;
                           }
                           return Container(
@@ -2286,8 +2278,8 @@ class _GridView extends State<GridView> {
                               ),
                             ),
                             child: widget.action == Action.edit ? _rowEdit(pIndex, 150.0) :
-                            widget.action == Action.add ? _rowAdd(pIndex, 150.0) :
-                            _rowAssign(pIndex),
+                              widget.action == Action.add ? _rowAdd(pIndex, 150.0) :
+                              _rowAssign(pIndex),
                           );
                         },
                       ),
@@ -2325,7 +2317,6 @@ class _GridView extends State<GridView> {
                                     else{
                                       _setEmptyText("", "");
                                     }
-
                                     await showGeneralDialog(
                                         context: context,
                                         barrierColor: Colors.black12,
@@ -2333,7 +2324,7 @@ class _GridView extends State<GridView> {
                                         transitionDuration: const Duration(milliseconds: 100),
                                         pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
                                           categoryValue = lastCategory;
-                                          return _editPopup(-1);
+                                          return _itemEdit(-1);
                                         }
                                     ).then((value){
                                       setState(() {});
@@ -2868,7 +2859,7 @@ Future<void> prepareStorage() async {
   }
 }
 
-Future<String> textEditDialog(BuildContext context, String str) async{
+Future<String> textEditDialog(BuildContext context, String title, String str) async{
   String originalText = str;
   String newText = originalText;
 
@@ -2890,7 +2881,7 @@ Future<String> textEditDialog(BuildContext context, String str) async{
                     },
                     child: AlertDialog(
                       actionsAlignment: MainAxisAlignment.spaceAround,
-                      title: const Text("Edit Text"),
+                      title: Text(title),
                       content: Card(
                           child: ListTile(
                             title: TextFormField(
@@ -2973,7 +2964,7 @@ setLocation(BuildContext context1){
                                         icon: Icon(Icons.edit_note, color: Colors.yellow.shade800),
                                         // EDIT LOCATION TEXT
                                         onPressed: () async {
-                                          await textEditDialog(context, job.allLocations[index]).then((value){
+                                          await textEditDialog(context, "Edit Location", job.allLocations[index]).then((value){
                                             if(value.isNotEmpty){
                                               job.allLocations[index] = value;
                                               job.allLocations = job.allLocations.toSet().toList();
@@ -3029,7 +3020,7 @@ setLocation(BuildContext context1){
                                   child: ListTile(
                                     title: Text("+ Add New Location..", style: greyText, textAlign: TextAlign.justify),
                                     onTap: () async {
-                                      await textEditDialog(context, "").then((value) async {
+                                      await textEditDialog(context, "New Location", "").then((value) async {
                                         if(value.isNotEmpty && !job.allLocations.contains(value)){
                                           job.allLocations.add(value);
                                           await writeJob(job).then((value){
@@ -3212,7 +3203,6 @@ writeErrLog(String err, String id) async {
 
     // Add error line to new file lines
     errLine = newLog + errLine;
-
     final errFile = File('$appDir/fd_err_log.txt');
     errFile.writeAsString(errLine, mode: FileMode.writeOnlyAppend);
   }
@@ -3305,7 +3295,6 @@ class StockJob {
     ];
 
     sj.location = '';
-
     return sj;
   }
 
