@@ -647,7 +647,8 @@ class _NewJob extends State<NewJob>{
                     leading: IconButton(
                       icon: const Icon(Icons.arrow_back),
                       onPressed: (){
-                        Navigator.pop(context, true);
+                        goToPage(context, const JobsPage());
+                        //Navigator.pop(context, true);
                       },
                     ),
                     centerTitle: true,
@@ -760,6 +761,11 @@ class _Stocktake extends State<Stocktake> {
     _getTable();
   }
 
+  @override
+  void dispose(){
+    super.dispose();
+  }
+
   Future<void> loadSpreadSheet(String filePath) async {
     Uint8List bytes;
     if(!File(filePath).existsSync()){
@@ -795,16 +801,16 @@ class _Stocktake extends State<Stocktake> {
       }
 
       setState((){
-        loadingMsg = "Creating header row...";
-      });
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      job.headerRow = List<String>.generate(table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase());
-
-      setState((){
         loadingMsg = "Creating categories...";
       });
       await Future.delayed(const Duration(milliseconds: 500));
+
+      job.headerRow = List<String>.generate(table.rows[0].length, (indexH) => table.rows[0][indexH].toString().toUpperCase());
+
+      // setState((){
+      //   loadingMsg = "Creating categories...";
+      // });
+      // await Future.delayed(const Duration(milliseconds: 500));
 
       setState((){
         loadingMsg = "Creating main table...";
@@ -813,15 +819,15 @@ class _Stocktake extends State<Stocktake> {
 
       // Add nof column to list (always false because it's from the MASTERFILE)
       job.table = List.generate(
-        table.rows.length, (index) => List<String>.generate(
-          table.rows[0].length, (index2) => table.rows[index][index2].toString().toUpperCase()
+        table.rows.length, (indexT1) => List<String>.generate(
+          table.rows[0].length, (indexT2) => table.rows[indexT1][indexT2].toString().toUpperCase()
         ) + ["false"],
         growable: true
       );
 
       job.table.removeAt(0); // Remove header row
 
-      masterCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][2].toString().toUpperCase());
+      masterCategory = List<String>.generate(table.rows.length, (indexC) => table.rows[indexC][2].toString().toUpperCase());
       masterCategory.removeAt(0); // Remove header row
       masterCategory = masterCategory.toSet().toList(); // Remove duplicates
     }
@@ -832,6 +838,10 @@ class _Stocktake extends State<Stocktake> {
 
   _getTable() async {
     if(job.table.isNotEmpty){
+      setState((){
+        loadingMsg = "Loading Job...";
+      });
+
       await Future.delayed(const Duration(seconds: 1));
       setState(() {
         isLoading = false;
@@ -868,27 +878,23 @@ class _Stocktake extends State<Stocktake> {
     }
   }
 
-  _popBack(){
-    if(!isLoading){
-      //headerRow = List.empty();
-      job = StockJob(id: "EMPTY");//, name: "EMPTY");
-      masterCategory = List.empty();
-      copyIndex = -1;
-
-      lastCategory = "MISC";
-      goToPage(context, const JobsPage());
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: () async => _popBack(),//goToPage(context, const JobsPage()),
+        onWillPop: () async => false,
         child: Scaffold(
           appBar: AppBar(
             leading: isLoading ? const Icon(Icons.lock_clock) : IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => _popBack(),
+              onPressed: () {
+                if(!isLoading){
+                  job = StockJob(id: "EMPTY");
+                  masterCategory = List.empty();
+                  copyIndex = -1;
+                  lastCategory = "MISC";
+                  goToPage(context, const JobsPage());
+                }
+              },
             ),
             centerTitle: true,
             title: const Text("Stocktake", textAlign: TextAlign.center),
@@ -906,7 +912,7 @@ class _Stocktake extends State<Stocktake> {
                   Card(
                     child: ListTile(
                       title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
-                      subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}", style: blackText),
+                      subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}\n\nTOTAL VALUE: ${job.calcTotalCost()} (approx)\n", style: blackText),
                     ),
                   ),
 
@@ -1028,11 +1034,13 @@ class _GridView extends State<GridView> {
 
   @override
   void dispose() {
-    // Make sure Focus is removed before disposing controller
-    FocusScopeNode currentFocus = FocusScope.of(context);
-    if (!currentFocus.hasPrimaryFocus) {
-      currentFocus.unfocus();
-    }
+    debugPrint("DISPOSED!!");
+
+    // // Make sure Focus is removed before disposing controller
+    // FocusScopeNode currentFocus = FocusScope.of(context);
+    // if (!currentFocus.hasPrimaryFocus) {
+    //   currentFocus.unfocus();
+    // }
 
     descriptCtrl.dispose();
     priceCtrl.dispose();
@@ -1044,15 +1052,6 @@ class _GridView extends State<GridView> {
     totalCost.dispose();
 
     super.dispose();
-  }
-
-  _popBack(){
-    if(widget.action == Action.addBarcode || widget.action == Action.addOrdercode){
-      goToPage(context, const GridView(action: Action.add));
-    }
-    else{
-      goToPage(context, const Stocktake());
-    }
   }
 
   Future<double> _counterConfirm(BuildContext context, String descript, double price, double c, bool edit) async {
@@ -1193,7 +1192,7 @@ class _GridView extends State<GridView> {
                       else{
                         String er = "Count is zero (0).";
                         if(edit){
-                          er += "\n\nPress 'DELETE' if you wish to remove this item.";
+                          er += "\n\nPress and hold item then select 'DELETE' if you wish to remove this item.";
                         }
                         showAlert(context, "ERROR:", er, colorWarning);
                         txtCtrl.text = "0.0";
@@ -1516,28 +1515,6 @@ class _GridView extends State<GridView> {
           title: ListView(
               children: [
                 _searchBar(),
-                const SizedBox(height:10.0),
-                Row(
-                    children: [
-                      Expanded(
-                          child: Container(
-                              height: 25.0,
-                              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                              child: Center(
-                                  child: Text(job.headerRow[Index.description], textAlign: TextAlign.center, style: blackText)
-                              )
-                          )
-                      ),
-                      // (searchColumn == Index.barcode || searchColumn == Index.ordercode) ? Container(
-                      //     width: 100.0,
-                      //     height:25.0,
-                      //     decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                      //     child: Center(
-                      //         child: Text(job.headerRow[searchColumn], textAlign: TextAlign.center, style: blackText)
-                      //     )
-                      // ) : Container()
-                    ]
-                )
               ]
           )
       );
@@ -1628,8 +1605,8 @@ class _GridView extends State<GridView> {
             ),
           ),
 
-          TapRegion(
-            onTapInside: (value) async {
+          GestureDetector(
+            onTap: () async {
               await textEditDialog(context, "Edit Location", job.stocktake[pIndex][Index.stockLocation]).then((value){
                 String editStr = value.toUpperCase();
                 if(!job.allLocations.contains(editStr)){
@@ -1765,7 +1742,6 @@ class _GridView extends State<GridView> {
 
   Widget _itemEdit(int index) {
     bool newItem = index == -1;
-
     confirmEdit() async {
       String msg = "";
       if(newItem){
@@ -1777,64 +1753,51 @@ class _GridView extends State<GridView> {
 
       await confirmDialog(context, msg).then((bool value) async {
         if (value) {
-          bool editError = false;
-          bool barcodeIsEmpty = false;
-          String finalBarcode = "";
           if(descriptCtrl.text.isEmpty){
-            editError = true;
             showAlert(context, "ERROR:", "Description text must not be empty!", colorWarning);
           }
-
-          barcodeIsEmpty = barcodeList.isEmpty || (barcodeList.length == 1 && barcodeList[0].isEmpty);
-          if(!barcodeIsEmpty) {
-            for(int i = 0; i < barcodeList.length; i++){
-              if(i > 0){
+          else{
+            String finalBarcode = "";
+            if(barcodeList.isNotEmpty) {
+              for(int i = 0; i < barcodeList.length; i++){
                 // Do not add empty barcodes
-                if(barcodeList[i].isNotEmpty){
-                  finalBarcode += ",${barcodeList[i]}";
+                if(barcodeList[i].isNotEmpty) {
+                  finalBarcode += (i > 0 ? "," : "") + barcodeList[i];
                 }
-              }
-              else{
-                // first barcode in barcodeList should not have a comma
-                finalBarcode += barcodeList[i];
               }
             }
-          }
 
-          if(!editError){
             String finalOrdercode = "";
-            for(int i = 0; i < ordercodeList.length; i++){
-              if(i > 0){
+            if(ordercodeList.isNotEmpty){
+              for(int i = 0; i < ordercodeList.length; i++) {
                 // Do not add empty ordercodes
                 if(ordercodeList[i].isNotEmpty){
-                  finalOrdercode += ",${ordercodeList[i]}";
+                  finalOrdercode += (i > 0 ? "," : "") + ordercodeList[i];
                 }
-              }
-              else{
-                finalOrdercode += ordercodeList[i];
               }
             }
 
             if(newItem){
-              // ADD NEW ITEM TO STOCKTAKE IF COUNT IS GOOD
+              // Add new item to table
+              int newIndex = job.table.length;
+              job.table.add(<String>[
+                newIndex.toString(),
+                finalBarcode,
+                categoryValue,
+                descriptCtrl.text.toUpperCase(),
+                "EACH",
+                Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString(),
+                "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
+                finalOrdercode,
+                true.toString()
+              ]);
+
+              // Add new item to stocktake if count is not 0
               double addCount = double.tryParse(countCtrl.text) ?? 0.0;
               if(addCount > 0){
-                int newIndex = job.table.length;
-                job.table.add(<String>[
-                  newIndex.toString(),
-                  finalBarcode,
-                  categoryValue,
-                  descriptCtrl.text.toUpperCase(),
-                  "EACH",
-                  Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString(),
-                  "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
-                  finalOrdercode,
-                  true.toString()
-                ]);
-
                 job.stocktake.add(<String>[
                   newIndex.toString(),
-                  Decimal.parse(double.parse(addCount.toString()).toStringAsFixed(3)).toString(), // Decimal.parse(addCount.toString()),
+                  Decimal.parse(double.parse(addCount.toString()).toStringAsFixed(3)).toString(),
                   job.location,
                   '0', // Use first barcode in barcode list by default
                   '0', // Use first ordercode in ordercode list by default
@@ -1849,8 +1812,11 @@ class _GridView extends State<GridView> {
               job.table[tableIndex][Index.barcode] = finalBarcode;
               job.table[tableIndex][Index.category] = categoryValue;
               job.table[tableIndex][Index.description] = descriptCtrl.text.toUpperCase();
-              //job.table[tableIndex][Index.uom] = "EACH";
-              job.table[tableIndex][Index.price] = Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString();
+              // Only update datetime if price has changed
+              String nPrice = Decimal.parse(double.parse(priceCtrl.text).toStringAsFixed(2)).toString();
+              if( job.table[tableIndex][Index.price] != nPrice){
+                job.table[tableIndex][Index.price] = nPrice;
+              }
               job.table[tableIndex][Index.datetime] = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
               job.table[tableIndex][Index.ordercode] = finalOrdercode;
             }
@@ -1867,11 +1833,9 @@ class _GridView extends State<GridView> {
           }
         }
       });
-
       setState(() {});
     }
 
-    // Add or edit NOF item
     return StatefulBuilder(
       builder: (context, setState){
         return GestureDetector(
@@ -1977,11 +1941,6 @@ class _GridView extends State<GridView> {
                               textAlign: TextAlign.center,
                               scrollPadding:  EdgeInsets.symmetric(vertical: keyboardHeight/2),
                               keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                              //initialValue: priceText,
-                              // onChanged: (String s) {
-                              //   priceText = s;
-                              //   setState((){});
-                              // }
                             ),
                           )
                       ),
@@ -2200,11 +2159,10 @@ class _GridView extends State<GridView> {
     double itemAspectRatio = MediaQuery.of(context).size.width / 2;
     itemAspectRatio /= (MediaQuery.of(context).size.height - kToolbarHeight - 24) / 2;
     itemAspectRatio *= 8;
-
     bool assignMode = widget.action == Action.addOrdercode || widget.action == Action.addBarcode;
 
     return WillPopScope(
-        onWillPop: () async => _popBack(),
+        onWillPop: () async => false,
         child: GestureDetector(
             onTap: () {
               FocusScopeNode currentFocus = FocusScope.of(context);
@@ -2227,7 +2185,12 @@ class _GridView extends State<GridView> {
                           leading: IconButton(
                             icon: const Icon(Icons.arrow_back),
                             onPressed: (){
-                              _popBack();
+                              if(widget.action == Action.addBarcode || widget.action == Action.addOrdercode){
+                                goToPage(context, const GridView(action: Action.add));
+                              }
+                              else{
+                                goToPage(context, const Stocktake());
+                              }
                             },
                           ),
                           actions: [
@@ -2458,16 +2421,16 @@ class ExportPage extends StatelessWidget{
         }
 
         finalSheet.add([
-          job.table[tableIndex][Index.index].toString(),                             // INDEX
-          job.table[tableIndex][Index.category].toString().toUpperCase(),            // CATEGORY
-          job.table[tableIndex][Index.description].toString().toUpperCase(),         // DESCRIPTION
-          job.table[tableIndex][Index.uom].toString().toUpperCase(),                 // UOM
-          quantity.toString(),                                                      // QTY
-          (price).toStringAsFixed(2),                                               // UNIT PRICE
-          barcode,                                                                  // BARCODES
-          job.table[tableIndex][Index.nof].toUpperCase() == "TRUE",                  // NOF
-          _getDateString(job.table[tableIndex][Index.datetime].toString()),           // DATETIME
-          ordercode,                                                                // ORDERCODE
+          job.table[tableIndex][Index.index].toString(),                        // INDEX
+          job.table[tableIndex][Index.category].toString().toUpperCase(),       // CATEGORY
+          job.table[tableIndex][Index.description].toString().toUpperCase(),    // DESCRIPTION
+          job.table[tableIndex][Index.uom].toString().toUpperCase(),            // UOM
+          quantity.toString(),                                                  // QTY
+          (price).toStringAsFixed(2),                                           // UNIT PRICE
+          barcode,                                                              // BARCODES
+          job.table[tableIndex][Index.nof].toUpperCase() == "TRUE",             // NOF
+          _getDateString(job.table[tableIndex][Index.datetime].toString()),     // DATETIME
+          ordercode,                                                            // ORDERCODE
         ]);
       }
     }
@@ -2585,7 +2548,6 @@ class ExportPage extends StatelessWidget{
       int tableIndex = int.parse(job.stocktake[i][Index.index]);
       int barcodeIndex = int.parse(job.stocktake[i][Index.stockBarcodes]);
       String bcode = job.table[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
-      // String bcode = jt[tableIndex][Index.barcode].toString().split(",").toList()[barcodeIndex];
 
       while(bcode.length < 16){
         bcode += " ";
@@ -3018,7 +2980,7 @@ setLocation(BuildContext context1){
                               ),
                               Card(
                                   child: ListTile(
-                                    title: Text("+ Add New Location..", style: greyText, textAlign: TextAlign.justify),
+                                    title: Text("+ Add New Location..", style: TextStyle(color: Colors.green, fontSize: sFile["fontScale"]), textAlign: TextAlign.justify),
                                     onTap: () async {
                                       await textEditDialog(context, "New Location", "").then((value) async {
                                         if(value.isNotEmpty && !job.allLocations.contains(value)){
@@ -3043,6 +3005,7 @@ setLocation(BuildContext context1){
 }
 
 goToPage(BuildContext context, Widget page) {
+  Navigator.pop(context);
   Navigator.push(
     context,
     PageRouteBuilder(
@@ -3315,5 +3278,14 @@ class StockJob {
     for (int i = 0; i < stocktake.length; i++) {
       total += Decimal.parse(stocktake[i][Index.stockCount].toString());
     }
+  }
+
+  String calcTotalCost() {
+   double tc = 0.0;
+   for(int i = 0; i< stocktake.length; i++){
+     int tableIndex = int.parse(stocktake[i][Index.index]);
+     tc += double.parse(stocktake[i][Index.stockCount]) * double.parse(table[tableIndex][Index.price]);
+   }
+   return '\$${Decimal.parse(double.parse(tc.toString()).toStringAsFixed(2))}';
   }
 }
