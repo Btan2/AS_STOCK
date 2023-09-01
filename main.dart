@@ -31,7 +31,7 @@ List<String> jobPageList = [];
 List<String> masterCategory = [];
 Map<String, dynamic> sFile = {};
 Directory? rootDir;
-enum Action {add, edit, assign} // addBarcode, addOrdercode}
+enum Action {add, edit, assign}
 int searchColumn = 3; // Start search column on description
 int copyIndex = -1;
 String copyCode = "";
@@ -140,7 +140,6 @@ class HomePage extends StatelessWidget{
                                   prepareStorage();
                                 }
 
-                                //await grantAccess().then((value){
                                 await storageType.isGranted.then((value){
                                   if(value){
                                     Navigator.push(context, MaterialPageRoute(builder: (context) => const JobsPage()));
@@ -273,7 +272,6 @@ class _AppSettings extends State<AppSettings> {
                             child: Card(
                               child: ListTile(
                                 title: DropdownButton(
-                                  //menuMaxHeight: MediaQuery.sizeOf(context).height/2.0,
                                   value: storageType,
                                   icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl,),
                                   items: ([Permission.manageExternalStorage, Permission.storage]).map((index) {
@@ -283,40 +281,17 @@ class _AppSettings extends State<AppSettings> {
                                     );
                                   }).toList(),
                                   onChanged: ((pValue) async {
-                                    bool granted = false;
                                     // change storage then check if valid, if not valid tell user
                                     storageType = pValue as Permission;
                                     if(storageType == Permission.manageExternalStorage){
                                       sFile["permission"] = "${Permission.manageExternalStorage}";
-                                      granted = await storageType.isGranted;
                                     }
                                     else if(storageType == Permission.storage){
                                       sFile["permission"] = "${Permission.storage}";
-                                      granted = await storageType.isGranted;
                                     }
 
                                     // Inform the user storage can be accessed
                                     prepareStorage();
-                                    
-                                    
-                                    if(granted){
-                                      showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
-                                    }
-                                    else {
-                                      showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
-                                    }
-                                    
-
-                                    // await grantAccess().then((value){
-                                    await storageType.isGranted.then((value){
-                                      //setState((){});
-                                      if(value){
-                                        showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
-                                      }
-                                      else {
-                                        showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
-                                      }
-                                    });
 
                                     await writeSession().then((value){
                                       if(errorString.isNotEmpty){
@@ -325,6 +300,15 @@ class _AppSettings extends State<AppSettings> {
                                     });
 
                                     setState(() {});
+
+                                    await storageType.isGranted.then((value){
+                                      if(value){
+                                        showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
+                                      }
+                                      else {
+                                        showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
+                                      }
+                                    });
                                   }),
                                 ),
                               ),
@@ -2918,9 +2902,7 @@ setLocation(BuildContext context1){
                                               job.stocktake[i][Index.stockLocation] = "NULL";
                                             }
                                           }
-
                                           job.allLocations.removeAt(index);
-
                                           await writeJob(job).then((value){
                                             setState((){});
                                           });
@@ -2950,7 +2932,7 @@ setLocation(BuildContext context1){
                                     },
                                   )
                               ),
-                              const SizedBox(height: 5.0),
+                              const SizedBox(height: 10.0),
                               job.location.isEmpty ?
                               const Center(
                                 child: Text("NO LOCATION SET. TAP A LOCATION TO SET", style: TextStyle(color: colorBack),)
