@@ -552,60 +552,60 @@ class _NewJob extends State<NewJob>{
         barrierDismissible: false,
         barrierColor: colorOk.withOpacity(0.8),
         builder: (context2) => WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-                actionsAlignment: MainAxisAlignment.spaceAround,
-                title: const Text("Select Spreadsheet:", textAlign: TextAlign.center,),
-                content: SingleChildScrollView(
-                    child: Center(
-                        child: Column(
-                            children:[
-                              rBox(
-                                context2,
-                                colorOk,
-                                TextButton(
-                                  child: Text('Load default MASTERFILE.xlsx', style: whiteText),
-                                  onPressed: () async {
-                                    setState((){
-                                      masterfileStr = "$appDir/MASTERFILE.xlsx";
-                                    });
-                                    Navigator.pop(context2);
-
-                                    //await _getDefaultMastersheet().then((value){
-                                    //setState(() {});
-                                    //Navigator.pop(context2);
-                                    //});
-                                  },
-                                ),
-                              ),
-                              rBox(
-                                context2,
-                                Colors.green,
-                                TextButton(
-                                  child: Text('Load from storage', style: whiteText),
-                                  onPressed: () async {
-                                    await FilesystemPicker.open(
-                                      title: rootDir.toString(),
-                                      context: context2,
-                                      rootDirectory: rootDir!,
-                                      fsType: FilesystemType.file,
-                                      allowedExtensions: ['.xlsx'],
-                                      pickText: 'Select XLSX document.',
-                                      folderIconColor: Colors.blue,
-                                      fileTileSelectMode: FileTileSelectMode.wholeTile,
-                                      requestPermission: () async => await storageType.request().isGranted,).then((value){
-                                        masterfileStr = value.toString();
-                                        setState(() {});
-                                        Navigator.pop(context2);
-                                      });
-                                  },
-                                ),
-                              ),
-                            ]
-                        )
-                    )
+          onWillPop: () async => false,
+          child: AlertDialog(
+            actionsAlignment: MainAxisAlignment.spaceAround,
+            title: const Text("Select Spreadsheet:", textAlign: TextAlign.center,),
+            content: SingleChildScrollView(
+              child: Center(
+                child: Column(
+                  children:[
+                    rBox(
+                      context2,
+                      colorOk,
+                      TextButton(
+                        child: Text('Load default MASTERFILE.xlsx', style: whiteText),
+                        onPressed: () async {
+                          setState((){
+                            masterfileStr = "$appDir/MASTERFILE.xlsx";
+                          });
+                          Navigator.pop(context2);
+                          //await _getDefaultMastersheet().then((value){
+                          //setState(() {});
+                          //Navigator.pop(context2);
+                          //});
+                          },
+                      ),
+                    ),
+                    rBox(
+                      context2,
+                      Colors.green,
+                      TextButton(
+                        child: Text('Load from storage', style: whiteText),
+                        onPressed: () async {
+                          await FilesystemPicker.open(
+                            title: rootDir.toString(),
+                            context: context2,
+                            rootDirectory: rootDir!,
+                            fsType: FilesystemType.file,
+                            allowedExtensions: ['.xlsx'],
+                            pickText: 'Select XLSX document.',
+                            folderIconColor: Colors.blue,
+                            fileTileSelectMode: FileTileSelectMode.wholeTile,
+                            requestPermission: () async => await storageType.request().isGranted,
+                          ).then((value){
+                            masterfileStr = value.toString();
+                            setState(() {});
+                            Navigator.pop(context2);
+                          });
+                        },
+                      ),
+                    ),
+                  ]
                 )
+              )
             )
+          )
         )
     );
   }
@@ -633,113 +633,113 @@ class _NewJob extends State<NewJob>{
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: () async => false,
-        child: GestureDetector(
-            onTap: () {
-              FocusScopeNode currentFocus = FocusScope.of(context);
-              if (!currentFocus.hasPrimaryFocus) {
-                currentFocus.unfocus();
-              }
-            },
-            child: Scaffold(
-                  appBar: AppBar(
-                    leading: IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: (){
-                        goToPage(context, const JobsPage());
+      onWillPop: () async => false,
+      child: GestureDetector(
+        onTap: (){
+          FocusScopeNode currentFocus = FocusScope.of(context);
+          if (!currentFocus.hasPrimaryFocus) {
+            currentFocus.unfocus();
+          }
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: (){
+                goToPage(context, const JobsPage());
+              },
+            ),
+            centerTitle: true,
+            title: const Text("New Job"),
+            automaticallyImplyLeading: false,
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                headerPadding("Job Id:", TextAlign.left),
+                Padding(
+                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                  child: Card(
+                    child: TextFormField(
+                      textAlign: TextAlign.left,
+                      onChanged: (String value){
+                        idStr = value;
+                        setState(() {});
                       },
+                    )
+                  )
+                ),
+                headerPadding('Masterfile:', TextAlign.left),
+                Padding(
+                  padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 10, bottom: 10),
+                  child: Center(
+                    child: Card(
+                      child: ListTile(
+                        title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
+                        onTap: () async {
+                          _masterfileSelector();
+                        }
+                      ),
                     ),
-                    centerTitle: true,
-                    title: const Text("New Job"),
-                    automaticallyImplyLeading: false,
-                  ),
-                  body: SingleChildScrollView(
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            headerPadding("Job Id:", TextAlign.left),
-                            Padding(
-                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                                child: Card(
-                                    child: TextFormField(
-                                      textAlign: TextAlign.left,
-                                      onChanged: (String value){
-                                        idStr = value;
-                                        setState(() {});
-                                      },
-                                    )
-                                )
-                            ),
-                            headerPadding('Masterfile:', TextAlign.left),
-                            Padding(
-                                padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 10, bottom: 10),
-                                child: Center(
-                                  child: Card(
-                                    child: ListTile(
-                                        title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
-                                        onTap: () async {
-                                          _masterfileSelector();
-                                        }
-                                    ),
-                                  ),
-                                )
-                            ),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width,
-                              height: MediaQuery.of(context).size.height/10.0,
-                            ),
-                            Center(
-                              child: rBox(
-                                  context,
-                                  colorOk,
-                                  TextButton(
-                                    child: Text('Create Job', style: whiteText),
-                                    onPressed: () async {
-                                      String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
-                                      if(File(jobFilePath).existsSync()){
-                                        showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job ID or delete the job file which already exists.", colorWarning);
-                                        return;
-                                      }
+                  )
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height/10.0,
+                ),
+                Center(
+                  child: rBox(
+                      context,
+                      colorOk,
+                      TextButton(
+                        child: Text('Create Job', style: whiteText),
+                        onPressed: () async {
+                          String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
+                          if(File(jobFilePath).existsSync()){
+                            showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job ID or delete the job file which already exists.", colorWarning);
+                            return;
+                          }
 
-                                      // Job must need ID
-                                      if(idStr.isEmpty){
-                                        showAlert(context, "WARNING", "Job ID is empty!", Colors.orange);
-                                        return;
-                                      }
+                          // Job must need ID
+                          if(idStr.isEmpty){
+                            showAlert(context, "WARNING", "Job ID is empty!", Colors.orange);
+                            return;
+                          }
 
-                                      idStr = _regexFormat(idStr);
+                          idStr = _regexFormat(idStr);
 
-                                      // // Using jobID for name if no name exists
-                                      // if(nameStr.isEmpty){
-                                      //   nameStr = "Job$nameStr";
-                                      // }
-                                      //
-                                      // nameStr = _regexFormat(nameStr);
+                          // // Using jobID for name if no name exists
+                          // if(nameStr.isEmpty){
+                          //   nameStr = "Job$nameStr";
+                          // }
+                          //
+                          // nameStr = _regexFormat(nameStr);
 
-                                      StockJob newJob = StockJob(id: idStr);
-                                      newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-                                      sheetPath = masterfileStr;
+                          StockJob newJob = StockJob(id: idStr);
+                          newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+                          sheetPath = masterfileStr;
 
-                                      // User must rename jobID if it already exists
-                                      await writeJob(newJob).then((value){
-                                        job = newJob;
-                                        job.calcTotal();
-                                        if (!jobPageList.contains(jobFilePath)) {
-                                          jobPageList.add(jobFilePath);
-                                        }
-                                        copyIndex = -1;
-                                        goToPage(context, const Stocktake());
-                                      });
-                                    },
-                                  )
-                              ),
-                            )
-                          ]
+                          // User must rename jobID if it already exists
+                          await writeJob(newJob).then((value){
+                            job = newJob;
+                            job.calcTotal();
+                            if (!jobPageList.contains(jobFilePath)) {
+                              jobPageList.add(jobFilePath);
+                            }
+                            copyIndex = -1;
+                            goToPage(context, const Stocktake());
+                          });
+                        },
                       )
                   ),
-                ),
-        )
+                )
+              ]
+            )
+          ),
+        ),
+      )
     );
   }
 }
@@ -800,11 +800,36 @@ class _Stocktake extends State<Stocktake> {
       }
 
       setState((){
-        loadingMsg = "Creating categories...";
+        loadingMsg = "Creating header...";
       });
       await Future.delayed(const Duration(milliseconds: 500));
 
       job.headerRow = List<String>.generate(table.rows[0].length, (indexH) => table.rows[0][indexH].toString().toUpperCase());
+
+      setState((){
+        loadingMsg = "Checking spreadsheet format...";
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      //Check headerRow to make sure it is formatted correctly
+      bool goodFormat = true;
+      if(job.headerRow.length == 8){
+        goodFormat = job.headerRow[Index.barcode].toUpperCase().contains("BARCODE") &&
+          job.headerRow[Index.category].toUpperCase().contains("CATEGORY") &&
+          job.headerRow[Index.description].toUpperCase().contains("DESCRIPTION") &&
+          job.headerRow[Index.uom].toUpperCase().contains("UOM") &&
+          job.headerRow[Index.price].toUpperCase().contains("PRICE") &&
+          job.headerRow[Index.datetime].toUpperCase().contains("DATE") &&
+          job.headerRow[Index.ordercode].toUpperCase().contains("ORDERCODE");
+      }
+      else{
+        goodFormat = false;
+      }
+
+      if(!goodFormat){
+        errorString = "Spreadsheet was not loaded!\nThe spreadsheet has incorrect formatting -> check the header row\n";
+        return;
+      }
 
       setState((){
         loadingMsg = "Creating main table...";
@@ -831,18 +856,6 @@ class _Stocktake extends State<Stocktake> {
   }
 
   _getTable() async {
-    // if(job.table.isNotEmpty){
-    //   setState((){
-    //     loadingMsg = "Loading Job...";
-    //   });
-    //
-    //   await Future.delayed(const Duration(seconds: 1));
-    //   setState(() {
-    //     isLoading = false;
-    //   });
-    //   return;
-    // }
-
     setState(() {
       isLoading = true;
     });
@@ -872,100 +885,99 @@ class _Stocktake extends State<Stocktake> {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: () async => false,
-        child: Scaffold(
-          appBar: AppBar(
-            leading: isLoading ? const Icon(Icons.lock_clock) : IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                if(!isLoading){
-                  job = StockJob(id: "EMPTY");
-                  masterCategory = List.empty();
-                  copyIndex = -1;
-                  lastCategory = "MISC";
-                  goToPage(context, const JobsPage());
-                }
-              },
-            ),
-            centerTitle: true,
-            title: const Text("Stocktake", textAlign: TextAlign.center),
-            automaticallyImplyLeading: false,
+      onWillPop: () async => false,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: isLoading ? const Icon(Icons.lock_clock) : IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if(!isLoading){
+                job = StockJob(id: "EMPTY");
+                masterCategory = List.empty();
+                copyIndex = -1;
+                lastCategory = "MISC";
+                goToPage(context, const JobsPage());
+              }
+            },
           ),
-          body: SingleChildScrollView(
-            child: Center(
-              child: Column(
-                children: isLoading ? [
-                  SizedBox(height: MediaQuery.of(context).size.height/3),
-                  Text(loadingMsg, style: const TextStyle(fontSize: 24.0)),
-                  const CircularProgressIndicator(),
-                ] :  [
-                  const SizedBox(height: 10.0,),
-                  Card(
-                    child: ListTile(
-                      title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
-                      subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}\n\nTOTAL VALUE: ${job.calcTotalCost()} (approx)\n", style: blackText),
-                    ),
+          centerTitle: true,
+          title: const Text("Stocktake", textAlign: TextAlign.center),
+          automaticallyImplyLeading: false,
+        ),
+        body: SingleChildScrollView(
+          child: Center(
+            child: Column(
+              children: isLoading ? [
+                SizedBox(height: MediaQuery.of(context).size.height/3),
+                Text(loadingMsg, style: const TextStyle(fontSize: 24.0)),
+                const CircularProgressIndicator(),
+              ] :  [
+                const SizedBox(height: 10.0,),
+                Card(
+                  child: ListTile(
+                    title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
+                    subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}\n\nTOTAL VALUE: ${job.calcTotalCost()} (approx)\n", style: blackText),
                   ),
-
-                  headerPadding("Current Location:", TextAlign.left),
-                  Card(
-                    child: ListTile(
-                      title: job.location.isEmpty ? Text("Tap to select a location...", style: greyText) : Text(job.location, textAlign: TextAlign.center, softWrap: true, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      leading: job.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
-                      trailing: job.location.isNotEmpty ?  const Icon(Icons.playlist_add, color: colorEdit) : null,
-                      onTap: () {
-                        setLocation(context);
-                      },
-                    ),
+                ),
+                headerPadding("Current Location:", TextAlign.left),
+                Card(
+                  child: ListTile(
+                    title: job.location.isEmpty ? Text("Tap to select a location...", style: greyText) : Text(job.location, textAlign: TextAlign.center, softWrap: true, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    leading: job.location.isEmpty ? const Icon(Icons.warning_amber, color: Colors.red) : null,
+                    trailing: job.location.isNotEmpty ?  const Icon(Icons.playlist_add, color: colorEdit) : null,
+                    onTap: () {
+                      setLocation(context);
+                    },
                   ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width,
-                    height: MediaQuery.of(context).size.height / 10.0,
-                  ),
-                  rBox(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('SCAN & SEARCH', style: whiteText),
-                        onPressed: () {
-                          if (job.location.isNotEmpty) {
-                            goToPage(context, const GridView(action: Action.add));
-                          } else {
-                            showAlert(context, "Alert", 'Create and set location before scanning.', Colors.red.withOpacity(0.8));
-                          }
-                        },
-                      )
-                  ),
-                  rBox(
-                      context,
-                      Colors.blue,
-                      TextButton(
-                        child: Text('EDIT STOCKTAKE', style: whiteText),
-                        onPressed: () {
-                          job.stocktake.isNotEmpty ? goToPage(context, const GridView(action: Action.edit)) :
-                          showAlert(context, "ERROR:", "Stocktake is empty.", Colors.blue.shade200);
-                        },
-                      )
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width,
-                    height: MediaQuery.of(context).size.height / 30.0,
-                  ),
-                  rBox(
-                      context,
-                      Colors.orange.shade700,
-                      TextButton(
-                        child: Text('EXPORT STOCKTAKE', style: whiteText),
-                        onPressed: () {
-                          goToPage(context, ExportPage());
-                        },
-                      )
-                  ),
-                ],
-              )
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height / 10.0,
+                ),
+                rBox(
+                  context,
+                  Colors.blue,
+                  TextButton(
+                    child: Text('SCAN & SEARCH', style: whiteText),
+                    onPressed: () {
+                      if (job.location.isNotEmpty) {
+                        goToPage(context, const GridView(action: Action.add));
+                      } else {
+                        showAlert(context, "Alert", 'Create and set location before scanning.', Colors.red.withOpacity(0.8));
+                      }
+                    },
+                  )
+                ),
+                rBox(
+                  context,
+                  Colors.blue,
+                  TextButton(
+                    child: Text('EDIT STOCKTAKE', style: whiteText),
+                    onPressed: () {
+                      job.stocktake.isNotEmpty ? goToPage(context, const GridView(action: Action.edit)) :
+                      showAlert(context, "ERROR:", "Stocktake is empty.", Colors.blue.shade200);
+                    },
+                  )
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height / 30.0,
+                ),
+                rBox(
+                  context,
+                  Colors.orange.shade700,
+                  TextButton(
+                    child: Text('EXPORT STOCKTAKE', style: whiteText),
+                    onPressed: () {
+                      goToPage(context, ExportPage());
+                    },
+                  )
+                ),
+              ],
             )
-          ),
-        )
+          )
+        ),
+      )
     );
   }
 }
