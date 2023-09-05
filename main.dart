@@ -28,18 +28,16 @@ import 'package:decimal/decimal.dart';
 const String versionStr = "0.23.09+1";
 Permission storageType = Permission.manageExternalStorage; // Permission.storage;
 List<String> jobPageList = [];
-List<String> masterCategory = [];
 Map<String, dynamic> sFile = {};
 Directory? rootDir;
 enum Action {add, edit, assign}
-
-int searchColumn = 3; // Start search column on description
+int searchColumn = Index.description; // Start search column on description
 int assignSearchColumn = Index.description;
-int assignColumn = -1;
+int assignColumn = -1; // ONLY barcode and/or ordercode column
 int copyIndex = -1;
-
 String copyCode = "";
 String errorString = "";
+String mastersheetPath = "";
 String sheetPath = "";
 String appDir = "";
 String lastCategory = "MISC";
@@ -77,11 +75,7 @@ void main() async {
     appDir = value.path;
   });
 
-  if(!File("$appDir/MASTERFILE.xlsx").existsSync()){
-    ByteData data = await rootBundle.load("assets/MASTERFILE.xlsx"); // Copy MASTERFILE from assets folder
-    var bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    await File("$appDir/MASTERFILE.xlsx").writeAsBytes(bytes); // Write MASTERFILE to App Directory
-  }
+  await checkForMasterfile(appDir);
 
   await loadSessionFile();
 
@@ -397,10 +391,6 @@ class _JobsPage extends State<JobsPage> {
       var dynamic = json.decode(fileContent);
       job = StockJob.fromJson(dynamic);
       job.calcTotal();
-
-      masterCategory = List<String>.generate(job.table.length, (index) => job.table[index][2].toString().toUpperCase());
-      masterCategory.removeAt(0); // Remove header row
-      masterCategory = masterCategory.toSet().toList(); // Remove duplicates
     }
     catch (e){
       writeErrLog(e.toString(), "JobsPage() -> _readJob() -> $path");
@@ -536,13 +526,12 @@ class NewJob extends StatefulWidget{
   State<NewJob> createState() => _NewJob();
 }
 class _NewJob extends State<NewJob>{
-  String masterfileStr = "";
   String idStr = "";
 
   @override
   void initState() {
     super.initState();
-    masterfileStr = "$appDir/MASTERFILE.xlsx"; //_getDefaultMastersheet();
+    sheetPath = "$appDir/$mastersheetPath";
   }
 
   @override
@@ -571,13 +560,9 @@ class _NewJob extends State<NewJob>{
                         child: Text('Load default MASTERFILE.xlsx', style: whiteText),
                         onPressed: () async {
                           setState((){
-                            masterfileStr = "$appDir/MASTERFILE.xlsx";
+                            sheetPath = "$appDir/$mastersheetPath";
                           });
                           Navigator.pop(context2);
-                          //await _getDefaultMastersheet().then((value){
-                          //setState(() {});
-                          //Navigator.pop(context2);
-                          //});
                           },
                       ),
                     ),
@@ -598,8 +583,9 @@ class _NewJob extends State<NewJob>{
                             fileTileSelectMode: FileTileSelectMode.wholeTile,
                             requestPermission: () async => await storageType.request().isGranted,
                           ).then((value){
-                            masterfileStr = value.toString();
-                            setState(() {});
+                            setState(() {
+                              sheetPath = value.toString();
+                            });
                             Navigator.pop(context2);
                           });
                         },
@@ -681,7 +667,7 @@ class _NewJob extends State<NewJob>{
                   child: Center(
                     child: Card(
                       child: ListTile(
-                        title: Text(masterfileStr.split("/").last, textAlign: TextAlign.center, style: blackText),
+                        title: Text(sheetPath.split("/").last, textAlign: TextAlign.center, style: blackText),
                         onTap: () async {
                           _masterfileSelector();
                         }
@@ -695,48 +681,47 @@ class _NewJob extends State<NewJob>{
                 ),
                 Center(
                   child: rBox(
-                      context,
-                      colorOk,
-                      TextButton(
-                        child: Text('Create Job', style: whiteText),
-                        onPressed: () async {
-                          String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
-                          if(File(jobFilePath).existsSync()){
-                            showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job ID or delete the job file which already exists.", colorWarning);
-                            return;
+                    context,
+                    colorOk,
+                    TextButton(
+                      child: Text('Create Job', style: whiteText),
+                      onPressed: () async {
+                        String jobFilePath = "/storage/emulated/0/Documents/$idStr/ASJob_$idStr";
+                        if(File(jobFilePath).existsSync()){
+                          showAlert(context, "ALERT", "Job file already exists!\n\nPlease rename the job ID or delete the job file which already exists.", colorWarning);
+                          return;
+                        }
+
+                        // Job must need ID
+                        if(idStr.isEmpty){
+                          showAlert(context, "WARNING", "Job ID is empty!", Colors.orange);
+                          return;
+                        }
+
+                        idStr = _regexFormat(idStr);
+
+                        // // Using jobID for name if no name exists
+                        // if(nameStr.isEmpty){
+                        //   nameStr = "Job$nameStr";
+                        // }
+                        //
+                        // nameStr = _regexFormat(nameStr);
+
+                        StockJob newJob = StockJob(id: idStr);
+                        newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+
+                        // User must rename jobID if it already exists
+                        await writeJob(newJob).then((value){
+                          job = newJob;
+                          job.calcTotal();
+                          if (!jobPageList.contains(jobFilePath)) {
+                            jobPageList.add(jobFilePath);
                           }
-
-                          // Job must need ID
-                          if(idStr.isEmpty){
-                            showAlert(context, "WARNING", "Job ID is empty!", Colors.orange);
-                            return;
-                          }
-
-                          idStr = _regexFormat(idStr);
-
-                          // // Using jobID for name if no name exists
-                          // if(nameStr.isEmpty){
-                          //   nameStr = "Job$nameStr";
-                          // }
-                          //
-                          // nameStr = _regexFormat(nameStr);
-
-                          StockJob newJob = StockJob(id: idStr);
-                          newJob.date = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-                          sheetPath = masterfileStr;
-
-                          // User must rename jobID if it already exists
-                          await writeJob(newJob).then((value){
-                            job = newJob;
-                            job.calcTotal();
-                            if (!jobPageList.contains(jobFilePath)) {
-                              jobPageList.add(jobFilePath);
-                            }
-                            copyIndex = -1;
-                            goToPage(context, const Stocktake());
-                          });
-                        },
-                      )
+                          copyIndex = -1;
+                          goToPage(context, const Stocktake());
+                        });
+                      },
+                    )
                   ),
                 )
               ]
@@ -770,7 +755,34 @@ class _Stocktake extends State<Stocktake> {
     super.dispose();
   }
 
-  Future<void> loadSpreadSheet(String filePath) async {
+  _getTable() async {
+    setState(() {
+      isLoading = true;
+    });
+    await Future.delayed(const Duration(seconds: 1));
+
+    if(sheetPath.toLowerCase().endsWith("xlsx")){
+      await _loadSpreadSheet(sheetPath).then((value) async {
+        if (job.table.isEmpty) {
+          writeErrLog(errorString, "NewJob() -> loadMasterSheet() -> ${job.id}");
+          showAlert(context, "ERROR", "$errorString\nSheet Path: $sheetPath", Colors.red);
+        }
+
+        // Make sure table is saved
+        writeJob(job);
+        setState(() {
+          isLoading = false;
+        });
+      });
+    }
+    else{
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadSpreadSheet(String filePath) async {
     Uint8List bytes;
     if(!File(filePath).existsSync()){
       errorString = "FAILED TO LOAD SPREADSHEET!\nThe filepath does not exist: -> $filePath";
@@ -850,40 +862,22 @@ class _Stocktake extends State<Stocktake> {
 
       job.table.removeAt(0); // Remove header row
 
-      masterCategory = List<String>.generate(table.rows.length, (indexC) => table.rows[indexC][2].toString().toUpperCase());
-      masterCategory.removeAt(0); // Remove header row
-      masterCategory = masterCategory.toSet().toList(); // Remove duplicates
+      job.categories = <String>["CATERING", "CONSUMABLE", "CHEMICALS", "PACKAGING", "MISC", "INVOICE"] + List<String>.generate(job.table.length, (index) => job.table[index][2].toString().toUpperCase());
+      job.categories.removeAt(0); // Remove header row
+      job.categories = job.categories.toSet().toList(); // Remove duplicates
     }
     catch (e){
       errorString = "$e";
     }
   }
 
-  _getTable() async {
-    setState(() {
-      isLoading = true;
-    });
-    await Future.delayed(const Duration(seconds: 1));
-
-    if(sheetPath.toLowerCase().endsWith("xlsx")){
-      await loadSpreadSheet(sheetPath).then((value) async {
-        if (job.table.isEmpty) {
-          writeErrLog(errorString, "NewJob() -> loadMasterSheet() -> ${job.id}");
-          showAlert(context, "ERROR", "$errorString\nSheet Path: $sheetPath", Colors.red);
-        }
-
-        // Make sure table is saved
-        writeJob(job);
-        setState(() {
-          isLoading = false;
-        });
-      });
+  String _calcTotalCost() {
+    double tc = 0.0;
+    for(int i = 0; i< job.stocktake.length; i++){
+      int tableIndex = int.parse(job.stocktake[i][Index.index]);
+      tc += double.parse(job.stocktake[i][Index.stockCount]) * double.parse(job.table[tableIndex][Index.price]);
     }
-    else{
-      setState(() {
-        isLoading = false;
-      });
-    }
+    return '\$${Decimal.parse(double.parse(tc.toString()).toStringAsFixed(2))}';
   }
 
   @override
@@ -897,7 +891,6 @@ class _Stocktake extends State<Stocktake> {
             onPressed: () {
               if(!isLoading){
                 job = StockJob(id: "EMPTY");
-                masterCategory = List.empty();
                 copyIndex = -1;
                 lastCategory = "MISC";
                 goToPage(context, const JobsPage());
@@ -915,12 +908,12 @@ class _Stocktake extends State<Stocktake> {
                 SizedBox(height: MediaQuery.of(context).size.height/3),
                 Text(loadingMsg, style: const TextStyle(fontSize: 24.0)),
                 const CircularProgressIndicator(),
-              ] :  [
+              ] : [
                 const SizedBox(height: 10.0,),
                 Card(
                   child: ListTile(
                     title: Text(job.id, textScaleFactor: 1.25, textAlign: TextAlign.center),
-                    subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}\n\nTOTAL VALUE: ${job.calcTotalCost()} (approx)\n", style: blackText),
+                    subtitle: Text("\n${job.date}\n\nTOTAL COUNT: ${job.total}\n\nTOTAL VALUE: ${_calcTotalCost()} (approx)\n", style: blackText),
                   ),
                 ),
                 headerPadding("Current Location:", TextAlign.left),
@@ -1008,7 +1001,6 @@ class _TableView extends State<TableView> {
   List<List<dynamic>> searchList = List.empty();
   List<String> barcodeList = List.empty();
   List<String> ordercodeList = List.empty();
-  Color colorMode = colorOk;
   String categoryValue = "MISC";
   String scanText = '';
   double keyboardHeight = 20.0;
@@ -1020,25 +1012,21 @@ class _TableView extends State<TableView> {
   @override
   void initState() {
     super.initState();
-    // Set filter list and GridView color
+    // Set searchList
     if(widget.action == Action.add){
       searchList = List.empty();
-      colorMode = colorOk;
     }
     else if(widget.action == Action.edit){
       searchList = List.of(job.stocktake);
-      colorMode = colorOk;
     }
-    else { //if action == addBarcode or addOrdercode
+    else if(widget.action == Action.assign){
       searchList = List.of(job.table);
-      colorMode = Colors.teal;
     }
   }
 
   @override
   void dispose() {
     //debugPrint("DISPOSED!!");
-
     // // Dispose Focus before disposing controller?
     // FocusScopeNode currentFocus = FocusScope.of(context);
     // if (!currentFocus.hasPrimaryFocus) {
@@ -1615,7 +1603,7 @@ class _TableView extends State<TableView> {
                 job.stocktake[index][Index.stockCount] = decimalCount;
                 job.calcTotal();
                 writeJob(job);
-                // Manually update the filter list item instead of updating the entire list
+                // Update the search list item instead of the entire list
                 searchList[index][Index.stockCount] = decimalCount;
                 setState(() {});
               }
@@ -1873,11 +1861,11 @@ class _TableView extends State<TableView> {
                             categoryValue = value!;
                           });
                         }),
-                        items: masterCategory.map((String value) {
+                        items: job.categories.map((String value) {
                           return DropdownMenuItem(
                             value: value,
                             child: Center(
-                                child: Text(value, textAlign: TextAlign.center,)
+                              child: Text(value, textAlign: TextAlign.center,)
                             ),
                           );
                         }).toList(),
@@ -2134,7 +2122,7 @@ class _TableView extends State<TableView> {
                 floating: true,
                 pinned: true,
                 collapsedHeight: kToolbarHeight * 2.5,
-                backgroundColor: colorMode,
+                backgroundColor: widget.action == Action.assign ? Colors.teal : colorOk,
                 centerTitle: true,
                 title: _setAppBarTitle(),
                 leading: IconButton(
@@ -2208,7 +2196,7 @@ class _TableView extends State<TableView> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       border: Border.all(
-                        color: colorMode,
+                        color: widget.action == Action.assign ? Colors.teal : colorOk,
                         style: BorderStyle.solid,
                         width: 3.0,
                       ),
@@ -2704,14 +2692,14 @@ class ExportPage extends StatelessWidget{
   }
 }
 
-Widget headerPadding(String title, TextAlign l){
+Widget headerPadding(String title, TextAlign l) {
   return Padding(
     padding: const EdgeInsets.all(15.0),
     child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue, fontSize: 20.0)),
   );
 }
 
-Widget titlePadding(String title, TextAlign l){
+Widget titlePadding(String title, TextAlign l) {
   return Padding(
       padding: const EdgeInsets.only(top: 15.0),
       child: DefaultTextStyle(
@@ -2843,7 +2831,7 @@ Future<String> textEditDialog(BuildContext context, String title, String str) as
   return newText;
 }
 
-setLocation(BuildContext context1){
+setLocation(BuildContext context1) {
   showGeneralDialog(
       context: context1,
       barrierColor: Colors.black12, // Background color
@@ -3038,6 +3026,32 @@ writeJob(StockJob job) async {
   jobFile.writeAsString(jString, mode: FileMode.writeOnly);
 }
 
+checkForMasterfile(String dir) async {
+  final List<FileSystemEntity> entities = await Directory(dir).list().toList();
+  //print(entities.toString());
+  String fileName = "";
+  for(int i = 0; i < entities.length; i++){
+    fileName = entities[i].path.split("/").last;
+    if(fileName.startsWith("MASTERFILE") && fileName.endsWith("xlsx")){
+      mastersheetPath = fileName;
+      return;
+    }
+  }
+
+  //!File("$appDir/MASTERFILE.xlsx").existsSync()
+  final manifestContent = await AssetManifest.loadFromAssetBundle(rootBundle);
+  final assetList = manifestContent.listAssets().where((String s) => s.startsWith("assets/MASTERFILE") && s.endsWith(".xlsx"));
+  //print(assetList.toString());
+  if(assetList.isNotEmpty){
+    ByteData data = await rootBundle.load(assetList.first); // Copy MASTERFILE from assets folder
+    var bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    String assetName = assetList.first.split("/").last;
+    await File("$dir/$assetName").writeAsBytes(bytes); // Write MASTERFILE to App Directory
+    mastersheetPath = assetName;
+    //print("MASTERSHEET: $mastersheetPath");
+  }
+}
+
 loadSessionFile() async {
   errorString = "";
   var filePath = File('$appDir/session_file');
@@ -3151,12 +3165,13 @@ copyErrLog() async {
 }
 
 class StockJob {
-  String date = '';
-  String id;
+  String date = "";
+  String id = "";
   List<String> headerRow = List.empty(growable: true);
   Decimal total = Decimal.parse('0.0');
   List<List<String>> stocktake = List.empty(growable: true);
   List<List<String>> table = List.empty();
+  List<String> categories = List.empty();
   List<String> allLocations = List.empty(growable: true);
   String location = "";
 
@@ -3166,11 +3181,12 @@ class StockJob {
     total,
     stocktake,
     table,
+    categories,
     allLocations,
     location,
   });
 
-  factory StockJob.fromJson(dynamic json) {
+  factory StockJob.fromJson(dynamic json){
     StockJob sj = StockJob(
         id: json['id'] as String
     );
@@ -3203,6 +3219,11 @@ class StockJob {
       ));
     }
 
+    if(json.containsKey('categories') && json['categories'] != null){
+      var c = jsonDecode(json['categories']);
+      sj.categories = List.generate(c.length, (index) => c[index].toString().toUpperCase());
+    }
+
     sj.allLocations = !json.containsKey("allLocations") || json['allLocations'] == null ? List.empty(growable: true) : [
       for(final l in jsonDecode(json['allLocations']))
         l as String,
@@ -3212,12 +3233,13 @@ class StockJob {
     return sj;
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson(){
     return {
       'date': date.isEmpty ? "${DateTime.now().day}_${DateTime.now().month}_${DateTime.now().year}" : date,
       'id': id,
       'headerRow': jsonEncode(headerRow),
       'table' : jsonEncode(table),
+      'categories' : jsonEncode(categories),
       'stocktake': jsonEncode(stocktake),
       'allLocations': jsonEncode(allLocations),
       'location': location,
@@ -3229,14 +3251,5 @@ class StockJob {
     for (int i = 0; i < stocktake.length; i++) {
       total += Decimal.parse(stocktake[i][Index.stockCount].toString());
     }
-  }
-
-  String calcTotalCost() {
-   double tc = 0.0;
-   for(int i = 0; i< stocktake.length; i++){
-     int tableIndex = int.parse(stocktake[i][Index.index]);
-     tc += double.parse(stocktake[i][Index.stockCount]) * double.parse(table[tableIndex][Index.price]);
-   }
-   return '\$${Decimal.parse(double.parse(tc.toString()).toStringAsFixed(2))}';
   }
 }
