@@ -30,6 +30,8 @@ Permission storageType = Permission.manageExternalStorage; // Permission.storage
 List<String> jobPageList = [];
 Map<String, dynamic> sFile = {};
 Directory? rootDir;
+enum SearchType {first, full}
+SearchType searchType = SearchType.first;
 enum Action {add, edit, assign}
 int searchColumn = Index.description; // Start search column on description
 int assignSearchColumn = Index.description;
@@ -248,21 +250,28 @@ class _AppSettings extends State<AppSettings> {
                                 )
                             )
                         ),
-                        headerPadding('Error Reports', TextAlign.left),
-                        Center(
-                          child: Padding(
-                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
-                              child: Card(
-                                  color: Colors.blueGrey[400],
-                                  child: ListTile(
-                                    title: Text('Copy Error Log', textAlign: TextAlign.center, style: whiteText),
-                                    onTap: () async {
-                                      copyErrLog();
-                                      showAlert(context, "ALERT", "'fd_error_log.txt' has been copied to Internal Storage -> Documents\n", colorOk);
-                                    },
-                                  )
+                        headerPadding('Search Text Type', TextAlign.left),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 5),
+                          child: Card(
+                            child: ListTile(
+                              title: DropdownButton(
+                                value: searchType,
+                                icon: const Icon(Icons.keyboard_arrow_down, textDirection: TextDirection.rtl),
+                                items: ([SearchType.first, SearchType.full]).map((index){
+                                  return DropdownMenuItem(
+                                    value: index,
+                                    child: Text(index.toString()),
+                                  );
+                                }).toList(),
+                                onChanged: ((value){
+                                  setState((){
+                                    searchType = value as SearchType;
+                                  });
+                                })
                               )
-                          ),
+                            )
+                          )
                         ),
                         headerPadding('Storage Permission Type', TextAlign.left),
                         Padding(
@@ -311,6 +320,22 @@ class _AppSettings extends State<AppSettings> {
                                 ),
                               ),
                             )
+                        ),
+                        headerPadding('Error Reports', TextAlign.left),
+                        Center(
+                          child: Padding(
+                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
+                              child: Card(
+                                  color: Colors.blueGrey[400],
+                                  child: ListTile(
+                                    title: Text('Copy Error Log', textAlign: TextAlign.center, style: whiteText),
+                                    onTap: () async {
+                                      copyErrLog();
+                                      showAlert(context, "ALERT", "'fd_error_log.txt' has been copied to Internal Storage -> Documents\n", colorOk);
+                                    },
+                                  )
+                              )
+                          ),
                         ),
                       ],
                     )
@@ -1012,6 +1037,9 @@ class _TableView extends State<TableView> {
   @override
   void initState() {
     super.initState();
+
+    print("HEY FUCK FACE PRINT THIS FUCKING STATEMENT YOU STUPID FAGGOT LANGUAGE");
+
     // Set searchList
     if(widget.action == Action.add){
       searchList = List.empty();
@@ -1259,18 +1287,16 @@ class _TableView extends State<TableView> {
     return edit;
   }
 
-  void _setEmptyText(String barcode, String ordercode){
-    categoryValue = "MISC";
+  void _setNOFText({String? barcode, String? ordercode, String? description}){
+    categoryValue = lastCategory;
     countCtrl.text = "0.0";
-    descriptCtrl.text = "";
+    descriptCtrl.text = description ?? "";
     priceCtrl.text = "0.0";
     barcodeIndex = 0;
-    barcodeList = List.empty(growable: true);
-    barcodeList.add(barcode);
+    barcodeList = List.generate(1, (index) => barcode ?? "", growable: true);
     barcodeCtrl.text = barcodeList[barcodeIndex];
     ordercodeIndex = 0;
-    ordercodeList = List.empty(growable: true);
-    ordercodeList.add(ordercode);
+    ordercodeList = List.generate(1, (index) => ordercode ?? "", growable: true);
     ordercodeCtrl.text = ordercodeList[ordercodeIndex];
   }
 
@@ -1330,7 +1356,7 @@ class _TableView extends State<TableView> {
           searchList.where((row) =>
               row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
           if(first.isNotEmpty){
-            searchList = List.of(first);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+            searchList = List.of(first);
             found = true;
           }
         }
@@ -1341,7 +1367,12 @@ class _TableView extends State<TableView> {
           searchList.where((row) =>
               row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
           if(refined.isNotEmpty){
-            searchList = List.of(refined);//..sort((x, y) => (x[tDescription] as dynamic).compareTo((y[tDescription] as dynamic)));
+            if(widget.action == Action.edit){
+              searchList = List.of(refined);
+            }
+            else{
+              searchList = List.of(refined);
+            }
           }
         }
       }
@@ -2150,24 +2181,24 @@ class _TableView extends State<TableView> {
                             null,
                           ),
                         ),
-                      PopupMenuItem<int>(
-                        value: Index.barcode,
-                        child: ListTile(
-                          title: const Text("Search Barcode"),
-                          trailing: widget.action == Action.assign && Index.barcode == assignSearchColumn ? const Icon(Icons.check) :
-                            widget.action != Action.assign && Index.barcode == searchColumn ? const Icon(Icons.check) :
-                            null,
+                        PopupMenuItem<int>(
+                          value: Index.barcode,
+                          child: ListTile(
+                            title: const Text("Search Barcode"),
+                            trailing: widget.action == Action.assign && Index.barcode == assignSearchColumn ? const Icon(Icons.check) :
+                              widget.action != Action.assign && Index.barcode == searchColumn ? const Icon(Icons.check) :
+                              null,
+                          ),
                         ),
-                      ),
-                      PopupMenuItem<int>(
-                        value: Index.ordercode,
-                        child: ListTile(
-                          title: const Text("Search Ordercode"),
-                          trailing: widget.action == Action.assign && Index.ordercode == assignSearchColumn ? const Icon(Icons.check) :
-                            widget.action != Action.assign && Index.ordercode == searchColumn ? const Icon(Icons.check) :
-                            null,
+                        PopupMenuItem<int>(
+                          value: Index.ordercode,
+                          child: ListTile(
+                            title: const Text("Search Ordercode"),
+                            trailing: widget.action == Action.assign && Index.ordercode == assignSearchColumn ? const Icon(Icons.check) :
+                              widget.action != Action.assign && Index.ordercode == searchColumn ? const Icon(Icons.check) :
+                              null,
+                          ),
                         ),
-                      ),
                       ];
                     },
                     onSelected: (value) async {
@@ -2232,21 +2263,22 @@ class _TableView extends State<TableView> {
                         }
                         else{
                           if (searchColumn == Index.barcode){
-                            _setEmptyText(searchCtrl.text, "");
+                            _setNOFText(barcode: searchCtrl.text);
                           }
                           else if (searchColumn == Index.ordercode){
-                            _setEmptyText("", searchCtrl.text);
+                            _setNOFText(ordercode: searchCtrl.text);
                           }
                           else{
-                            _setEmptyText("", "");
+                            _setNOFText(description: searchCtrl.text);
                           }
+
                           await showGeneralDialog(
                             context: context,
                             barrierColor: Colors.black12,
                             barrierDismissible: false,
                             transitionDuration: const Duration(milliseconds: 100),
                             pageBuilder: (BuildContext buildContext, Animation animation, Animation secondaryAnimation){
-                              categoryValue = lastCategory;
+                              //categoryValue = lastCategory;
                               return _itemEdit(tableIndex: -1);
                             }
                           ).then((value){
@@ -2374,12 +2406,12 @@ class ExportPage extends StatelessWidget{
         //Decimal cost = quantity * Decimal.parse(jobTable[tableIndex][Index.price]);
 
         String barcode = job.table[tableIndex][Index.barcode].toString();
-        if(barcode == "null") {
+        if(barcode.toUpperCase() == "NULL") {
           barcode = "";
         }
 
         String ordercode = job.table[tableIndex][Index.ordercode].toString();
-        if(ordercode == "null"){
+        if(ordercode.toUpperCase() == "NULL"){
           ordercode = "";
         }
 
@@ -2918,28 +2950,33 @@ setLocation(BuildContext context1) {
                                         setState((){});
                                       },
                                     )
-                                )
+                                  )
                                 ),
                               ),
                               Card(
-                                  child: ListTile(
-                                    title: Text("+ Add New Location..", style: TextStyle(color: Colors.green, fontSize: sFile["fontScale"]), textAlign: TextAlign.justify),
-                                    onTap: () async {
-                                      await textEditDialog(context, "New Location", "").then((value) async {
-                                        if(value.isNotEmpty && !job.allLocations.contains(value)){
-                                          job.allLocations.add(value);
-                                          await writeJob(job).then((value){
-                                            setState((){});
-                                          });
-                                        }
-                                      });
-                                    },
-                                  )
+                                child: ListTile(
+                                  title: Text("+ Add New Location..", style: TextStyle(color: Colors.green, fontSize: sFile["fontScale"]), textAlign: TextAlign.justify),
+                                  onTap: () async {
+                                    await textEditDialog(context, "New Location", "").then((value) async {
+                                      if(value.isNotEmpty && !job.allLocations.contains(value)){
+                                        job.allLocations.add(value);
+                                        await writeJob(job).then((value){
+                                          setState((){});
+                                        });
+                                      }
+                                    });
+                                  },
+                                )
                               ),
-                              const SizedBox(height: 10.0),
+                              const SizedBox(height: 20.0),
                               job.location.isEmpty ?
-                              const Center(
-                                child: Text("NO LOCATION SET. TAP A LOCATION TO SET", style: TextStyle(color: colorBack),)
+                              Container(
+                                height: 50.0,
+                                color: Colors.red,
+                                //decoration: BoxDecoration(color: Colors.red, border: Border.all(color: Colors.red, width: 1.0)),
+                                child: const Center(
+                                  child: Text("NO LOCATION SET. TAP A LOCATION TO SET", style: TextStyle(color: Colors.white),)
+                                )
                               ) : Container()
                             ]
                         )
@@ -2965,7 +3002,7 @@ goToPage(BuildContext context, Widget page) {
   );
 }
 
-showNotification(BuildContext context,  Color bkgColor, TextStyle textStyle, String message,) {
+showNotification(BuildContext context, Color bkgColor, TextStyle textStyle, String message) {
   ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: textStyle, maxLines: 2, softWrap: true, overflow: TextOverflow.fade),
