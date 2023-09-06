@@ -1038,8 +1038,6 @@ class _TableView extends State<TableView> {
   void initState() {
     super.initState();
 
-    print("HEY FUCK FACE PRINT THIS FUCKING STATEMENT YOU STUPID FAGGOT LANGUAGE");
-
     // Set searchList
     if(widget.action == Action.add){
       searchList = List.empty();
