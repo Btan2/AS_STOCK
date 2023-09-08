@@ -192,6 +192,7 @@ class AppSettings extends StatefulWidget {
   State<AppSettings> createState() => _AppSettings();
 }
 class _AppSettings extends State<AppSettings> {
+
   @override
   void initState() {
     super.initState();
@@ -298,24 +299,25 @@ class _AppSettings extends State<AppSettings> {
                                     }
 
                                     // Inform the user storage can be accessed
-                                    prepareStorage();
+                                    await prepareStorage();
 
-                                    await writeSession().then((value){
+                                    await writeSession().then((value) async {
                                       if(errorString.isNotEmpty){
                                         showNotification(context, Colors.red, whiteText, "Write session file error: $errorString\n");
                                       }
-                                    });
 
-                                    setState(() {});
+                                      setState((){});
 
-                                    await storageType.isGranted.then((value){
-                                      if(value){
-                                        showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
-                                      }
-                                      else {
-                                        showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
-                                      }
+                                      await storageType.isGranted.then((value){
+                                        if(value){
+                                          showAlert(context, "ALERT", "Storage permissions were granted!", Colors.green);
+                                        }
+                                        else {
+                                          showAlert(context, "ERROR", "Storage permissions were denied!\n\nTry changing 'Storage Permission Type' in App Settings.", Colors.red);
+                                        }
+                                      });
                                     });
+                                    // setState(() {});
                                   }),
                                 ),
                               ),
@@ -1037,7 +1039,6 @@ class _TableView extends State<TableView> {
   @override
   void initState() {
     super.initState();
-
     // Set searchList
     if(widget.action == Action.add){
       searchList = List.empty();
@@ -1058,7 +1059,6 @@ class _TableView extends State<TableView> {
     // if (!currentFocus.hasPrimaryFocus) {
     //   currentFocus.unfocus();
     // }
-
     descriptCtrl.dispose();
     priceCtrl.dispose();
     barcodeCtrl.dispose();
@@ -1075,152 +1075,272 @@ class _TableView extends State<TableView> {
     bool delete = false;
     double addCount = c;
     await showDialog(
-        useSafeArea: true,
-        context: context,
-        barrierDismissible: false,
-        barrierColor: colorOk.withOpacity(0.8),
-        builder: (context){
-          TextEditingController txtCtrl = TextEditingController();
-          txtCtrl.text = addCount.toString();
-          totalCost.text = "Total Cost: ${Decimal.parse((price * addCount).toStringAsFixed(3))}";
-
-          return WillPopScope(
-              onWillPop: () async => false,
-              child: AlertDialog(
-                alignment: Alignment.center,
-                actionsAlignment: MainAxisAlignment.spaceAround,
-                title: Center(
-                    child:
-                    Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 4, textAlign: TextAlign.center,)),
-                content: GestureDetector(
-                  onTap: () {
+      useSafeArea: true,
+      context: context,
+      barrierDismissible: false,
+      barrierColor: colorOk.withOpacity(0.8),
+      builder: (context){
+        TextEditingController txtCtrl = TextEditingController();
+        txtCtrl.text = addCount.toString();
+        totalCost.text = "Total Cost: ${Decimal.parse((price * addCount).toStringAsFixed(3))}";
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            alignment: Alignment.center,
+            actionsAlignment: MainAxisAlignment.spaceAround,
+            title: Center(
+                child: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 4, textAlign: TextAlign.center,)),
+            content: GestureDetector(
+              onTap: () {
+                FocusScopeNode currentFocus = FocusScope.of(context);
+                if (!currentFocus.hasPrimaryFocus) {
+                  currentFocus.unfocus();
+                }
+              },
+              child: SingleChildScrollView(
+                child: Column(
+                  children: <Widget>[
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Unit Price: $price',
+                        border: InputBorder.none,
+                        hintStyle: const TextStyle(color: Colors.black)
+                      ),
+                      enabled: false
+                    ),
+                    TextField(
+                      controller: totalCost,
+                      style: const TextStyle(color: Colors.black),
+                      decoration: const InputDecoration(border: InputBorder.none),
+                      enabled: false
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
+                      child: Card(
+                        shadowColor: Colors.white.withOpacity(0.0),
+                          child: ListTile(
+                            trailing: IconButton(
+                              icon: const Icon(Icons.add_circle_outline),
+                              onPressed: () {
+                                addCount += 1;
+                                txtCtrl.text = addCount.toString();
+                                totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}";// ${(addCount * price).toString()}";
+                              },
+                            ),
+                            title: TextFormField(
+                              controller: txtCtrl,
+                              textAlign: TextAlign.center,
+                              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                              onChanged: (String value) async {
+                               addCount = double.tryParse(value) ?? 0;
+                               totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}"; //${(addCount * price).toString()}";
+                              },
+                            ),
+                            leading: IconButton(
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed: (){
+                                addCount = max(addCount - 1, 0);
+                                txtCtrl.text = addCount.toString();
+                                totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}";//${(addCount * price).toString()}";
+                              },
+                            ),
+                          )
+                        ),
+                      ),
+                      edit ? Padding(
+                        padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                          onPressed: () async {
+                            await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
+                              if(value){
+                                delete = true;
+                                // Unfocus then dispose
+                                FocusScopeNode currentFocus = FocusScope.of(context);
+                                if (!currentFocus.hasPrimaryFocus) {
+                                  currentFocus.unfocus();
+                                }
+                                txtCtrl.dispose();
+                                Navigator.pop(context);
+                              }
+                            });
+                          },
+                          child: const Text("DELETE"),
+                        ),
+                      ) : Container(),
+                    ]
+                  )
+                ),
+              ),
+              actions: <Widget>[
+              ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                  onPressed: () {
+                    //Unfocus then dispose
                     FocusScopeNode currentFocus = FocusScope.of(context);
                     if (!currentFocus.hasPrimaryFocus) {
                       currentFocus.unfocus();
                     }
+                    txtCtrl.dispose();
+                    Navigator.pop(context);
                   },
-                  child: SingleChildScrollView(
-                      child: Column(
-                          children: <Widget>[
-                            TextField(
-                              decoration: InputDecoration(
-                                hintText: 'Unit Price: $price',
-                                  border: InputBorder.none,
-                                  hintStyle: const TextStyle(color: Colors.black)
-                              ),
-                              enabled: false
-                            ),
-                            TextField(
-                                controller: totalCost,
-                                style: const TextStyle(color: Colors.black),
-                                decoration: const InputDecoration(border: InputBorder.none),
-                                enabled: false
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
-                              child: Card(
-                                  shadowColor: Colors.white.withOpacity(0.0),
-                                  child: ListTile(
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.add_circle_outline),
-                                      onPressed: () {
-                                        addCount += 1;
-                                        txtCtrl.text = addCount.toString();
-                                        totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}";// ${(addCount * price).toString()}";
-                                      },
-                                    ),
-                                    title: TextFormField(
-                                      controller: txtCtrl,
-                                      textAlign: TextAlign.center,
-                                      keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
-                                       onChanged: (String value) async {
-                                         addCount = double.tryParse(value) ?? 0;
-                                         totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}"; //${(addCount * price).toString()}";
-                                      },
-                                    ),
-                                    leading: IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline),
-                                      onPressed: (){
-                                        addCount = max(addCount - 1, 0);
-                                        txtCtrl.text = addCount.toString();
-                                        totalCost.text = "Total Cost:  ${Decimal.parse((addCount * price).toStringAsFixed(3))}";//${(addCount * price).toString()}";
-                                      },
-                                    ),
-                                  )
-                              ),
-                            ),
-                            edit ? Padding(
-                              padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 0.0),
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                                onPressed: () async {
-                                  await confirmDialog(context, "CONFIRM ITEM DELETION?").then((value){
-                                    if(value){
-                                      delete = true;
-                                      // Unfocus then dispose
-                                      FocusScopeNode currentFocus = FocusScope.of(context);
-                                      if (!currentFocus.hasPrimaryFocus) {
-                                        currentFocus.unfocus();
-                                      }
-                                      txtCtrl.dispose();
-                                      Navigator.pop(context);
-                                    }
-                                  });
-                                },
-                                child: const Text("DELETE"),
-                              ),
-                            ) : Container(),
-                          ]
-                      )
-                  ),
-                ),
-                actions: <Widget>[
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: colorBack),
-                    onPressed: () {
-                      //Unfocus then dispose
-                      FocusScopeNode currentFocus = FocusScope.of(context);
-                      if (!currentFocus.hasPrimaryFocus) {
-                        currentFocus.unfocus();
-                      }
-                      txtCtrl.dispose();
-                      Navigator.pop(context);
-                    },
-                    child: const Text("Cancel"),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: colorOk),
-                    onPressed: () async {
-                      if(addCount > 0){
-                        confirmed = true;
-
-                        //Unfocus then dispose
-                        FocusScopeNode currentFocus = FocusScope.of(context);
-                        if (!currentFocus.hasPrimaryFocus) {
-                          currentFocus.unfocus();
-                        }
-
-                        txtCtrl.dispose();
-                        Navigator.pop(context);
-                      }
-                      else{
-                        String er = "Count is zero (0).";
-                        if(edit){
-                          er += "\n\nPress and hold item then select 'DELETE' if you wish to remove this item.";
-                        }
-                        showAlert(context, "ERROR:", er, colorWarning);
-                        txtCtrl.text = "0.0";
-                      }
-                    },
-
-                    child: const Text("Confirm"),
-                  ),
-                ],
-              )
-          );
-        }
+                  child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                onPressed: () async {
+                  if(addCount > 0){
+                    confirmed = true;
+                    //Unfocus then dispose
+                    FocusScopeNode currentFocus = FocusScope.of(context);
+                    if (!currentFocus.hasPrimaryFocus) {
+                      currentFocus.unfocus();
+                    }
+                    txtCtrl.dispose();
+                    Navigator.pop(context);
+                  }
+                  else{
+                    String er = "Count is zero (0).";
+                    if(edit){
+                      er += "\n\nPress and hold item then select 'DELETE' if you wish to remove this item.";
+                    }
+                    showAlert(context, "ERROR:", er, colorWarning);
+                    txtCtrl.text = "0.0";
+                  }
+                },
+                child: const Text("Confirm"),
+              ),
+            ],
+          )
+        );
+      }
     );
+
     return confirmed ? addCount : (delete ? -2 : -1);
+  }
+
+  Future<double> _assignConfirm(BuildContext context, String descript, int index) async {
+    double addCount = 0;
+    double price = double.parse(searchList[index][Index.price]);
+    await showDialog(
+      useSafeArea: true,
+      context: context,
+      barrierDismissible: false,
+      barrierColor: colorOk.withOpacity(0.8),
+      builder: (context){
+        TextEditingController txtCtrl = TextEditingController();
+        txtCtrl.text = addCount.toString();
+        totalCost.text = "Total Cost: ${Decimal.parse((price * addCount).toStringAsFixed(3))}";
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            alignment: Alignment.center,
+            actionsAlignment: MainAxisAlignment.spaceAround,
+            title: Center(
+              child: Text(descript, overflow: TextOverflow.fade, softWrap: true, maxLines: 4, textAlign: TextAlign.center,)
+            ),
+            content: GestureDetector(
+              onTap: (){
+                FocusScopeNode currentFocus = FocusScope.of(context);
+                if (!currentFocus.hasPrimaryFocus) {
+                  currentFocus.unfocus();
+                }
+              },
+              child: SingleChildScrollView(
+                child: Column(
+                  children: <Widget>[
+                    const Center(
+                      child: Text("------------------"),
+                    ),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Unit Price: $price',
+                        border: InputBorder.none,
+                        hintStyle: const TextStyle(color: Colors.black)
+                      ),
+                      enabled: false
+                    ),
+                    TextField(
+                      controller: totalCost,
+                      style: const TextStyle(color: Colors.black),
+                      decoration: const InputDecoration(border: InputBorder.none),
+                      enabled: false
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15.0, right: 15.0, bottom: 10.0),
+                      child: Card(
+                        shadowColor: Colors.white.withOpacity(0.0),
+                        child: ListTile(
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              addCount += 1;
+                              txtCtrl.text = addCount.toString();
+                              totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}";// ${(addCount * price).toString()}";
+                            },
+                          ),
+                          title: TextFormField(
+                            controller: txtCtrl,
+                            textAlign: TextAlign.center,
+                            keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: true),
+                            onChanged: (String value) async {
+                              addCount = double.tryParse(value) ?? 0;
+                              totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}"; //${(addCount * price).toString()}";
+                            },
+                          ),
+                          leading: IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: (){
+                              addCount = max(addCount - 1, 0);
+                              txtCtrl.text = addCount.toString();
+                              totalCost.text = "Total Cost: ${Decimal.parse((addCount * price).toStringAsFixed(3))}";//${(addCount * price).toString()}";
+                            },
+                          ),
+                        )
+                      ),
+                    ),
+                  ]
+                )
+              ),
+            ),
+            actions: <Widget>[
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: colorBack),
+                onPressed: () {
+                  addCount = -1;
+                  //Unfocus then dispose
+                  FocusScopeNode currentFocus = FocusScope.of(context);
+                  if (!currentFocus.hasPrimaryFocus) {
+                    currentFocus.unfocus();
+                  }
+                  txtCtrl.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                onPressed: () async {
+                  if(addCount < 0){
+                    addCount = 0;
+                  }
+                  //Unfocus then dispose
+                  FocusScopeNode currentFocus = FocusScope.of(context);
+                  if (!currentFocus.hasPrimaryFocus) {
+                    currentFocus.unfocus();
+                  }
+                  txtCtrl.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text("Confirm"),
+              ),
+            ],
+          )
+        );
+      }
+    );
+
+    return addCount;
   }
 
   Future<bool> _spreadsheetLongPress(BuildContext context, int index) async {
@@ -1327,9 +1447,9 @@ class _TableView extends State<TableView> {
   Widget _searchBar(){
     void defaultSearchList(){
       searchList = widget.action == Action.add ? List.empty() :
-          widget.action == Action.assign ? List.of(job.table) :
-          widget.action == Action.edit ? List.of(job.stocktake) :
-          List.empty();
+         widget.action == Action.assign ? List.of(job.table) :
+         widget.action == Action.edit ? List.of(job.stocktake) :
+         List.empty();
     }
 
     void searchString(String searchText){
@@ -1346,34 +1466,41 @@ class _TableView extends State<TableView> {
 
       bool found = false;
       List<String> searchWords = searchText.split(' ').where((String s) => s.isNotEmpty).toList();
-      for (int i = 0; i < searchWords.length; i++) {
-        if (!found) {
-          List<List<dynamic>> first = widget.action == Action.edit ?
-          searchList.where((row) =>
-              job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
-          searchList.where((row) =>
-              row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-          if(first.isNotEmpty){
-            searchList = List.of(first);
-            found = true;
-          }
-        }
-        else {
-          List<List<dynamic>> refined = widget.action == Action.edit ?
-          searchList.where((row) =>
-              job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
-          searchList.where((row) =>
-              row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-          if(refined.isNotEmpty){
-            if(widget.action == Action.edit){
-              searchList = List.of(refined);
+
+      if(searchType == SearchType.first){
+        for (int i = 0; i < searchWords.length; i++) {
+          if (!found) {
+            List<List<dynamic>> first = widget.action == Action.edit ?
+            searchList.where((row) =>
+                job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+            searchList.where((row) =>
+                row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+            if(first.isNotEmpty){
+              searchList = List.of(first);
+              found = true;
             }
-            else{
+          }
+          else {
+            List<List<dynamic>> refined = widget.action == Action.edit ?
+            searchList.where((row) =>
+                job.table[int.parse(row[Index.index])][column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList() :
+            searchList.where((row) =>
+                row[column].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+            if(refined.isNotEmpty){
               searchList = List.of(refined);
             }
           }
         }
       }
+      else if(searchType == SearchType.full){
+        List<List<dynamic>> full = widget.action == Action.edit ?
+          searchList.where((row) => job.table[int.parse(row[Index.index])][column].toString().contains(searchText)).toList() :
+          searchList.where((row) => row[column].toString().contains(searchText)).toList();
+        if(full.isNotEmpty){
+          searchList = List.of(full);
+        }
+      }
+      
       if(!found){
         searchList = List.empty();
       }
@@ -1523,10 +1650,11 @@ class _TableView extends State<TableView> {
   }
 
   Widget _rowAssign(int index, double rowHeight) {
+    bool added = false;
     return GestureDetector(
       onTap: () async {
-        await confirmDialog(context, "Assign $copyCode to ${searchList[index][Index.description]}?").then((value) async {
-          if (value) {
+        await _assignConfirm(context, "Assign $copyCode to ${searchList[index][Index.description]}?", index).then((value) async {
+          if(value > -1) {
             int tableIndex = int.parse(searchList[index][Index.index]);
             // Make sure we add barcode/ordercode to the correct column
             String s = job.table[tableIndex][assignColumn];
@@ -1536,10 +1664,30 @@ class _TableView extends State<TableView> {
             else {
               job.table[tableIndex][assignColumn] += ",$copyCode";
             }
+
+            if(value > 0){
+              added = true;
+              job.stocktake.add(<String>[
+                int.parse(searchList[index][Index.index].toString()).toString(),
+                Decimal.parse(value.toStringAsFixed(3)).toString(),
+                job.location,
+                addBarcodeIndex.toString(),
+                addOrdercodeIndex.toString(),
+              ]);
+              String shortDescript = searchList[index][Index.description].toString();
+              shortDescript.substring(0, min(shortDescript.length, 14));
+              job.calcTotal();
+              writeJob(job);
+            }
             copyCode = "";
             setState(() {});
             await writeJob(job).then((value){
               goToPage(context, const TableView(action: Action.add));
+              if(added){
+                String shortDescript = searchList[index][Index.description].toString();
+                shortDescript.substring(0, min(shortDescript.length, 14));
+                showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $value");
+              }
             });
           }
         });
@@ -1688,23 +1836,22 @@ class _TableView extends State<TableView> {
             shortDescript.substring(0, min(shortDescript.length, 14));
             showNotification(context, colorWarning, whiteText, "Added '$shortDescript' --> $addCount");
             job.calcTotal();
-
             writeJob(job);
           }
           setState(() {});
         });
       },
       child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: rowHeight,
-                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
-                child: Center(
-                  child: Text(searchList[index][Index.description], textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.ellipsis)
-                ),
+        children: [
+          Expanded(
+            child: Container(
+              height: rowHeight,
+              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 1.0)),
+              child: Center(
+                child: Text(searchList[index][Index.description], textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.ellipsis)
               ),
             ),
+          ),
             // lastCell.isNotEmpty ? Container(
             //   width: 100.0,
             //   height: rowHeight,
