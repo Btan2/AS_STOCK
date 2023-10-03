@@ -1,56 +1,47 @@
-import 'package:universal_html/html.dart';
+import 'dart:convert';
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+import 'package:excel/excel.dart' as excel;
 
-enum Action{blank, edit, view, compare, upload}
-enum CellFormat{words, datetime, decimals, integers, multiline}
-
-String versionStr = "0.23.08+1";
-
+String versionStr = "0.23.09+1";
 String loadingMsg = "";
-
+bool masterWasEdited = false;
 List<List<String>> jobTable = [];
-List<Map<String, dynamic>> jobHeader = [{}];
-
-List<List<String>> tempMasterTable = [];
-
-List<List<String>> bkpTable = [];
-List<List<String>> masterTable = [];
-List<Map<String, dynamic>> masterHeader = [{}];
-
+List<String> jobHeader = [];
 List<String> jobCategory = [];
+List<List<String>> masterTable = [];
+List<String> masterHeader = [];
 List<String> masterCategory = [];
-
 TextStyle get whiteText{ return const TextStyle(color: Colors.white, fontSize: 20.0);}
 TextStyle get blackText{ return const TextStyle(color: Colors.black, fontSize: 20.0);}
 TextStyle get greyText{ return const TextStyle(color: Colors.black12, fontSize: 20.0);}
 TextStyle get cellText{ return const TextStyle(color: Colors.black, fontSize: 12.0);}
-
 final Color colorOk = Colors.blue.shade400;
 const Color colorError = Colors.redAccent;
 final Color colorWarning = Colors.deepPurple.shade200;
 
 class Index {
-  static int masterIndex = 0;
-  static int masterBarcode = 1;
-  static int masterCategory = 2;
-  static int masterDescript = 3;
-  static int masterUOM = 4;
-  static int masterPrice = 5;
-  static int masterDate = 6;
-  static int masterOrdercode = 7;
-  static int jobTableIndex = 0;
-  static int jobMasterIndex = 1;
-  static int jobCategory = 2;
-  static int jobDescript = 3;
-  static int jobUOM = 4;
-  static int jobQTY = 5;
-  static int jobPrice = 6;
-  static int jobBarcode = 7;
-  static int jobNof = 8;
-  static int jobDate = 9;
-  static int jobOrdercode = 10;
+  static const int masterIndex = 0;
+  static const int masterBarcode = 1;
+  static const int masterCategory = 2;
+  static const int masterDescript = 3;
+  static const int masterUOM = 4;
+  static const int masterPrice = 5;
+  static const int masterDate = 6;
+  static const int masterOrdercode = 7;
+  static const int jobTableIndex = 0;
+  static const int jobMasterIndex = 1;
+  static const int jobCategory = 2;
+  static const int jobDescript = 3;
+  static const int jobUOM = 4;
+  static const int jobQTY = 5;
+  static const int jobPrice = 6;
+  static const int jobBarcode = 7;
+  static const int jobNof = 8;
+  static const int jobDate = 9;
+  static const int jobOrdercode = 10;
 }
 
 void main() {
@@ -90,93 +81,92 @@ class _LoginPage extends State<LoginPage>{
         child: Text("version $versionStr", style: cellText, textAlign: TextAlign.center),
       ),
       body: SingleChildScrollView(
-          child: Center(
-              child: Column(
-                  children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 35.0),
-                      child: Center(
-                        child: SizedBox(
-                          height: MediaQuery.of(context).size.height/10.0,
-                          child: SvgPicture.asset("AS_logo_light.svg"),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: 50,
-                      width: MediaQuery.of(context).size.width,
-                      child: const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
-                    ),
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height / 10.0,
-                      width: MediaQuery.of(context).size.width,
-                    ),
-                    rBox(
-                      width: MediaQuery.of(context).size.width/4.0,
-                      child: TextField(
-                        decoration: const InputDecoration(hintText: 'Enter username', border: OutlineInputBorder()),
-                        textAlign: TextAlign.center,
-                        onChanged: (String value) {
-                          username = value;
-                          setState(() {});
-                        }
-                        ),
-                    ),
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height/40.0,
-                    ),
-                    rBox(
-                      width: MediaQuery.of(context).size.width/4.0,
-                      child: TextField(
-                          obscureText: true,
-                          decoration: const InputDecoration(hintText: 'Enter password', border: OutlineInputBorder()),
-                          textAlign: TextAlign.center,
-                          onChanged: (String value) {
-                            pass = value;
-                            setState(() {});
-                          }
-                      ),
-                    ),
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height/40.0,
-                    ),
-                    TapRegion(
-                      onTapInside: (value) async{
-                         setState(() {
-                           splashColor = Colors.green;
-                         });
-
-                         Navigator.push(context, MaterialPageRoute(builder: (context) => const MainPage()));
-
-                        // if(pass == "pass" && username == "andy"){
-                        //   setState(() {
-                        //     splashColor = Colors.green;
-                        //   });
-                        //   Navigator.push(context, MaterialPageRoute(builder: (context) => const MainPage()));
-                        //   return;
-                        // }
-                        // else{
-                        //  setState((){
-                        //    splashColor = colorError;
-                        //  });
-                        //  await Future.delayed(const Duration(milliseconds: 500));
-                        //  setState(() {
-                        //    splashColor = colorOk;
-                        //  });
-                        // }
-                      },
-                      child: rBox(
-                          width: MediaQuery.of(context).size.width/4.0,
-                          child: Material(
-                            color: splashColor,
-                            borderRadius: BorderRadius.circular(20.0),
-                            child: const Center(child: Text("Login", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 20.0))),
-                          )
-                      )
-                    ),
-                  ]
-              )
-            )
+        child: Center(
+          child: Column(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(top: 35.0),
+                child: Center(
+                  child: SizedBox(
+                    height: MediaQuery.of(context).size.height/10.0,
+                    child: SvgPicture.asset("AS_logo_light.svg"),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 50,
+                width: MediaQuery.of(context).size.width,
+                child: const Text('Serving Australian businesses for over 30 years!', style: TextStyle(color: Colors.blueGrey), textAlign: TextAlign.center,),
+              ),
+              SizedBox(
+                height: MediaQuery.of(context).size.height / 10.0,
+                width: MediaQuery.of(context).size.width,
+              ),
+              rBox(
+                width: MediaQuery.of(context).size.width/4.0,
+                child: TextField(
+                  decoration: const InputDecoration(hintText: 'Enter username', border: OutlineInputBorder()),
+                  textAlign: TextAlign.center,
+                  onChanged: (String value) {
+                    username = value;
+                    setState(() {});
+                  }
+                ),
+              ),
+              SizedBox(
+                height: MediaQuery.of(context).size.height/40.0,
+              ),
+              rBox(
+                width: MediaQuery.of(context).size.width/4.0,
+                child: TextField(
+                  obscureText: true,
+                  decoration: const InputDecoration(hintText: 'Enter password', border: OutlineInputBorder()),
+                  textAlign: TextAlign.center,
+                  onChanged: (String value) {
+                    setState(() {
+                      pass = value;
+                    });
+                  }
+                ),
+              ),
+              SizedBox(
+                height: MediaQuery.of(context).size.height/40.0,
+              ),
+              TapRegion(
+                onTapInside: (value) async{
+                  setState(() {
+                    splashColor = Colors.green;
+                  });
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const MainPage()));
+                  // if(pass == "pass" && username == "andy"){
+                  //   setState(() {
+                  //     splashColor = Colors.green;
+                  //   });
+                  //   Navigator.push(context, MaterialPageRoute(builder: (context) => const MainPage()));
+                  //   return;
+                  // }
+                  // else{
+                  //  setState((){
+                  //    splashColor = colorError;
+                  //  });
+                  //  await Future.delayed(const Duration(milliseconds: 500));
+                  //  setState(() {
+                  //    splashColor = colorOk;
+                  //  });
+                  // }
+                  },
+                  child: rBox(
+                    width: MediaQuery.of(context).size.width/4.0,
+                    child: Material(
+                      color: splashColor,
+                      borderRadius: BorderRadius.circular(20.0),
+                      child: const Center(child: Text("Login", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 20.0))),
+                    )
+                  )
+              ),
+            ]
+          )
+        )
       ),
     );
   }
@@ -207,7 +197,7 @@ class _MainPage extends State<MainPage>{
 
   Future<void> _filePicker() async {
     // Load xlsx from file browser
-    FileUploadInputElement uploadInput = FileUploadInputElement();
+    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.click();
 
     uploadInput.onAbort.listen((e){
@@ -216,9 +206,9 @@ class _MainPage extends State<MainPage>{
 
     uploadInput.onChange.listen((e) {
       // read file content as dataURL
-      List<File> files = List.empty();
-      files = uploadInput.files as List<File>;
-      FileReader reader = FileReader();
+      List<html.File> files = List.empty();
+      files = uploadInput.files as List<html.File>;
+      html.FileReader reader = html.FileReader();
       final file = files[0];
       reader.readAsArrayBuffer(file);
 
@@ -232,7 +222,7 @@ class _MainPage extends State<MainPage>{
 
       reader.onLoadEnd.listen((e) async {
         await _loadMasterFile(reader.result as List<int>);
-        debugPrint(masterTable.length.toString());
+        //debugPrint(masterTable.length.toString());
         setState((){
           _isLoading = false;
           showAlert(context: context, text: const Text("MASTERFILE loaded successfully"));
@@ -247,8 +237,8 @@ class _MainPage extends State<MainPage>{
       return;
     }
 
-    masterTable = List.empty();
     setState((){
+      masterTable = List.empty();
       loadingMsg = "Decoding spreadsheet...";
     });
     await Future.delayed(const Duration(seconds: 1));
@@ -270,9 +260,7 @@ class _MainPage extends State<MainPage>{
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      masterHeader = List.generate(
-          table.rows[0].length, (index) => <String, dynamic>{"text" : table.rows[0][index].toString().toUpperCase(), "format" : CellFormat.words}
-      );
+      masterHeader = List.generate(table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase());
 
       setState((){
         _loadingMsg = "Creating categories...";
@@ -286,23 +274,102 @@ class _MainPage extends State<MainPage>{
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      masterTable = List.generate(table.rows.length, (index) => List<String>.generate(masterHeader.length, (index2) => table.rows[index][index2].toString().toUpperCase()));
+      masterTable = List.generate(table.rows.length, (index) =>
+        List<String>.generate(masterHeader.length, (index2) =>
+            index2 == Index.masterDate ? getDateString(table.rows[index][index2].toString()) :
+              table.rows[index][index2].toString().toUpperCase()
+        )
+      );
       masterTable.removeAt(0); // Remove header from main
 
       setState((){
-        _loadingMsg = "Creating backup table...";
-      });
-      await Future.delayed(const Duration(milliseconds:500));
-      bkpTable = List.of(masterTable); // Copy loaded masterTable for later use
-
-      setState((){
-        _loadingMsg = "The spreadsheet was imported.";
+        _loadingMsg = "Spreadsheet was imported successfully.";
       });
     }
     catch (e){
-      debugPrint("The Spreadsheet has errors:\n ---> $e");
       _loadingMsg = "The Spreadsheet has errors:\n ---> $e";
     }
+  }
+
+  exportXLSX() async {
+    setState((){
+      _loadingMsg = "Creating XLSX document...";
+    });
+    await Future.delayed(const Duration(milliseconds:500));
+
+    var exportExcel = excel.Excel.createExcel();
+    var sheetObject = exportExcel['Sheet1'];
+    sheetObject.isRTL = false;
+
+    setState((){
+      _loadingMsg = "Creating table header...";
+    });
+    await Future.delayed(const Duration(milliseconds:500));
+
+    // Add header row
+    sheetObject.insertRowIterables(["Poduct ID", "Barcode (multi) #", "Category", "Description", 'UOM', "Price", "Datetime", "Ordercode"], 0,);
+
+    setState((){
+      _loadingMsg = "Creating table rows...";
+    });
+    await Future.delayed(const Duration(milliseconds:500));
+
+    for(int i = 0; i < masterTable.length; i++){
+      sheetObject.insertRowIterables(
+          <String> [
+            masterTable[i][0],
+            masterTable[i][1],
+            masterTable[i][2],
+            masterTable[i][3],
+            masterTable[i][4],
+            masterTable[i][5],
+            getDateString(masterTable[i][6]),
+            masterTable[i][7]
+          ],
+          i+1
+      );
+      String dateFormat = getDateString(masterTable[i][6]);
+      int yearThen = int.parse(dateFormat.split("/").last);
+
+      // Get last two year digits using modulus
+      int diff = (DateTime.now().year % 100) - (yearThen % 100);
+
+      // Color code cell if date is older than 1 year
+      if(diff > 0){
+        excel.CellIndex cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: i+1);
+        sheetObject.cell(cellIndex).cellStyle = excel.CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: excel.getFontFamily(excel.FontFamily.Arial));
+      }
+    }
+
+    setState((){
+      _loadingMsg = "Setting column widths...";
+    });
+    await Future.delayed(const Duration(milliseconds:500));
+
+    // Set column widths
+    sheetObject.setColWidth(0, 15.0); // INDEX
+    sheetObject.setColWidth(1, 25.0); // Barcode
+    sheetObject.setColWidth(2, 25.0); // Category
+    sheetObject.setColWidth(3, 75.0); // Description
+    sheetObject.setColWidth(4, 15.0); // UOM
+    sheetObject.setColWidth(5, 25.0); // Price
+    sheetObject.setColWidth(6, 25.0); // Datetime
+    sheetObject.setColWidth(7, 15.0); // Ordercode
+
+    String filename = "MASTERFILE_${DateTime.now().month}_${DateTime.now().year}.xlsx";
+    var fileBytes = exportExcel.save();
+
+    html.AnchorElement()
+      ..href = ("data:application/octet-stream;charset=utf-16le;base64,${base64.encode(fileBytes!)}")//'${Uri.dataFromBytes(fileBytes!, mimeType: 'text/xlsx')}'
+      ..download = filename
+      ..setAttribute("download", filename)
+      ..style.display = 'none'
+      ..click();
+
+    setState((){
+      _isLoading = false;
+      _loadingMsg = "Loading...";
+    });
   }
 
   @override
@@ -316,8 +383,8 @@ class _MainPage extends State<MainPage>{
       body: SingleChildScrollView(
           child: Center(
               child: Column(
-                children: _isLoading ? [
-                  SizedBox(height: MediaQuery.of(context).size.height/3),
+                children:_isLoading ? [
+                SizedBox(height: MediaQuery.of(context).size.height/3),
                   Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
@@ -338,7 +405,7 @@ class _MainPage extends State<MainPage>{
                             _filePicker();
                           }
                           else{
-                            tempMasterTable = List.of(masterTable);
+                            //tempMasterTable = List.of(masterTable);
                             Navigator.push(context, MaterialPageRoute(builder: (context) => const MasterTableView()));
                           }
                         },
@@ -357,6 +424,22 @@ class _MainPage extends State<MainPage>{
                         }
                       },
                       child: const Text("Load Job File"),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: ElevatedButton(
+                      onPressed: () async{
+                        setState((){
+                          _isLoading = true;
+                        });
+
+                        exportXLSX();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green, // Background color
+                      ),
+                      child: const Text("Download MASTERFILE"),
                     ),
                   ),
                   Padding(
@@ -392,7 +475,8 @@ class _JobTableView extends State<JobTableView> {
   bool _selectAll = false;
   bool _isLoading = false;
   int _searchColumn = Index.jobDescript;
-  List<Map<String, dynamic>> _header = [];
+  int nofCount = 0;
+  int editCount = 0;
   List<List<String>> _filterList = [];
   List<List<String>> _addList = [];
   List<bool> _isChecked = [];
@@ -402,6 +486,9 @@ class _JobTableView extends State<JobTableView> {
     super.initState();
     if(jobTable.isEmpty){
       _filePicker();
+    }
+    else{
+      _filterList = List.of(jobTable);
     }
   }
 
@@ -413,91 +500,91 @@ class _JobTableView extends State<JobTableView> {
 
   Widget _searchBar(double width){
     return Container(
-        width: width,
-        decoration: BoxDecoration(
+      width: width,
+      decoration: BoxDecoration(
+        color: colorOk,
+        border: Border.all(
           color: colorOk,
-          border: Border.all(
-            color: colorOk,
-            style: BorderStyle.solid,
-            width: 2.0,
-          ),
-          borderRadius: BorderRadius.circular(20.0),
+          style: BorderStyle.solid,
+          width: 2.0,
+        ),
+        borderRadius: BorderRadius.circular(20.0),
+      ),
+
+      child: ListTile(
+        leading: PopupMenuButton(
+          icon: const Icon(Icons.manage_search, color: Colors.white),
+          itemBuilder: (context) {
+            return List.generate(jobHeader.length, (index) =>
+                PopupMenuItem<int> (
+
+                  value: index,
+                  child: ListTile(
+                    title: Text("Search ${jobHeader[index]}"),
+                    trailing: index == _searchColumn ? const Icon(Icons.check) : null,
+                  ),
+                )
+            );
+          },
+          onSelected: (value) async {
+            setState((){
+              _searchColumn = value;
+            });
+          }
         ),
 
-        child: ListTile(
-          leading: PopupMenuButton(
-              icon: const Icon(Icons.manage_search, color: Colors.white),
-              itemBuilder: (context) {
-                return List.generate(jobHeader.length, (index) =>
-                    PopupMenuItem<int> (
-                      value: index,
-                      child: ListTile(
-                        title: Text("Search ${jobHeader[index]["text"]}"),
-                        trailing: index == _searchColumn ? const Icon(Icons.check) : null,
-                      ),
-                    )
-                );
-              },
-              onSelected: (value) async {
-                setState((){
-                  _searchColumn = value;
-                });
-              }
+        title: TextFormField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            hintText: "Search ${jobHeader[_searchColumn].toLowerCase()}...",
+            border: InputBorder.none,
           ),
 
-          title: TextFormField(
-            controller: _searchCtrl,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white,
-              hintText: "Search ${jobHeader[_searchColumn]["text"].toLowerCase()}...",
-              border: InputBorder.none,
-            ),
-
-            onChanged: (String value) {
-              setState((){
-                //activeRow = -1;
-                if(value.isEmpty){
-                  _filterList = List.of(jobTable);
-                }
-                else{
-                  String searchText = value.toUpperCase();
-                  bool found = false;
-                  List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-                  List<List<String>> refined = [[]];
-
-                  for (int i = 0; i < searchWords.length; i++) {
-                    if (!found){
-                      _filterList = jobTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
-                      found = _filterList.isNotEmpty;
-                    }
-                    else{
-                      refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
-                      if(refined.isNotEmpty){
-                        _filterList = List.of(refined);
-                      }
-                    }
-                  }
-                  if(!found){
-                    _filterList = List.empty();
-                  }
-                }
-                //setTableState();
-              });
-            },
-          ),
-
-          trailing: IconButton(
-            icon: const Icon(Icons.clear, color: Colors.white),
-            onPressed: () {
-              setState((){
-                _searchCtrl.clear();
+          onChanged: (String value) {
+            setState((){
+              //activeRow = -1;
+              if(value.isEmpty){
                 _filterList = List.of(jobTable);
-                //setTableState();
-              });
-            },
-          ),
-        )
+              }
+              else{
+                String searchText = value.toUpperCase();
+                bool found = false;
+                List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
+                List<List<String>> refined = [[]];
+
+                for (int i = 0; i < searchWords.length; i++) {
+                  if (!found){
+                    _filterList = jobTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                    found = _filterList.isNotEmpty;
+                  }
+                  else{
+                    refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                    if(refined.isNotEmpty){
+                      _filterList = List.of(refined);
+                    }
+                  }
+                }
+                if(!found){
+                  _filterList = List.empty();
+                }
+              }
+            });
+          },
+        ),
+
+        trailing: IconButton(
+          icon: const Icon(Icons.clear, color: Colors.white),
+          onPressed: () {
+            setState((){
+              _searchCtrl.clear();
+              _filterList = List.of(jobTable);
+              //setTableState();
+            });
+          },
+        ),
+      )
     );
   }
 
@@ -507,7 +594,7 @@ class _JobTableView extends State<JobTableView> {
     });
 
     // Load xlsx from file browser
-    FileUploadInputElement uploadInput = FileUploadInputElement();
+    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.click();
 
     uploadInput.onAbort.listen((e){
@@ -516,9 +603,9 @@ class _JobTableView extends State<JobTableView> {
 
     uploadInput.onChange.listen((e) {
       // read file content as dataURL
-      List<File> files = List.empty();
-      files = uploadInput.files as List<File>;
-      FileReader reader = FileReader();
+      List<html.File> files = List.empty();
+      files = uploadInput.files as List<html.File>;
+      html.FileReader reader = html.FileReader();
       final file = files[0];
       reader.readAsArrayBuffer(file);
 
@@ -548,12 +635,10 @@ class _JobTableView extends State<JobTableView> {
       return;
     }
 
-    jobTable = List.empty(growable: true);
-
     setState((){
+      jobTable = List.empty();
       _loadingMsg = "Decoding spreadsheet...";
     });
-
     await Future.delayed(const Duration(seconds: 1));
 
     try{
@@ -571,17 +656,17 @@ class _JobTableView extends State<JobTableView> {
       setState((){
         _loadingMsg = "Creating header row...";
       });
-
       await Future.delayed(const Duration(milliseconds:500));
+
       jobHeader = List.generate(
-          table.rows[0].length, (index) => <String, dynamic>{"text" : table.rows[0][index].toString().toUpperCase(), "format" : CellFormat.words}
+          table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase()
       );
 
       setState((){
         _loadingMsg = "Creating categories...";
       });
-
       await Future.delayed(const Duration(milliseconds:500));
+
       jobCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][0].toString().toUpperCase()).toSet().toList();
 
       setState((){
@@ -589,22 +674,27 @@ class _JobTableView extends State<JobTableView> {
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      jobTable = List.generate(table.rows.length, (index) => [(index-1).toString()] + List<String>.generate(jobHeader.length, (index2) => table.rows[index][index2].toString().toUpperCase()));
+      jobTable = List.generate(table.rows.length, (index) =>
+        // Need to add extra index column as the MASTER INDEX will not be linear
+        [(index-1).toString()] + List<String>.generate(jobHeader.length, (index2) =>
+            index2 == Index.jobDate ? getDateString(table.rows[index][index2].toString()) :
+            table.rows[index][index2].toString().toUpperCase()
+        )
+      );
       jobTable.removeAt(0); // Remove header from main
 
       setState((){
-        _header = List.of(jobHeader);
         _filterList = List.of(jobTable);
         _isChecked = List<bool>.filled(jobTable.length, false);
       });
     }
     catch (e){
-      debugPrint("The Spreadsheet has errors:\n ---> $e");
+      //debugPrint("The Spreadsheet has errors:\n ---> $e");
       _loadingMsg = "The Spreadsheet has errors:\n ---> $e";
     }
   }
 
-  Widget _tableHeader(){
+  Widget _getHeader(){
     double height = MediaQuery.of(context).size.height / 2.0;
     double cellHeight = height / 8.0;
     return Row(
@@ -626,48 +716,49 @@ class _JobTableView extends State<JobTableView> {
             )
           ),
           Expanded(
-              flex: 1,
-              child: Container(
-                height: cellHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.zero,
-                  border: Border.all(
-                    color: Colors.black,
-                    style: BorderStyle.solid,
-                    width: 1.0,
-                  ),
+            flex: 1,
+            child: Container(
+              height: cellHeight,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: Colors.black,
+                  style: BorderStyle.solid,
+                  width: 1.0,
                 ),
-                child: const Text(
-                  "Table Index",
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
-                  softWrap: true,
-                ),
-              )
-          )
-        ] + List.generate(_header.length, (index) =>
-            Expanded(
-                flex: 1,
-                child: Container(
-                  height: cellHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.zero,
-                    border: Border.all(
-                      color: Colors.black,
-                      style: BorderStyle.solid,
-                      width: 1.0,
-                    ),
-                  ),
-                  child: Text(
-                    _header[index]["text"],
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    softWrap: true,
-                  ),
-                )
+              ),
+              child: const Text(
+                "Table Index",
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                softWrap: true,
+              ),
             )
+          )
+        ] + List.generate(jobHeader.length, (index) => Expanded(
+          flex: 1,
+          child: Container(
+            height: cellHeight,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: Colors.black,
+                style: BorderStyle.solid,
+                width: 1.0,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                jobHeader[index],
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                softWrap: true,
+              ),
+            )
+          )
+        )
       )
     );
   }
@@ -676,48 +767,67 @@ class _JobTableView extends State<JobTableView> {
     double height = MediaQuery.of(context).size.height / 2.0;
     double cellHeight = height / 8.0;
     return Row(
-        children: [
-          Expanded(
-            flex: 1,
-            child: Checkbox(
-              value: _isChecked[tableIndex],
-              onChanged: (value){
-                setState((){
-                  _isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
-                  if(_isChecked[tableIndex]){
-                    _addList.add(jobTable[tableIndex]);
-                  }
-                  else{
-                    _addList.remove(jobTable[tableIndex]);
-                  }
-                });
-              }
+      children: [
+        Expanded(
+          flex: 1,
+          child: Checkbox(
+            value: _isChecked[tableIndex],
+            onChanged: (value){
+              setState((){
+                _isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
+                if(_isChecked[tableIndex]){
+                  _addList.add(jobTable[tableIndex]);
+                }
+                else{
+                  _addList.remove(jobTable[tableIndex]);
+                }
+              });
+            }
+          )
+        )
+      ] + List.generate(jobTable[tableIndex].length, (index) =>
+        Expanded(
+          flex: 1,
+          child: Container(
+            height: cellHeight,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: Colors.black,
+                style: BorderStyle.solid,
+                width: 1.0,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                jobTable[tableIndex][index],
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                softWrap: true,
+              ),
             )
           )
-        ] + List.generate(jobTable[tableIndex].length, (index) =>
-            Expanded(
-               flex: 1,
-                child: Container(
-                  height: cellHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.zero,
-                    border: Border.all(
-                      color: Colors.black,
-                      style: BorderStyle.solid,
-                      width: 1.0,
-                    ),
-                  ),
-                  child: Text(
-                    jobTable[tableIndex][index],
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    softWrap: true,
-                  ),
-                )
-            )
         )
+      )
     );
+  }
+
+  int _getEditCount(){
+    int count = 0;
+    for(int i = 0; i < jobTable.length; i++){
+      int tableIndex = int.parse(jobTable[i][Index.jobMasterIndex]);
+      if(tableIndex < masterTable.length){
+        if(jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
+          jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
+          jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
+          jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
+          jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
+            count += 1;
+        }
+      }
+    }
+    return count;
   }
 
   void _showChangedItems() {
@@ -725,16 +835,14 @@ class _JobTableView extends State<JobTableView> {
 
     // Go through both tables and check for any differences
     for(int i = 0; i < jobTable.length; i++){
-      for(int m = 0; m < masterTable.length; m++){
-        if(jobTable[i][Index.jobMasterIndex] == masterTable[m][Index.masterIndex]){
-          if(jobTable[i][Index.jobBarcode] != masterTable[m][Index.masterBarcode] ||
-            jobTable[i][Index.jobCategory] != masterTable[m][Index.masterCategory] ||
-            jobTable[i][Index.jobDescript] != masterTable[m][Index.masterDescript] ||
-            jobTable[i][Index.jobPrice] != masterTable[m][Index.masterPrice] ||
-            jobTable[i][Index.jobOrdercode] != masterTable[m][Index.masterOrdercode]){
-            _filterList.add(jobTable[i]);
-          }
-          break;
+      int tableIndex = int.parse(jobTable[i][Index.jobMasterIndex]);
+      if(tableIndex < masterTable.length){
+        if(jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
+            jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
+            jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
+            jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
+            jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
+          _filterList.add(jobTable[i]);
         }
       }
     }
@@ -742,7 +850,7 @@ class _JobTableView extends State<JobTableView> {
 
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery.of(context).size.width / 1.2;
+    double width = MediaQuery.of(context).size.width * 0.9;
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -755,100 +863,131 @@ class _JobTableView extends State<JobTableView> {
         )
       ),
       body: SingleChildScrollView(
-          child:
-          Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: _isLoading ?
-              Center(
-                  child: Column(
-                      children: [
-                        SizedBox(height: MediaQuery.of(context).size.height/3),
-                        Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
-                        Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-                        )
-                      ]
-                  )
-              ) : Column (
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: _isLoading ? Center(
+              child: Column(
                 children: [
-                  Container(
-                    width: width,
-                    height: MediaQuery.of(context).size.height/12.0,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Colors.black.withOpacity(0.5),
-                        style: BorderStyle.solid,
-                        width: 1.0,
-                      ),
-                    ),
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      itemCount: 1,
-                      itemBuilder: (context, index) {
-                        return _tableHeader();
-                      },
-                    ),
-                  ),
-                  Container(
-                    width: width,
-                    height: MediaQuery.of(context).size.height / 2,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Colors.black.withOpacity(0.5),
-                        style: BorderStyle.solid,
-                        width: 1.0,
-                      ),
-                    ),
-                    child: _filterList.isNotEmpty ? ListView.builder(
-                      padding: EdgeInsets.zero,
-                      itemCount: _filterList.length,
-                      prototypeItem: _getRow(int.parse(_filterList.first[0])),
-                      itemBuilder: (context, index) {
-                        final int tableIndex = int.parse(_filterList[index][0]);
-                        return _getRow(tableIndex);
-                      },
-                    ) :
-                    Expanded(
-                        flex: 1,
-                        child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
-                    ),
-                  ),
+                  SizedBox(height: MediaQuery.of(context).size.height/3),
+                  Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
                   Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _showChangedItems();
-                      },
-                      child: const Text("Show Edited Items"),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _filterList = _filterList.length != jobTable.length ? List.of(jobTable) :
-                          jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").toList();
-                        });
-                      },
-                      child: _filterList.length == jobTable.length ? const Text("Show NOF List") : const Text("Show Full List"),
-                    ),
-                  ),
-                  _addList.isNotEmpty ? Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                        onPressed: () {
-                          setState((){
-                            updateMasterFile(_addList);
-                          });
-                        },
-                        child: const Text("Update MASTERFILE")
-                    ),
-                  ) : Container(),
-                ],
+                    padding: const EdgeInsets.all(20.0),
+                    child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
+                  )
+                ]
               )
+            ) : Column(
+              children: [
+                Container(
+                  width: width,
+                  height: MediaQuery.of(context).size.height/12.0,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.black.withOpacity(0.5),
+                      style: BorderStyle.solid,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: 1,
+                    itemBuilder: (context, index) {
+                      return _getHeader();
+                    },
+                  ),
+                ),
+                Container(
+                  width: width,
+                  height: MediaQuery.of(context).size.height / 2,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.black.withOpacity(0.5),
+                      style: BorderStyle.solid,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: _filterList.isNotEmpty ? ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: _filterList.length,
+                    prototypeItem: _getRow(int.parse(_filterList.first[0])),
+                    itemBuilder: (context, index) {
+                      return _getRow(int.parse(_filterList[index][0]));
+                    },
+                  ) : Expanded(
+                    flex: 1,
+                    child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
+                  ),
+                ),
+                const SizedBox(
+                  height: 5.0,
+                ),
+                _searchBar(width),
+                const SizedBox(
+                  height: 5.0,
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      _showChangedItems();
+                    },
+                    child: const Text("Show Edited Items"),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: (){
+                      setState((){
+                        _filterList = _filterList.length != jobTable.length ? List.of(jobTable) :
+                        jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").toList();
+                      });
+                    },
+                    child: _filterList.length == jobTable.length ? const Text("Show NOF List") : const Text("Show Full List"),
+                  ),
+                ),
+                _addList.isNotEmpty ? Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      int nofCount = jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").length;
+                      int editCount = _getEditCount();
+                      await confirmDialog(context, "Add selected items to MASTERFILE?\nNew Items: $nofCount\nEdited Items: $editCount").then((value){
+                        setState((){
+                          masterTable = List.of(masterTable);
+                          for(int j = 0; j < _addList.length; j++){
+                            int tableIndex = int.parse(_addList[j][Index.jobMasterIndex]);
+                            bool isNof = _addList[j][Index.jobNof].toString().toUpperCase() == "TRUE";
+                            if(isNof){
+                              masterTable.add([
+                                masterTable.length.toString(),
+                                _addList[j][Index.jobBarcode],
+                                _addList[j][Index.jobCategory],
+                                _addList[j][Index.jobDescript],
+                                "EACH",
+                                _addList[j][Index.jobPrice],
+                                _addList[j][Index.jobDate],
+                                _addList[j][Index.jobOrdercode]
+                              ]);
+                            }
+                            else {
+                              masterTable[tableIndex][Index.masterBarcode] = _addList[j][Index.jobBarcode];
+                              masterTable[tableIndex][Index.masterOrdercode] = _addList[j][Index.jobCategory];
+                              masterTable[tableIndex][Index.masterDescript] = _addList[j][Index.jobDescript];
+                              masterTable[tableIndex][Index.masterPrice] = _addList[j][Index.jobPrice];
+                              masterTable[tableIndex][Index.masterOrdercode] = _addList[j][Index.jobOrdercode];
+                              masterTable[tableIndex][Index.masterDate] = _addList[j][Index.jobBarcode];
+                            }
+                          }
+                        });
+                      });
+                    },
+                    child: const Text("Add to MASTERFILE")
+                ),
+              ) : Container(),
+            ],
           )
+        )
       )
     );
   }
@@ -859,24 +998,138 @@ class MasterTableView extends StatefulWidget{
   @override
   State<MasterTableView> createState() => _MasterTableView();
 }
-class _MasterTableView extends State<MasterTableView> {
-  // int _selectRow = -1;
-  // int _selectCell = -1;
+class _MasterTableView extends State<MasterTableView>{
   int _searchColumn = Index.masterDescript;
+  bool _hasChanged = false;
   final TextEditingController _searchCtrl = TextEditingController();
-  List<int> _changedItems = [];
+  final TextEditingController _editDescript = TextEditingController();
+  final TextEditingController _editPrice = TextEditingController();
+  final TextEditingController _editUOM = TextEditingController();
+  final TextEditingController _editBarcode = TextEditingController();
+  final TextEditingController _editOrdercode = TextEditingController();
+  List<List<String>> _tempMasterTable = [];
   List<List<String>> _filterList = [];
 
   @override
   void initState() {
     super.initState();
-    _filterList = List.of(tempMasterTable);
+    _tempMasterTable = List.of(masterTable);
+    _filterList = List.of(_tempMasterTable);
   }
 
   @override
   void dispose(){
-    //masterSearchCtrl.dispose();
+    _searchCtrl.dispose();
+    _editBarcode.dispose();
+    _editOrdercode.dispose();
+    _editDescript.dispose();
+    _editPrice.dispose();
+    _editUOM.dispose();
     super.dispose();
+  }
+
+  _editDialog({required BuildContext context, required List<String> item, Color? color}) {
+    List<String> editedItem = List.of(item);
+    _editDescript.text = item[Index.masterDescript];
+    _editPrice.text = item[Index.masterPrice];
+    _editUOM.text = item[Index.masterUOM];
+
+    getFieldType(int index){
+      switch(index){
+        case Index.masterDescript:
+          return TextFormField(
+            controller: _editDescript,
+            maxLines: 1,
+            onChanged: (value){
+              editedItem[index] = _editDescript.text;
+            },
+          );
+        case Index.masterPrice:
+          return TextFormField(
+              controller: _editPrice,
+              maxLines: 1,
+              onChanged: (value){
+                editedItem[index] = _editPrice.text;
+              }
+          );
+        case Index.masterUOM:
+          return TextFormField(
+              controller: _editUOM,
+              maxLines: 1,
+              onChanged: (value){
+                editedItem[index] = _editUOM.text;
+              }
+          );
+        // case Index.masterBarcode:
+        //   break;
+        // case Index.masterOrdercode:
+        //   break;
+        default:
+          return Text(item[index]);
+      }
+    }
+
+    return showDialog(
+        barrierDismissible: false,
+        context: context,
+        barrierColor: color ?? colorOk,
+        builder: (context) => WillPopScope(
+            onWillPop: () async => false,
+            child: SingleChildScrollView(
+              child: AlertDialog(
+                actionsAlignment: MainAxisAlignment.spaceEvenly,
+                actionsPadding: const EdgeInsets.all(20.0),
+                content: SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.6,
+                    height: MediaQuery.of(context).size.height * 0.75,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        textDirection: TextDirection.ltr,
+                        children: List.generate(item.length, (index) =>
+                          Column(
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: headerPadding(masterHeader[index], TextAlign.left),
+                              ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 20.0),
+                                  child: getFieldType(index),
+                                )
+                              ),
+                            ]
+                          )
+                        )
+                      ),
+                    )
+                ),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                    child: Text("Cancel", style: whiteText),
+                    onPressed: (){
+                      Navigator.pop(context);
+                    },
+                  ),
+                  ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                      child: Text("Save", style: whiteText),
+                      onPressed: () {
+                        setState((){
+                          int tableIndex = int.parse(item[Index.masterIndex]);
+                          _tempMasterTable[tableIndex] = editedItem;
+                          _hasChanged = true;
+                        });
+                        Navigator.pop(context);
+                      }
+                  ),
+                ],
+              ),
+            )
+        )
+    );
   }
 
   Widget _searchBar(double width){
@@ -901,7 +1154,7 @@ class _MasterTableView extends State<MasterTableView> {
                     PopupMenuItem<int> (
                       value: index,
                       child: ListTile(
-                        title: Text("Search ${masterHeader[index]["text"]}"),
+                        title: Text("Search ${masterHeader[index]}"),
                         trailing: index == _searchColumn ? const Icon(Icons.check) : null,
                       ),
                     )
@@ -919,7 +1172,7 @@ class _MasterTableView extends State<MasterTableView> {
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white,
-              hintText: "Search ${masterHeader[_searchColumn]["text"].toLowerCase()}...",
+              hintText: "Search ${masterHeader[_searchColumn].toLowerCase()}...",
               border: InputBorder.none,
             ),
 
@@ -927,7 +1180,7 @@ class _MasterTableView extends State<MasterTableView> {
               setState((){
                 //activeRow = -1;
                 if(value.isEmpty){
-                  _filterList = List.of(tempMasterTable);
+                  _filterList = List.of(_tempMasterTable);
                 }
                 else{
                   String searchText = value.toUpperCase();
@@ -937,7 +1190,7 @@ class _MasterTableView extends State<MasterTableView> {
 
                   for (int i = 0; i < searchWords.length; i++) {
                     if (!found){
-                      _filterList = tempMasterTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                      _filterList = _tempMasterTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
                       found = _filterList.isNotEmpty;
                     }
                     else{
@@ -962,7 +1215,7 @@ class _MasterTableView extends State<MasterTableView> {
             onPressed: () {
               setState((){
                 _searchCtrl.clear();
-                _filterList = List.of(tempMasterTable);
+                _filterList = List.of(_tempMasterTable);
                 //setTableState();
               });
             },
@@ -972,197 +1225,239 @@ class _MasterTableView extends State<MasterTableView> {
   }
 
   Widget _getHeader(){
-    double height = MediaQuery.of(context).size.height / 2.0;
-    double cellHeight = height / 8.0;
-    return Row(
-        children: List.generate(masterHeader.length, (index) =>
-            Expanded(
-                flex: 1,
-                child: Container(
-                  height: cellHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.zero,
-                    border: Border.all(
-                      color: Colors.black,
-                      style: BorderStyle.solid,
-                      width: 1.0,
-                    ),
-                  ),
-                  child: Text(
-                    masterHeader[index]["text"],
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    softWrap: true,
-                  ),
-                )
-            )
+    double height = 50.0;
+    double cellWidth = 75.0;
+
+    cellFit(int index){
+      return Expanded(
+        flex: 1,
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.white24,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: Colors.black,
+              style: BorderStyle.solid,
+              width: 1.0,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              masterHeader[index],
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              softWrap: true,
+            ),
+          )
         )
+      );
+    }
+
+    cell(int index){
+      return Container(
+        width: cellWidth,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white24,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: Colors.black,
+            style: BorderStyle.solid,
+            width: 1.0,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            masterHeader[index],
+            textAlign: TextAlign.center,
+            maxLines: 4,
+            softWrap: true,
+          ),
+        )
+      );
+    }
+
+    return Row(
+      children: List.generate(masterHeader.length, (index) =>
+        index != Index.masterIndex && index != Index.masterPrice ? cellFit(index) : cell(index)
+      )
     );
   }
 
   Widget _getRow(int tableIndex){
-    double height = MediaQuery.of(context).size.height / 2.0;
-    double cellHeight = height / 8.0;
-    return Row(
-        children: List.generate(tempMasterTable[tableIndex].length, (index) =>
-            Expanded(
-                flex: 1,
-                child: Container(
-                  height: cellHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.zero,
-                    border: Border.all(
-                      color: Colors.black,
-                      style: BorderStyle.solid,
-                      width: 1.0,
-                    ),
-                  ),
-                  child: Text(
-                    tempMasterTable[tableIndex][index],
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    softWrap: true,
-                  ),
-                )
-            )
+    // Get formatted date string and check if it is old (> 1 year)
+    int year = int.parse(_tempMasterTable[tableIndex][Index.masterDate].split("/").last);
+    bool oldDate = (DateTime.now().year % 100) - (year % 100) > 0;
+    double height = 50.0;
+    double cellWidth = 75.0;
+
+    cellFit(int index){
+      return Expanded(
+        flex: 1,
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: index == Index.masterDate && oldDate ? Colors.red[800] : Colors.white24,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: Colors.black,
+              style: BorderStyle.solid,
+              width: 1.0,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              _tempMasterTable[tableIndex][index],
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              softWrap: true,
+            ),
+          )
         )
+      );
+    }
+
+    cell(int index){
+      return Container(
+        height: height,
+        width: cellWidth,
+        decoration: BoxDecoration(
+          color: index == Index.masterDate && oldDate ? Colors.red[800] : Colors.white24,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: Colors.black,
+            style: BorderStyle.solid,
+            width: 1.0,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            _tempMasterTable[tableIndex][index],
+            textAlign: TextAlign.center,
+            maxLines: 4,
+            softWrap: true,
+          ),
+        )
+      );
+    }
+
+    return TapRegion(
+      onTapInside: (value) async{
+        await _editDialog(context: context, item: List.of(_tempMasterTable[tableIndex]));
+      },
+      child: Row(
+        children: List.generate(_tempMasterTable[tableIndex].length, (index) => index != Index.masterIndex && index != Index.masterPrice ? cellFit(index) : cell(index),)
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery.of(context).size.width / 1.2;
+    double width = MediaQuery.of(context).size.width * 0.9;
     return Scaffold(
-        appBar: AppBar(
-          centerTitle: true,
-          title: SvgPicture.asset("AS_logo_light.svg", height: 50),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: (){
-              Navigator.pop(context);
-            },
-          )
-        ),
-        body: SingleChildScrollView(
-            child:
-            Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column (
-                  children: [
-                    Container(
-                      width: width,
-                      height: MediaQuery.of(context).size.height/12.0,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Colors.black.withOpacity(0.5),
-                          style: BorderStyle.solid,
-                          width: 1.0,
-                        ),
-                      ),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: 1,
-                        itemBuilder: (context, index) {
-                          return _getHeader();
-                        },
-                      ),
-                    ),
-                    Container(
-                      width: width,
-                      height: MediaQuery.of(context).size.height / 2,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Colors.black.withOpacity(0.5),
-                          style: BorderStyle.solid,
-                          width: 1.0,
-                        ),
-                      ),
-                      child: _filterList.isNotEmpty ? ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: _filterList.length,
-                        prototypeItem: _getRow(int.parse(_filterList.first[0])),
-                        itemBuilder: (context, index) {
-                          final int tableIndex = int.parse(_filterList[index][0]);
-                          return _getRow(tableIndex);
-                        },
-                      ) :
-                      Expanded(
-                          flex: 1,
-                          child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 5.0,
-                    ),
-
-                    _searchBar(width),
-
-                    const SizedBox(
-                      height: 5.0,
-                    ),
-
-                    _changedItems.isNotEmpty ? Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: ElevatedButton(
-                          onPressed: () async {
-                            await confirmDialog(context, "Confirm changes to MASTERFILE?").then((value){
-                              if(value){
-                                setState((){
-                                  for(int i = 0; i < _changedItems.length; i++){
-                                    int tableIndex = _changedItems[i];
-                                    masterTable[tableIndex] = List.of(tempMasterTable[tableIndex]);
-                                  }
-                                });
-                              }
-                            });
-                          },
-                          child: const Text("Update MASTERFILE")
-                      ),
-                    ) : Container(),
-                  ],
-                )
-            )
+      appBar: AppBar(
+        centerTitle: true,
+        title: SvgPicture.asset("AS_logo_light.svg", height: 50),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            if(_hasChanged){
+              await confirmWithCancel(context, "Table was edited!\nConfirm changes to MASTERFILE?\n\nNOTE: Press 'Cancel' to continue editing.").then((int value) async {
+                if(value == 1){
+                  setState((){
+                    masterTable = List.of(_tempMasterTable);
+                    // Reset changed flag
+                    _hasChanged = false;
+                    Navigator.pop(context);
+                  });
+                }
+                else if(value == 0){
+                  _tempMasterTable = List.of(masterTable);
+                  // Reset changed flag
+                  _hasChanged = false;
+                  Navigator.pop(context);
+                }
+              });
+            }
+          },
         )
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Center(
+            child: Column(
+              children: [
+                Container(
+                  width: width,
+                  height: MediaQuery.of(context).size.height/12.0,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.black.withOpacity(0.5),
+                      style: BorderStyle.solid,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: 1,
+                    itemBuilder: (context, index) {
+                      return _getHeader();
+                    },
+                  ),
+                ),
+                Container(
+                  width: width,
+                  height: MediaQuery.of(context).size.height * 0.65,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.black.withOpacity(0.5),
+                      style: BorderStyle.solid,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: _filterList.isNotEmpty ? ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: _filterList.length,
+                    prototypeItem: _getRow(int.parse(_filterList.first[0])),
+                    itemBuilder: (context, index) {
+                      final int tableIndex = int.parse(_filterList[index][0]);
+                      return _getRow(tableIndex);
+                    },
+                  ) : Expanded(
+                    flex: 1,
+                    child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
+                  ),
+                ),
+                const SizedBox(
+                  height: 5.0,
+                ),
+                _searchBar(width),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      await confirmDialog(context, "Confirm changes to MASTERFILE?").then((value){
+                        if(value){
+                          setState((){
+                            masterTable = List.of(_tempMasterTable);
+                            // Reset changed flag
+                            _hasChanged = false;
+                          });
+                        }
+                      });
+                    },
+                    child: const Text("Update MASTERFILE")
+                  ),
+                ),
+              ],
+            )
+          ),
+        )
+      )
     );
   }
-}
-
-updateMasterFile(List<List<String>> addList){
-  tempMasterTable = List.of(masterTable);
-
-  for(int j = 0; j < addList.length; j++){
-    int index = int.parse(addList[j][Index.jobMasterIndex]);
-    String newDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-
-    if(index >= tempMasterTable.length){
-      tempMasterTable.add([
-        index.toString(),
-        addList[j][Index.jobBarcode],
-        addList[j][Index.jobCategory],
-        addList[j][Index.jobDescript],
-        "EACH",
-        addList[j][Index.jobPrice],
-        newDate,
-        addList[j][Index.jobOrdercode]
-      ]);
-    }
-    else {
-      //debugPrint("$index ORIGINAL: ${tempMasterTable[index].toString()}");
-      tempMasterTable[index][Index.masterBarcode] = addList[j][Index.jobBarcode];
-      tempMasterTable[index][Index.masterOrdercode] = addList[j][Index.jobCategory];
-      tempMasterTable[index][Index.masterDescript] = addList[j][Index.jobDescript];
-      tempMasterTable[index][Index.masterPrice] = addList[j][Index.jobPrice];
-      tempMasterTable[index][Index.masterOrdercode] = addList[j][Index.jobOrdercode];
-      tempMasterTable[index][Index.masterDate] = newDate;
-      //debugPrint("$index NEW: ${tempMasterTable[index].toString()}");
-    }
-  }
-
-  //export masterTable to XLSX and download
-  //Will need to push this file to the database
 }
 
 rBox({required double width, required Widget child}){
@@ -1230,6 +1525,64 @@ String getDateString(String d){
   return newDate;
 }
 
+Future<int> confirmWithCancel(BuildContext context, String str) async {
+  // 0 = NO,
+  // 1 = YES,
+  // -1 = CANCEL,
+  int confirmation = -1;
+
+  await showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: colorOk.withOpacity(0.8),
+      builder: (context) => WillPopScope(
+          onWillPop: () async => false,
+          child: SingleChildScrollView(
+              child: SizedBox(
+                  height: MediaQuery.of(context).size.height,
+                  child: Center(
+                      child: AlertDialog(
+                        actionsAlignment: MainAxisAlignment.spaceAround,
+                        actionsPadding: const EdgeInsets.all(20.0),
+                        titlePadding: const EdgeInsets.all(20.0),
+                        title: Text(str, textAlign: TextAlign.center,),
+                        actions: <Widget>[
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: colorError),
+                            onPressed: () {
+                              confirmation = 1;
+                              Navigator.pop(context);
+                            },
+                            child: const Text("YES"),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: colorOk),
+                            onPressed: () {
+                              confirmation = 0;
+                              Navigator.pop(context);
+                            },
+                            child: const Text("NO"),
+                          ),
+                          const SizedBox(height: 5.0),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: colorWarning),
+                            onPressed:(){
+                              confirmation = -1;
+                              Navigator.pop(context);
+                            },
+                            child: const Text("Cancel")
+                          )
+                        ],
+                      )
+                  )
+              )
+          )
+      )
+  );
+
+  return confirmation;
+}
+
 Future<bool> confirmDialog(BuildContext context, String str) async {
   bool confirmation = false;
   await showDialog(
@@ -1275,857 +1628,9 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   return confirmation;
 }
 
-// class MainPage2 extends StatefulWidget{
-//   const MainPage2({super.key});
-//   @override
-//   State<MainPage2> createState() => _MainPage2();
-// }
-// class _MainPage2 extends State<MainPage2>{
-//   Action action = Action.blank;
-//   TextEditingController masterSearchCtrl = TextEditingController();
-//   TextEditingController jobSearchCtrl = TextEditingController();
-//   List<List<String>> jobFilterList = [[]];
-//   List<List<String>> masterFilterList = [[]];
-//   List<String> masterEdit = [];
-//   List<String> jobEdit = [];
-//   String loadingMsg = "Loading...";
-//   int masterRow = -1;
-//   int masterCell = -1;
-//   int jobRow = -1;
-//   int jobCell = -1;
-//   int searchColumn = 0;
-//   bool isLoading = false;
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//   }
-//
-//   @override
-//   void dispose(){
-//     masterSearchCtrl.dispose();
-//     jobSearchCtrl.dispose();
-//     super.dispose();
-//   }
-//
-//   // void _filePicker({bool? job}) {
-//   //   // Load xlsx from file browser
-//   //   FileUploadInputElement uploadInput = FileUploadInputElement();
-//   //   uploadInput.click();
-//   //
-//   //   uploadInput.onAbort.listen((e){
-//   //     setState(() {
-//   //       isLoading = false;
-//   //     });
-//   //     return;
-//   //   });
-//   //
-//   //   uploadInput.onChange.listen((e) {
-//   //     // read file content as dataURL
-//   //     List<File> files = List.empty();
-//   //     files = uploadInput.files as List<File>;
-//   //
-//   //     FileReader reader = FileReader();
-//   //
-//   //     final file = files[0];
-//   //     reader.readAsArrayBuffer(file);
-//   //
-//   //     reader.onAbort.listen((e) {
-//   //       setState(() {
-//   //         isLoading = false;
-//   //       });
-//   //       return;
-//   //     });
-//   //
-//   //     reader.onError.listen((fileEvent) {
-//   //       return;
-//   //     });
-//   //
-//   //     reader.onLoadEnd.listen((e) async {
-//   //       bool master = (job ?? false) == false;
-//   //       if(master){
-//   //         await loadMasterSheet(bytes: reader.result as List<int>, master: master).then((value){
-//   //           setState(() {
-//   //             masterFilterList = List.of(masterTable);
-//   //             //jobFilterList = List.of(jobTable);
-//   //             isLoading = false;
-//   //           });
-//   //         });
-//   //       }
-//   //       else {
-//   //         await loadJobSheet(bytes: reader.result as List<int>).then((value) {
-//   //           setState(() {
-//   //             jobFilterList = List.of(jobTable);
-//   //             debugPrint(jobTable[2].toString());
-//   //             isLoading = false;
-//   //           });
-//   //         });
-//   //       }
-//   //     });
-//   //   });
-//   // }
-//
-//   Widget _blank(){
-//     double height = MediaQuery.of(context).size.height;
-//     return SizedBox(
-//       height: height,
-//       child: SvgPicture.asset("AS_logo_symbol.svg", width: height/2)
-//     );
-//   }
-//
-//   Widget _uploadPage(){
-//     return Column(
-//         children: [
-//           SizedBox(
-//               height: MediaQuery.of(context).size.height/3
-//           ),
-//           ElevatedButton(
-//               onPressed: (){},
-//               child: const Text("Edit")
-//           ),
-//           const SizedBox(height: 20.0),
-//           ElevatedButton(
-//               onPressed: (){},
-//               child: const Text("Commit")
-//           ),
-//           const SizedBox(height: 20.0),
-//           Padding(
-//             padding: const EdgeInsets.all(20.0),
-//             child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-//           )
-//         ]
-//     );
-//   }
-//
-//   bool showComparisons = false;
-//   List<List<String>> compareTable = List.empty();
-//
-//   Widget _comparePage(){
-//     return Column(
-//       children:
-//       showComparisons ? [
-//         _tableView(
-//           header: jobHeader,
-//           table: compareTable,
-//           width: MediaQuery.of(context).size.width * 0.5,
-//           height: MediaQuery.of(context).size.height / 1.8,
-//           padding: 10.0,
-//           filterList: compareTable,
-//           searchCtrl: jobSearchCtrl,
-//           activeCell: jobCell,
-//           activeRow: jobRow,
-//           editItem: jobEdit,
-//           job: true
-//         )
-//       ] : [
-//         Row(
-//           children:[
-//             Expanded(
-//                 child: _tableView(
-//                     header: jobHeader,
-//                     table: jobTable,
-//                     width: MediaQuery.of(context).size.width * 0.5,
-//                     height: MediaQuery.of(context).size.height / 1.8,
-//                     padding: 10.0,
-//                     filterList: List.of(jobFilterList),
-//                     searchCtrl: jobSearchCtrl,
-//                     activeCell: jobCell,
-//                     activeRow: jobRow,
-//                     editItem: jobEdit,
-//                     job: true
-//               )
-//             ),
-//             // Expanded(
-//             //     child: _tableView(
-//             //         header: masterHeader,
-//             //         table: masterTable,
-//             //         width: MediaQuery.of(context).size.width * 0.5,
-//             //         height: MediaQuery.of(context).size.height / 1.8,
-//             //         padding: 10.0,
-//             //         filterList: List.of(masterFilterList),
-//             //         searchCtrl: masterSearchCtrl,
-//             //         activeRow: masterRow,
-//             //         activeCell: masterCell,
-//             //         editItem: masterEdit
-//             //     )
-//             // ),
-//           ]
-//         ),
-//         ElevatedButton(
-//           //width: 250,
-//           child: const Text("Compare Tables"),
-//           onPressed: () async{
-//             await _compareTables().then((value){
-//               showAlert(context: context, text: Text("Table length: ${value.length}"), color: colorOk);
-//               if(value.isNotEmpty){
-//                 compareTable = value;
-//                 //debugPrint(compareTable[0].toString());
-//                 showComparisons = true;
-//                 setState((){});
-//               }
-//               // Show page of table that consists of comparison list.
-//             });
-//           }
-//         ),
-//
-//       ],
-//     );
-//   }
-//
-//   Future<List<List<String>>> _compareTables() async{
-//     // go through both tables and check for any differences
-//     List<List<String>> badComparisons = List.empty(growable: true);
-//     for(int i = 0; i < jobTable.length; i++){
-//       for(int j = 0; j < masterHeader.length; j++){
-//         if(jobTable[i][j] != masterTable[i][j]){
-//           badComparisons.add(jobTable[i]);
-//           break;
-//         }
-//       }
-//     }
-//     return badComparisons;
-//   }
-//
-//   Widget _tableView({
-//     bool? job,
-//     required List<Map<String, dynamic>> header,
-//     required List<List<String>> table,
-//     required List<List<String>> filterList,
-//     required double width,
-//     required double height,
-//     required double padding,
-//     required TextEditingController searchCtrl,
-//     required List<String> editItem,
-//     required activeRow,
-//     required activeCell,
-//   }){
-//
-//     bool isJob = job ?? false;
-//
-//     double cellHeight = height/8;
-//
-//     setTableState(){
-//       setState((){
-//         if(isJob){
-//           jobSearchCtrl = searchCtrl;
-//           jobFilterList = filterList;
-//           jobRow = activeRow;
-//           jobCell = activeCell;
-//           jobEdit = editItem;
-//         }
-//         else{
-//           masterSearchCtrl = searchCtrl;
-//           masterFilterList = filterList;
-//           masterRow = activeRow;
-//           masterCell = activeCell;
-//           masterEdit = editItem;
-//         }
-//       });
-//     }
-//
-//     confirmEdit(int index){
-//       setState((){
-//         if(isJob){
-//           jobTable[index] = List.of(editItem);
-//         }
-//         else{
-//           masterTable[index] = List.of(editItem);
-//         }
-//       });
-//     }
-//
-//     Widget searchBar(double width){
-//       searchWords(String searchText){
-//         bool found = false;
-//         List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-//         List<List<String>> refined = [[]];
-//
-//         for (int i = 0; i < searchWords.length; i++) {
-//           if (!found) {
-//               filterList = table.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-//               found = filterList.isNotEmpty;
-//           }
-//           else {
-//               refined = filterList.where((row) => row[searchColumn].contains(searchWords[i])).toList();
-//               if(refined.isNotEmpty){
-//                 filterList = List.of(refined);
-//               }
-//           }
-//         }
-//
-//         if(!found){
-//             filterList = List.empty();
-//         }
-//       }
-//
-//       return Container(
-//           width: width,
-//           decoration: BoxDecoration(
-//             color: colorOk,
-//             border: Border.all(
-//               color: colorOk,
-//               style: BorderStyle.solid,
-//               width: 2.0,
-//             ),
-//             borderRadius: BorderRadius.circular(20.0),
-//           ),
-//
-//           child: ListTile(
-//             leading: PopupMenuButton(
-//                 icon: const Icon(Icons.manage_search, color: Colors.white),
-//                 itemBuilder: (context) {
-//                   return List.generate(header.length, (index) =>
-//                       PopupMenuItem<int> (
-//                         value: index,
-//                         child: ListTile(
-//                           title: Text("Search ${header[index]["text"]}"),
-//                           trailing: index == searchColumn ? const Icon(Icons.check) : null,
-//                         ),
-//                       )
-//                   );
-//                 },
-//                 onSelected: (value) async {
-//                   setState((){
-//                     searchColumn = value;
-//                   });
-//                 }
-//             ),
-//
-//             title: TextFormField(
-//               controller: searchCtrl,
-//               decoration: InputDecoration(
-//                 filled: true,
-//                 fillColor: Colors.white,
-//                 hintText: "Search ${header[searchColumn]["text"].toLowerCase()}...",
-//                 border: InputBorder.none,
-//               ),
-//
-//               onChanged: (String value){
-//                 activeRow = -1;
-//
-//                 if(value.isNotEmpty){
-//                   searchWords(value.toUpperCase());
-//                 }
-//                 else{
-//                     filterList = List.of(table);
-//                 }
-//
-//                 setTableState();
-//               },
-//             ),
-//
-//             trailing: IconButton(
-//               icon: const Icon(Icons.clear, color: Colors.white),
-//               onPressed: () {
-//                   searchCtrl.clear();
-//                   filterList = table;
-//                   setTableState();
-//               },
-//             ),
-//           )
-//       );
-//     }
-//
-//     Widget tableHeader(){
-//       return Row(
-//         children: List.generate(header.length, (index) => Expanded(
-//           child: Container(
-//               height: cellHeight,
-//               decoration: BoxDecoration(
-//                 color: Colors.white.withOpacity(0.0),
-//                 borderRadius: BorderRadius.zero,
-//                 border: Border.all(
-//                   color: Colors.black,
-//                   style: BorderStyle.solid,
-//                   width: 1.0,
-//                 ),
-//               ),
-//               child: TapRegion(
-//                 child: Center(
-//                     child: Text(
-//                       header[index]["text"],
-//                       softWrap: true,
-//                       maxLines: 3,
-//                       overflow: TextOverflow.fade,
-//                       style: cellText
-//                   )
-//               ),
-//               onTapInside: (value){
-//                 showAlert(
-//                     context: context,
-//                     text: Text("Cell Text: ${header[index]["text"]}\n\nCell Format: ${header[index]["format"]}")
-//                 );
-//               },
-//             )
-//           )
-//         ))
-//       );
-//     }
-//
-//     Widget editRow(){
-//       return Row(
-//           children: List.generate(header.length, (index) => Expanded(
-//               child: Container(
-//                 height: cellHeight,
-//                 width: index == 3 ? 150 : 50,
-//                 decoration: BoxDecoration(
-//                   color: Colors.white.withOpacity(0.0),
-//                   borderRadius: BorderRadius.zero,
-//                   border: Border.all(
-//                     color: colorOk, //Colors.black,
-//                     style: BorderStyle.solid,
-//                     width: 2.0,
-//                   ),
-//                 ),
-//                 child: TapRegion(
-//                   onTapInside:(value) {
-//                     activeCell = index;
-//                     setTableState();
-//                   },
-//
-//                   child: activeCell == index ? TextFormField(
-//                     autofocus: true,
-//                     initialValue: activeRow < 0 ? "" :  table[activeRow][index],
-//                     textAlign: TextAlign.center,
-//                     maxLines: 4,
-//                     onTapOutside: (value){
-//                       activeCell = -1; // Disable text edit on tap outside
-//                       //editItem[index] = value as String;
-//                       setTableState();
-//                       // setState((){
-//                       //   activeCell = -1;
-//                       // });q
-//                     },
-//                     onChanged: (String value){
-//                       editItem[index] = value;
-//                       setTableState();
-//                     },
-//                   ) : Text(
-//                     activeRow < 0 ? "" : editItem[index],
-//                     textAlign: TextAlign.center,
-//                     maxLines: 4,
-//                     softWrap: true,
-//                   ),
-//                 )
-//               )
-//           )
-//           )
-//       );
-//     }
-//
-//     Widget getRow(int tableIndex){
-//       int tableLength = table[tableIndex].length;//isJob ? jobTable[tableIndex].length : masterTable[tableIndex].length;
-//       return TapRegion(
-//           onTapInside: (value) {
-//             activeRow = tableIndex;
-//             editItem = List.of(table[tableIndex]);
-//             setTableState();
-//           },
-//           child: Row(
-//               children: List.generate(tableLength, (index) => Expanded(
-//                   child: Container(
-//                     height: cellHeight,
-//                     decoration: BoxDecoration(
-//                       color: activeRow == tableIndex ? Colors.white24 : Colors.white.withOpacity(0.0),
-//                       borderRadius: BorderRadius.zero,
-//                       border: Border.all(
-//                         color: Colors.black,
-//                         style: BorderStyle.solid,
-//                         width: 1.0,
-//                       ),
-//                     ),
-//                     child: Text(
-//                       table[tableIndex][index],
-//                       textAlign: TextAlign.center,
-//                       maxLines: 4,
-//                       softWrap: true,
-//                     ),
-//                   )
-//               )
-//           )
-//       ),
-//       );
-//     }
-//
-//     return Padding(
-//         padding: EdgeInsets.all(padding),
-//         child: TapRegion(
-//             onTapOutside: (value){
-//               setState(() {
-//                 // if(activeCell < 0){
-//                 //   activeRow = -1;
-//                 // }
-//               });
-//             },
-//
-//             child: Column(
-//                 children:[
-//                   SizedBox(
-//                     width: width,
-//                     child: tableHeader(),
-//                   ),
-//                   Container(  // Main Scrollable list
-//                     width: width,
-//                     height: height,
-//                     decoration: BoxDecoration(
-//                       border: Border.all(
-//                         color: Colors.black.withOpacity(0.5),
-//                         style: BorderStyle.solid,
-//                         width: 1.0,
-//                       ),
-//                     ),
-//                     child: filterList.isNotEmpty ? ListView.builder(
-//                       itemCount: filterList.length,
-//                       prototypeItem: getRow(int.parse(filterList.first[0])),
-//                       itemBuilder: (context, index) {
-//                         final int tableIndex = int.parse(filterList[index][0]);
-//                         return getRow(tableIndex);
-//                       },
-//                     ) :
-//                     Row(
-//                         children: [
-//                           Expanded(child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,))
-//                         ]
-//                     ),
-//                   ),
-//                   const SizedBox(
-//                     height: 5.0,
-//                   ),
-//
-//                   action != Action.compare ? searchBar(width) : Container(),
-//                   const SizedBox(
-//                     height: 5.0,
-//                   ),
-//                   Container(
-//                       width: width,
-//                       color: colorOk,
-//                       child: Text("Edit Row", textAlign: TextAlign.center, style: whiteText)
-//                   ),
-//                   SizedBox(
-//                     width: width,
-//                     child: editRow(),
-//                   ),
-//                   const SizedBox(
-//                     height: 5.0,
-//                   ),
-//                   activeRow > 0 ? SizedBox(
-//                     width: width,
-//                     child: Row(
-//                         children:[
-//                           ElevatedButton(
-//                               onPressed: () {
-//                                 activeRow = -1;
-//                                 activeCell = -1;
-//                                 setTableState();
-//                               },
-//                               child: const Text("CLEAR")
-//                           ),
-//                           ElevatedButton(
-//                               onPressed: () {
-//                                 int i = int.tryParse(editItem[0]) ?? -1;
-//                                 if(i>- 0){
-//                                   confirmEdit(i);
-//                                 }
-//                               },
-//                               child: const Text("SAVE EDIT")
-//                           )
-//                         ]
-//                     )
-//                   ) : Container(),
-//                 ]
-//             )
-//         )
-//     );
-//   }
-//
-//   ListView _drawerMenu(){
-//     return ListView(
-//       children: <Widget>[
-//         const SizedBox(height: 5),
-//         ListTile(
-//           leading: const Icon( Icons.arrow_back_outlined, color: Colors.white),
-//           hoverColor: Colors.white70,
-//           onTap: (){
-//             Navigator.pop(context);
-//           },
-//         ),
-//         const SizedBox(height: 20),
-//         ListTile(
-//           leading: const Icon( Icons.cloud_download, color: Colors.white),
-//           title: const Text("Get Master File", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//           hoverColor: Colors.white70,
-//           onTap: () async {
-//             setState(() {
-//               loadingMsg = "Waiting for file...";
-//               isLoading = true;
-//               action = Action.view;
-//             });
-//
-//             //_filePicker();
-//
-//             Navigator.pop(context);
-//           },
-//         ),
-//         const SizedBox(height: 20),
-//         ListTile(
-//           leading: Icon( Icons.open_in_browser, color: masterTable.isNotEmpty ? Colors.white : Colors.grey),
-//           title: const Text("Upload Job File & Edit", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//           hoverColor: Colors.white70,
-//           onTap: () async {
-//             // OPEN JOB FILE SCREEN
-//             setState((){
-//               loadingMsg = "Waiting for file...";
-//               isLoading = true;
-//               action = Action.compare;
-//             });
-//
-//             //_filePicker(job: true);
-//             Navigator.pop(context);
-//
-//             // if(masterTable.isNotEmpty){
-//             //   setState(() {
-//             //     loadingMsg = "Waiting for file...";
-//             //     //isLoading = true;
-//             //     action = Action.compare;
-//             //   });
-//             //
-//             //   //_filePicker(job: true);
-//             //   Navigator.pop(context);
-//             // }
-//             // else{
-//             //   showAlert(context: context, text: const Text("MASTER table is empty.", textAlign: TextAlign.center,));
-//             //   //Show pop up
-//             // }
-//           }
-//         ),
-//         const SizedBox(height: 20),
-//         ListTile(
-//           leading: Icon( Icons.cloud_upload, color: Colors.red.shade50),
-//           title: const Text("Upload changes to Masterfile", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//           hoverColor: Colors.white70,
-//           onTap: () {
-//             action = Action.upload;
-//             setState(() {});
-//             Navigator.pop(context);
-//           },
-//         ),
-//         const SizedBox(height: 20),
-//         ListTile(
-//           leading: const Icon(Icons.logout_outlined, color: Colors.white),
-//           title: const Text("LOGOUT", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//           hoverColor: Colors.white70,
-//           onTap: () async {
-//             await confirmDialog(context, "End session and logout?").then((value){
-//               if(value){
-//                 masterTable = List.empty();
-//                 jobTable = List.empty();
-//                 jobHeader = List.empty();
-//                 masterHeader = List.empty();
-//                 masterCategory = List.empty();
-//                 jobCategory = List.empty();
-//                 bkpTable = List.empty();
-//
-//                 Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) => const LoginPage()));
-//               }
-//             });
-//           },
-//         ),
-//       ],
-//     );
-//   }
-//
-//   Widget _getMainBody(){
-//     double mediaHeight = MediaQuery.of(context).size.height;
-//
-//     if(action == Action.blank){
-//       masterTable = List.empty();
-//       return _blank();
-//     }
-//     else if(action == Action.upload){
-//       return _uploadPage();
-//     }
-//     else if(action == Action.compare){
-//       if(isLoading){
-//         // Show loading icon animation
-//         return Column(
-//             children: [
-//               SizedBox(height: MediaQuery.of(context).size.height/3),
-//               Text(loadingMsg, textAlign: TextAlign.center, style: blackText),
-//               Padding(
-//                 padding: const EdgeInsets.all(20.0),
-//                 child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-//               )
-//             ]
-//         );
-//       }
-//       else if(jobTable.isNotEmpty){
-//         return _comparePage();
-//       }
-//       // else if(masterTable.isNotEmpty){
-//       //   return _comparePage();
-//       // }
-//     }
-//     else if(action == Action.view){
-//       if(isLoading){
-//         return Column(
-//             children: [
-//               SizedBox(height: MediaQuery.of(context).size.height/3),
-//               Text(loadingMsg, textAlign: TextAlign.center, style: blackText),
-//               Padding(
-//                 padding: const EdgeInsets.all(20.0),
-//                 child: SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-//               )
-//             ]
-//         );
-//       }
-//       else if(masterTable.isNotEmpty){
-//         return _tableView(
-//           header: masterHeader,
-//             table: masterTable,
-//             width: MediaQuery.of(context).size.width / 1.5,
-//             height: mediaHeight / 2,
-//             padding: 8.0,
-//             filterList: masterFilterList,
-//             searchCtrl: masterSearchCtrl,
-//             activeRow: masterRow,
-//             activeCell: masterCell,
-//             editItem: masterEdit
-//         );
-//       }
-//     }
-//
-//     return _blank();
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//         appBar: AppBar(
-//           centerTitle: true,
-//           title: SvgPicture.asset("AS_logo_light.svg", height: 50),
-//           leading: Builder(
-//               builder: (context) => IconButton(
-//                 icon: const Icon(Icons.menu, color: Colors.white),
-//                 onPressed: () => Scaffold.of(context).openDrawer(),
-//               )
-//           ),
-//         ),
-//
-//         drawer: Drawer(
-//             child: Material(
-//                 color: Colors.blue,
-//                 child: _drawerMenu()
-//             )
-//         ),
-//
-//         body: SingleChildScrollView(
-//             child: Center(
-//                 child: _getMainBody()
-//             )
-//         )
-//     );
-//   }
-// }
-
-// ListView drawerMenu(BuildContext context){
-//   return ListView(
-//     children: <Widget>[
-//       const SizedBox(height: 5),
-//       ListTile(
-//         leading: const Icon( Icons.arrow_back_outlined, color: Colors.white),
-//         hoverColor: Colors.white70,
-//         onTap: (){
-//           Navigator.pop(context);
-//         },
-//       ),
-//       const SizedBox(height: 20),
-//       ListTile(
-//         leading: const Icon( Icons.cloud_download, color: Colors.white),
-//         title: const Text("Get Master File", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//         hoverColor: Colors.white70,
-//         onTap: () async {
-//           // setState(() {
-//           //   loadingMsg = "Waiting for file...";
-//           //   isLoading = true;
-//           //   action = Action.view;
-//           // });
-//           //
-//           // _filePicker();
-//
-//           Navigator.pop(context);
-//         },
-//       ),
-//       const SizedBox(height: 20),
-//       ListTile(
-//           leading: Icon( Icons.open_in_browser, color: masterTable.isNotEmpty ? Colors.white : Colors.grey),
-//           title: const Text("Upload Job File & Edit", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//           hoverColor: Colors.white70,
-//           onTap: () async {
-//             // // OPEN JOB FILE SCREEN
-//             // setState((){
-//             //   loadingMsg = "Waiting for file...";
-//             //   isLoading = true;
-//             //   action = Action.compare;
-//             // });
-//             //
-//             // _filePicker(job: true);
-//             Navigator.pop(context);
-//           }
-//       ),
-//       const SizedBox(height: 20),
-//       ListTile(
-//         leading: Icon( Icons.cloud_upload, color: Colors.red.shade50),
-//         title: const Text("Upload changes to Masterfile", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//         hoverColor: Colors.white70,
-//         onTap: () {
-//           // action = Action.upload;
-//           // setState(() {});
-//           Navigator.pop(context);
-//         },
-//       ),
-//       const SizedBox(height: 20),
-//       ListTile(
-//         leading: const Icon(Icons.logout_outlined, color: Colors.white),
-//         title: const Text("LOGOUT", style: TextStyle(color: Colors.white, fontSize: 20.0)),
-//         hoverColor: Colors.white70,
-//         onTap: () async {
-//           await confirmDialog(context, "End session and logout?").then((value){
-//             if(value){
-//               masterTable = List.empty();
-//               jobTable = List.empty();
-//               jobHeader = List.empty();
-//               masterHeader = List.empty();
-//               masterCategory = List.empty();
-//               jobCategory = List.empty();
-//               bkpTable = List.empty();
-//
-//               Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) => const LoginPage()));
-//             }
-//           });
-//         },
-//       ),
-//     ],
-//   );
-// }
-
-// Container getCell(double height, String text){
-//   return Container(
-//     width: 75,//cellWidth[index],
-//     height: height,
-//     decoration: BoxDecoration(
-//       color: Colors.white24,
-//       borderRadius: BorderRadius.zero,
-//       border: Border.all(
-//         color: Colors.black,
-//         style: BorderStyle.solid,
-//         width: 1.0,
-//       ),
-//     ),
-//     child: Text(
-//       text,
-//       textAlign: TextAlign.center,
-//       maxLines: 4,
-//       softWrap: true,
-//     ),
-//   );
-// }
+Widget headerPadding(String title, TextAlign l) {
+  return Padding(
+    padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 10.0, bottom: 5.0),
+    child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue,)),
+  );
+}
