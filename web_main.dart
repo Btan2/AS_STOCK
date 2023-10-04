@@ -276,7 +276,7 @@ class _MainPage extends State<MainPage>{
 
       masterTable = List.generate(table.rows.length, (index) =>
         List<String>.generate(masterHeader.length, (index2) =>
-            index2 == Index.masterDate ? getDateString(table.rows[index][index2].toString()) :
+            index2 == Index.masterDate ? getDateString(string: table.rows[index][index2].toString()) :
               table.rows[index][index2].toString().toUpperCase()
         )
       );
@@ -323,12 +323,12 @@ class _MainPage extends State<MainPage>{
             masterTable[i][3],
             masterTable[i][4],
             masterTable[i][5],
-            getDateString(masterTable[i][6]),
+            getDateString(string: masterTable[i][6]),
             masterTable[i][7]
           ],
           i+1
       );
-      String dateFormat = getDateString(masterTable[i][6]);
+      String dateFormat = getDateString(string: masterTable[i][6]);
       int yearThen = int.parse(dateFormat.split("/").last);
 
       // Get last two year digits using modulus
@@ -677,7 +677,7 @@ class _JobTableView extends State<JobTableView> {
       jobTable = List.generate(table.rows.length, (index) =>
         // Need to add extra index column as the MASTER INDEX will not be linear
         [(index-1).toString()] + List<String>.generate(jobHeader.length, (index2) =>
-            index2 == Index.jobDate ? getDateString(table.rows[index][index2].toString()) :
+            index2 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString()) :
             table.rows[index][index2].toString().toUpperCase()
         )
       );
@@ -1001,14 +1001,17 @@ class MasterTableView extends StatefulWidget{
 class _MasterTableView extends State<MasterTableView>{
   int _searchColumn = Index.masterDescript;
   bool _hasChanged = false;
+  final List<TextEditingController> _editCtrl = List.generate(6, (index) => TextEditingController());
+
   final TextEditingController _searchCtrl = TextEditingController();
-  final TextEditingController _editDescript = TextEditingController();
-  final TextEditingController _editPrice = TextEditingController();
-  final TextEditingController _editUOM = TextEditingController();
-  final TextEditingController _editBarcode = TextEditingController();
-  final TextEditingController _editOrdercode = TextEditingController();
+
   List<List<String>> _tempMasterTable = [];
   List<List<String>> _filterList = [];
+
+  int barcodeIndex = 0;
+  List<String> barcodeList = [];
+  int ordercodeIndex = 0;
+  List<String> ordercodeList = [];
 
   @override
   void initState() {
@@ -1019,54 +1022,160 @@ class _MasterTableView extends State<MasterTableView>{
 
   @override
   void dispose(){
+    for(int c = 0; c < _editCtrl.length; c++){
+      _editCtrl[c].dispose();
+    }
+
     _searchCtrl.dispose();
-    _editBarcode.dispose();
-    _editOrdercode.dispose();
-    _editDescript.dispose();
-    _editPrice.dispose();
-    _editUOM.dispose();
     super.dispose();
   }
 
   _editDialog({required BuildContext context, required List<String> item, Color? color}) {
     List<String> editedItem = List.of(item);
-    _editDescript.text = item[Index.masterDescript];
-    _editPrice.text = item[Index.masterPrice];
-    _editUOM.text = item[Index.masterUOM];
 
-    getFieldType(int index){
-      switch(index){
-        case Index.masterDescript:
-          return TextFormField(
-            controller: _editDescript,
-            maxLines: 1,
-            onChanged: (value){
-              editedItem[index] = _editDescript.text;
-            },
-          );
-        case Index.masterPrice:
-          return TextFormField(
-              controller: _editPrice,
-              maxLines: 1,
-              onChanged: (value){
-                editedItem[index] = _editPrice.text;
-              }
-          );
-        case Index.masterUOM:
-          return TextFormField(
-              controller: _editUOM,
-              maxLines: 1,
-              onChanged: (value){
-                editedItem[index] = _editUOM.text;
-              }
-          );
-        // case Index.masterBarcode:
-        //   break;
-        // case Index.masterOrdercode:
-        //   break;
-        default:
-          return Text(item[index]);
-      }
+    editField(int itemIndex, int ctrlIndex){
+      _editCtrl[ctrlIndex].text = item[itemIndex];
+      return Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: headerPadding(masterHeader[itemIndex], TextAlign.left),
+          ),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 20.0),
+                child: TextFormField(
+                controller: _editCtrl[ctrlIndex],
+                  maxLines: 1,
+                  onChanged: (value){
+                    editedItem[itemIndex] = value;
+                  },
+                ),
+              )
+          ),
+        ]
+      );
+    }
+
+    listField(int itemIndex, int ctrlIndex){
+      bool isBarcode = itemIndex == Index.masterBarcode;
+      _editCtrl[ctrlIndex].text = isBarcode ? barcodeList[barcodeIndex] : ordercodeList[ordercodeIndex];
+      return Column(
+        children:[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: headerPadding(masterHeader[itemIndex], TextAlign.left),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: (){
+                  setState((){
+                    if(isBarcode){
+                      barcodeIndex = (barcodeIndex - 1) % barcodeList.length;
+                      _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                    }
+                    else{
+                      ordercodeIndex = (ordercodeIndex - 1) % ordercodeList.length;
+                      _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                    }
+                  });
+                },
+              ),
+              Flexible(
+                child: TextFormField(
+                    textAlign: TextAlign.center,
+                    controller: _editCtrl[ctrlIndex],
+                    maxLines: 1,
+                    onChanged: (value){
+                      setState((){
+                        if(isBarcode){
+                          barcodeList[barcodeIndex] = value;
+                        }
+                        else{
+                          ordercodeList[ordercodeIndex] = value;
+                        }
+                      });
+                    }
+                ),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.arrow_forward),
+                  onPressed: (){
+                    setState((){
+                      if(isBarcode){
+                        barcodeIndex = (barcodeIndex + 1) % barcodeList.length;
+                        _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                      }
+                      else{
+                        ordercodeIndex = (ordercodeIndex + 1) % ordercodeList.length;
+                        _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                      }
+                    });
+                  }
+              )
+            ],
+          ),
+          Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                    icon: const Icon(Icons.fiber_new, color: Colors.blue),
+                    onPressed: (){
+                      setState((){
+                        if(isBarcode){
+                          barcodeList.add("");
+                          barcodeIndex = barcodeList.length - 1;
+                          _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                        }
+                        else{
+                          ordercodeList.add("");
+                          ordercodeIndex = ordercodeList.length - 1;
+                          _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                        }
+
+                      });
+                    }
+                ),
+                Flexible(
+                    child: IconButton(
+                        icon: const Icon(Icons.delete_forever, color: Colors.red),
+                        onPressed: (){
+                          setState((){
+                            if(isBarcode){
+                              // Remove if more than 1 barcode in list
+                              if(barcodeList.length > 1){
+                                barcodeList.removeAt(barcodeIndex);
+                                barcodeIndex--;
+                              }
+                              else{
+                                // Clear barcode at index 0
+                                barcodeList[barcodeIndex] = "";
+                              }
+                              _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                            }
+                            else{
+                              // Remove if more than 1 barcode in list
+                              if(ordercodeList.length > 1){
+                                ordercodeList.removeAt(ordercodeIndex);
+                                ordercodeIndex--;
+                              }
+                              else{
+                                // Clear barcode at index 0
+                                ordercodeList[ordercodeIndex] = "";
+                              }
+                              _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                            }
+                          });
+                        }
+                    )
+                ),
+              ]
+          ),
+        ],
+      );
     }
 
     return showDialog(
@@ -1085,23 +1194,14 @@ class _MasterTableView extends State<MasterTableView>{
                     child: SingleChildScrollView(
                       child: Column(
                         textDirection: TextDirection.ltr,
-                        children: List.generate(item.length, (index) =>
-                          Column(
-                            children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: headerPadding(masterHeader[index], TextAlign.left),
-                              ),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 20.0),
-                                  child: getFieldType(index),
-                                )
-                              ),
-                            ]
-                          )
-                        )
+                        children: [
+                          editField(Index.masterDescript, 0),
+                          editField(Index.masterPrice,1),
+                          editField(Index.masterCategory,2),
+                          editField(Index.masterUOM,3),
+                          listField(Index.masterBarcode,4),
+                          listField(Index.masterOrdercode,5)
+                        ]
                       ),
                     )
                 ),
@@ -1118,6 +1218,29 @@ class _MasterTableView extends State<MasterTableView>{
                       child: Text("Save", style: whiteText),
                       onPressed: () {
                         setState((){
+                          // format bcodeList
+                          editedItem[Index.masterBarcode] = "";
+                          for(int b = 0; b < barcodeList.length; b++){
+                            if(b < barcodeList.length -1){
+                              editedItem[Index.masterBarcode] += "${barcodeList[b]},";
+                            }
+                            else{
+                              editedItem[Index.masterBarcode] += barcodeList[b];
+                            }
+                          }
+
+                          editedItem[Index.masterOrdercode] = "";
+                          for(int o = 0; o < ordercodeList.length; o++){
+                            if(o < ordercodeList.length -1){
+                              editedItem[Index.masterOrdercode] += "${ordercodeList[o]},";
+                            }
+                            else{
+                              editedItem[Index.masterOrdercode] += ordercodeList[o];
+                            }
+                          }
+
+                          editedItem[Index.masterDate] = getDateString();
+
                           int tableIndex = int.parse(item[Index.masterIndex]);
                           _tempMasterTable[tableIndex] = editedItem;
                           _hasChanged = true;
@@ -1344,6 +1467,11 @@ class _MasterTableView extends State<MasterTableView>{
 
     return TapRegion(
       onTapInside: (value) async{
+        barcodeIndex = 0;
+        barcodeList = _tempMasterTable[tableIndex][Index.masterBarcode].split(",");
+
+        ordercodeIndex = 0;
+        ordercodeList = _tempMasterTable[tableIndex][Index.masterOrdercode].split(",");
         await _editDialog(context: context, item: List.of(_tempMasterTable[tableIndex]));
       },
       child: Row(
@@ -1502,7 +1630,8 @@ showAlert({required BuildContext context, required Text text, Color? color}) {
   );
 }
 
-String getDateString(String d){
+String getDateString({String? string}){
+  String d = string ?? "";
   String newDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
   if(d.isNotEmpty) {
     try{
