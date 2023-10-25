@@ -1,4 +1,4 @@
-import 'dart:convert';
+//import 'dart:convert';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -323,7 +323,7 @@ class _MainPage extends State<MainPage>{
             masterTable[i][3],
             masterTable[i][4],
             masterTable[i][5],
-            getDateString(string: masterTable[i][6]),
+            masterTable[i][6],
             masterTable[i][7]
           ],
           i+1
@@ -357,14 +357,15 @@ class _MainPage extends State<MainPage>{
     sheetObject.setColWidth(7, 15.0); // Ordercode
 
     String filename = "MASTERFILE_${DateTime.now().month}_${DateTime.now().year}.xlsx";
-    var fileBytes = exportExcel.save();
+    //var fileBytes = exportExcel.save(fileName: filename);
+    exportExcel.save(fileName: filename);
 
-    html.AnchorElement()
-      ..href = ("data:application/octet-stream;charset=utf-16le;base64,${base64.encode(fileBytes!)}")//'${Uri.dataFromBytes(fileBytes!, mimeType: 'text/xlsx')}'
-      ..download = filename
-      ..setAttribute("download", filename)
-      ..style.display = 'none'
-      ..click();
+    // html.AnchorElement()
+    //   ..href = ("data:application/octet-stream;charset=utf-16le;base64,${base64.encode(fileBytes!)}")//'${Uri.dataFromBytes(fileBytes!, mimeType: 'text/xlsx')}'
+    //   ..download = filename
+    //   ..setAttribute("download", filename)
+    //   ..style.display = 'none'
+    //   ..click();
 
     setState((){
       _isLoading = false;
@@ -430,10 +431,25 @@ class _MainPage extends State<MainPage>{
                     padding: const EdgeInsets.all(8.0),
                     child: ElevatedButton(
                       onPressed: () async{
+                        // setState((){
+                        //   _isLoading = true;
+                        // });
+
+                        //uploadMasterfile();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.yellow, // Background color
+                      ),
+                      child: const Text("Push MASTERFILE"),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: ElevatedButton(
+                      onPressed: () async{
                         setState((){
                           _isLoading = true;
                         });
-
                         exportXLSX();
                       },
                       style: ElevatedButton.styleFrom(
@@ -484,12 +500,14 @@ class _JobTableView extends State<JobTableView> {
   @override
   void initState() {
     super.initState();
-    if(jobTable.isEmpty){
-      _filePicker();
-    }
-    else{
-      _filterList = List.of(jobTable);
-    }
+    _filePicker();
+
+    // if(jobTable.isEmpty){
+    //
+    // }
+    // else{
+    //   _filterList = List.of(jobTable);
+    // }
   }
 
   @override
@@ -658,10 +676,6 @@ class _JobTableView extends State<JobTableView> {
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      jobHeader = List.generate(
-          table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase()
-      );
-
       setState((){
         _loadingMsg = "Creating categories...";
       });
@@ -676,11 +690,21 @@ class _JobTableView extends State<JobTableView> {
 
       jobTable = List.generate(table.rows.length, (index) =>
         // Need to add extra index column as the MASTER INDEX will not be linear
-        [(index-1).toString()] + List<String>.generate(jobHeader.length, (index2) =>
-            index2 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString()) :
-            table.rows[index][index2].toString().toUpperCase()
+        [(index-1).toString()] + List<String>.generate(table.rows[0].length, (index2) =>
+            index2 - 1 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString().toUpperCase())
+                : table.rows[index][index2].toString().toUpperCase()
         )
       );
+
+      jobHeader = ["INDEX"] + List.generate(
+          table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase()
+      );
+
+      // for (var j in jobTable){
+      //   j[Index.jobDate] = getDateString(string: j[Index.jobDate].toString());
+      //   //index2+1 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString()) :
+      // }
+
       jobTable.removeAt(0); // Remove header from main
 
       setState((){
@@ -695,13 +719,67 @@ class _JobTableView extends State<JobTableView> {
   }
 
   Widget _getHeader(){
-    double height = MediaQuery.of(context).size.height / 2.0;
-    double cellHeight = height / 8.0;
+
+    double cellHeight = 50.0;
+    double cellWidth = 75.0;
+
+    cellFit(int index){
+      return Expanded(
+          flex: 1,
+          child: Container(
+              height: cellHeight,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: Colors.black,
+                  style: BorderStyle.solid,
+                  width: 1.0,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  jobHeader[index],
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  softWrap: true,
+                ),
+              )
+          )
+      );
+    }
+
+    cell(int index){
+      return Container(
+          width: cellWidth,
+          height: cellHeight,
+          decoration: BoxDecoration(
+            color: Colors.white24,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: Colors.black,
+              style: BorderStyle.solid,
+              width: 1.0,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              jobHeader[index],
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              softWrap: true,
+            ),
+          )
+      );
+    }
+
     return Row(
-        children: [
-          Expanded(
-            flex: 1,
-            child: Checkbox(
+        children:
+        <Widget>[
+          SizedBox(
+          height: cellHeight,
+          width: cellWidth,
+          child: Checkbox(
               value: _selectAll,
               onChanged: (value){
                 setState((){
@@ -713,11 +791,21 @@ class _JobTableView extends State<JobTableView> {
                   }
                 });
               }
-            )
-          ),
-          Expanded(
-            flex: 1,
-            child: Container(
+          )
+        )] + List.generate(jobHeader.length, (index) =>
+          index != Index.jobMasterIndex && index != Index.jobTableIndex && index != Index.jobPrice && index != Index.jobQTY ? cellFit(index) : cell(index)
+        )
+    );
+  }
+
+  Widget _getRow(int tableIndex){
+    double cellHeight = 50.0;
+    double cellWidth = 75.0;
+
+    cellFit(int index){
+      return Expanded(
+          flex: 1,
+          child: Container(
               height: cellHeight,
               decoration: BoxDecoration(
                 color: Colors.white24,
@@ -728,87 +816,64 @@ class _JobTableView extends State<JobTableView> {
                   width: 1.0,
                 ),
               ),
-              child: const Text(
-                "Table Index",
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                softWrap: true,
-              ),
-            )
+              child: Center(
+                child: Text(
+                  jobTable[tableIndex][index],
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  softWrap: true,
+                ),
+              )
           )
-        ] + List.generate(jobHeader.length, (index) => Expanded(
-          flex: 1,
-          child: Container(
-            height: cellHeight,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: Colors.black,
-                style: BorderStyle.solid,
-                width: 1.0,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                jobHeader[index],
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                softWrap: true,
-              ),
-            )
-          )
-        )
-      )
-    );
-  }
+      );
+    }
 
-  Widget _getRow(int tableIndex){
-    double height = MediaQuery.of(context).size.height / 2.0;
-    double cellHeight = height / 8.0;
+    cell(int index){
+      return Container(
+          height: cellHeight,
+          width: cellWidth,
+          decoration: BoxDecoration(
+            color: Colors.white24,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: Colors.black,
+              style: BorderStyle.solid,
+              width: 1.0,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              jobTable[tableIndex][index],
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              softWrap: true,
+            ),
+          )
+      );
+    }
+
     return Row(
-      children: [
-        Expanded(
-          flex: 1,
+      children: <Widget>[
+        SizedBox(
+          height: cellHeight,
+          width: cellWidth,
           child: Checkbox(
-            value: _isChecked[tableIndex],
-            onChanged: (value){
-              setState((){
-                _isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
-                if(_isChecked[tableIndex]){
-                  _addList.add(jobTable[tableIndex]);
-                }
-                else{
-                  _addList.remove(jobTable[tableIndex]);
-                }
-              });
-            }
+              value: _isChecked[tableIndex],
+              onChanged: (value){
+                setState((){
+                  _isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
+                  if(_isChecked[tableIndex]){
+                    _addList.add(jobTable[tableIndex]);
+                  }
+                  else{
+                    _addList.remove(jobTable[tableIndex]);
+                  }
+                });
+              }
           )
         )
       ] + List.generate(jobTable[tableIndex].length, (index) =>
-        Expanded(
-          flex: 1,
-          child: Container(
-            height: cellHeight,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: Colors.black,
-                style: BorderStyle.solid,
-                width: 1.0,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                jobTable[tableIndex][index],
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                softWrap: true,
-              ),
-            )
-          )
-        )
+      index != Index.jobMasterIndex && index != Index.jobPrice && index != Index.jobTableIndex && index != Index.jobQTY ? cellFit(index) : cell(index),
       )
     );
   }
@@ -831,7 +896,7 @@ class _JobTableView extends State<JobTableView> {
   }
 
   void _showChangedItems() {
-    _filterList.clear();
+    _filterList = List.empty(growable: true);
 
     // Go through both tables and check for any differences
     for(int i = 0; i < jobTable.length; i++){
@@ -846,6 +911,8 @@ class _JobTableView extends State<JobTableView> {
         }
       }
     }
+
+    setState((){});
   }
 
   @override
@@ -876,7 +943,7 @@ class _JobTableView extends State<JobTableView> {
                   )
                 ]
               )
-            ) : Column(
+            ) : Center(child: Column(
               children: [
                 Container(
                   width: width,
@@ -913,10 +980,7 @@ class _JobTableView extends State<JobTableView> {
                     itemBuilder: (context, index) {
                       return _getRow(int.parse(_filterList[index][0]));
                     },
-                  ) : Expanded(
-                    flex: 1,
-                    child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
-                  ),
+                  ) : Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
                 ),
                 const SizedBox(
                   height: 5.0,
@@ -950,9 +1014,9 @@ class _JobTableView extends State<JobTableView> {
                   padding: const EdgeInsets.all(8.0),
                   child: ElevatedButton(
                     onPressed: () async {
-                      int nofCount = jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").length;
+                      //int nofCount = jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").length;
                       int editCount = _getEditCount();
-                      await confirmDialog(context, "Add selected items to MASTERFILE?\nNew Items: $nofCount\nEdited Items: $editCount").then((value){
+                      await confirmDialog(context, "Add selected items to MASTERFILE?\nAdd Items: ${_addList.length} \nEdited Items: $editCount").then((value){
                         setState((){
                           masterTable = List.of(masterTable);
                           for(int j = 0; j < _addList.length; j++){
@@ -986,7 +1050,7 @@ class _JobTableView extends State<JobTableView> {
                 ),
               ) : Container(),
             ],
-          )
+          ))
         )
       )
     );
@@ -1000,14 +1064,11 @@ class MasterTableView extends StatefulWidget{
 }
 class _MasterTableView extends State<MasterTableView>{
   int _searchColumn = Index.masterDescript;
-  bool _hasChanged = false;
+  List<int> _editedItems = [];
   final List<TextEditingController> _editCtrl = List.generate(6, (index) => TextEditingController());
-
   final TextEditingController _searchCtrl = TextEditingController();
-
   List<List<String>> _tempMasterTable = [];
   List<List<String>> _filterList = [];
-
   int barcodeIndex = 0;
   List<String> barcodeList = [];
   int ordercodeIndex = 0;
@@ -1030,31 +1091,107 @@ class _MasterTableView extends State<MasterTableView>{
     super.dispose();
   }
 
-  _editDialog({required BuildContext context, required List<String> item, Color? color}) {
-    List<String> editedItem = List.of(item);
+
+  _sortList(){
+    // sort by desciption text 0-9->a-z
+    // calc new indices
+    _tempMasterTable.sort((x, y) => (x[Index.masterDescript]).compareTo((y[Index.masterDescript])));
+
+    //Calc new indices from list
+    for(int i = 0; i < _tempMasterTable.length; i++){
+      _tempMasterTable[i][Index.masterIndex] = i.toString();
+    }
+  }
+
+  // Edit item OR add new item
+  _editDialog({required BuildContext context, List<String>? item, Color? color}) {
+    bool newItem = false;
+    List<String> editedItem = [];
+    if(item == null){
+      newItem = true;
+      editedItem = [
+        _tempMasterTable.length.toString(),
+        ' ',
+        'MISC',
+        'NEW ITEM',
+        'EACH',
+        '0.0',
+        getDateString(),
+        ' '
+      ];
+    }
+    else{
+      editedItem = List.of(item);
+    }
 
     editField(int itemIndex, int ctrlIndex){
-      _editCtrl[ctrlIndex].text = item[itemIndex];
-      return Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: headerPadding(masterHeader[itemIndex], TextAlign.left),
-          ),
-          Align(
+      _editCtrl[ctrlIndex].text = editedItem[itemIndex];
+      return Padding(
+        padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 5.0, bottom: 5),
+        child: Column(
+          children: [
+            Align(
               alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 20.0),
-                child: TextFormField(
-                controller: _editCtrl[ctrlIndex],
-                  maxLines: 1,
-                  onChanged: (value){
-                    editedItem[itemIndex] = value;
-                  },
-                ),
+              child: headerPadding(masterHeader[itemIndex], TextAlign.left),
+            ),
+            Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 20.0),
+                  child: TextFormField(
+                  controller: _editCtrl[ctrlIndex],
+                    maxLines: 1,
+                    onChanged: (value){
+                      editedItem[itemIndex] = value;
+                    },
+                  ),
+                )
+            ),
+          ]
+        )
+      );
+    }
+
+    categoryDropField(int ctrlIndex) {
+      _editCtrl[ctrlIndex].text = editedItem[Index.masterCategory];
+      return Padding(
+        padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 5.0, bottom: 5),
+        child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: headerPadding(masterHeader[Index.masterCategory], TextAlign.left),
+              ),
+              ListTile(
+                  trailing: PopupMenuButton(
+                      icon: const Icon(Icons.arrow_downward, color: Colors.black),
+                      itemBuilder: (context){
+                        return List.generate(masterCategory.length, (index) =>
+                            PopupMenuItem<int>(
+                              value: index,
+                              child: ListTile(
+                                title: Text(masterCategory[index]),
+                              ),
+                            )
+                        );
+                      },
+                      onSelected: (value) async{
+                        setState(() {
+                          _editCtrl[ctrlIndex].text = masterCategory[value];
+                          editedItem[Index.masterCategory] = masterCategory[value];
+                        });
+                      }
+                  ),
+                  title: TextFormField(
+                    textAlign: TextAlign.center,
+                    controller: _editCtrl[ctrlIndex],
+                    style: const TextStyle(color: Colors.black),
+                    maxLines: 1,
+                    enabled: false,
+                  )
               )
-          ),
-        ]
+            ]
+        )
       );
     }
 
@@ -1074,12 +1211,16 @@ class _MasterTableView extends State<MasterTableView>{
                 onPressed: (){
                   setState((){
                     if(isBarcode){
-                      barcodeIndex = (barcodeIndex - 1) % barcodeList.length;
-                      _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                      if(barcodeIndex > 0){
+                        barcodeIndex--;
+                        _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                      }
                     }
                     else{
-                      ordercodeIndex = (ordercodeIndex - 1) % ordercodeList.length;
-                      _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                      if(ordercodeIndex > 0){
+                        ordercodeIndex--;
+                        _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                      }
                     }
                   });
                 },
@@ -1106,12 +1247,16 @@ class _MasterTableView extends State<MasterTableView>{
                   onPressed: (){
                     setState((){
                       if(isBarcode){
-                        barcodeIndex = (barcodeIndex + 1) % barcodeList.length;
-                        _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                        if(barcodeIndex < barcodeList.length - 1){
+                          barcodeIndex++;
+                          _editCtrl[ctrlIndex].text = barcodeList[barcodeIndex];
+                        }
                       }
                       else{
-                        ordercodeIndex = (ordercodeIndex + 1) % ordercodeList.length;
-                        _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                        if(ordercodeIndex < ordercodeList.length - 1){
+                          ordercodeIndex++;
+                          _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
+                        }
                       }
                     });
                   }
@@ -1135,7 +1280,6 @@ class _MasterTableView extends State<MasterTableView>{
                           ordercodeIndex = ordercodeList.length - 1;
                           _editCtrl[ctrlIndex].text = ordercodeList[ordercodeIndex];
                         }
-
                       });
                     }
                 ),
@@ -1197,7 +1341,7 @@ class _MasterTableView extends State<MasterTableView>{
                         children: [
                           editField(Index.masterDescript, 0),
                           editField(Index.masterPrice,1),
-                          editField(Index.masterCategory,2),
+                          categoryDropField(2),
                           editField(Index.masterUOM,3),
                           listField(Index.masterBarcode,4),
                           listField(Index.masterOrdercode,5)
@@ -1228,7 +1372,6 @@ class _MasterTableView extends State<MasterTableView>{
                               editedItem[Index.masterBarcode] += barcodeList[b];
                             }
                           }
-
                           editedItem[Index.masterOrdercode] = "";
                           for(int o = 0; o < ordercodeList.length; o++){
                             if(o < ordercodeList.length -1){
@@ -1238,12 +1381,20 @@ class _MasterTableView extends State<MasterTableView>{
                               editedItem[Index.masterOrdercode] += ordercodeList[o];
                             }
                           }
-
                           editedItem[Index.masterDate] = getDateString();
+                          int tableIndex = int.parse(editedItem[Index.masterIndex]);
 
-                          int tableIndex = int.parse(item[Index.masterIndex]);
-                          _tempMasterTable[tableIndex] = editedItem;
-                          _hasChanged = true;
+                          if(newItem){
+                            _tempMasterTable.add(editedItem);
+                            _filterList = List.of(_tempMasterTable);
+                          }
+                          else{
+                            _tempMasterTable[tableIndex] = editedItem;
+                          }
+
+                          if(!_editedItems.contains(tableIndex)){
+                            _editedItems.add(tableIndex);
+                          }
                         });
                         Navigator.pop(context);
                       }
@@ -1301,23 +1452,27 @@ class _MasterTableView extends State<MasterTableView>{
 
             onChanged: (String value) {
               setState((){
-                //activeRow = -1;
+                _filterList = List.of(_tempMasterTable);
                 if(value.isEmpty){
-                  _filterList = List.of(_tempMasterTable);
+                    return;
                 }
                 else{
                   String searchText = value.toUpperCase();
                   bool found = false;
                   List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-                  List<List<String>> refined = [[]];
-
                   for (int i = 0; i < searchWords.length; i++) {
-                    if (!found){
-                      _filterList = _tempMasterTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
-                      found = _filterList.isNotEmpty;
+                    if (!found) {
+                      List<List<String>> first = _filterList.where((row) =>
+                          row[_searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
+                      if(first.isNotEmpty){
+                        _filterList = List.of(first);
+                        found = true;
+                      }
                     }
-                    else{
-                      refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                    else {
+                      List<List<String>> refined =
+                      _filterList.where((row) =>
+                          row[_searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
                       if(refined.isNotEmpty){
                         _filterList = List.of(refined);
                       }
@@ -1490,23 +1645,22 @@ class _MasterTableView extends State<MasterTableView>{
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () async {
-            if(_hasChanged){
-              await confirmWithCancel(context, "Table was edited!\nConfirm changes to MASTERFILE?\n\nNOTE: Press 'Cancel' to continue editing.").then((int value) async {
+            if(_editedItems.isNotEmpty){
+              await confirmWithCancel(context, "Table was edited!\nConfirm changes to MASTERFILE?\nEdit count:${_editedItems.length}\nPress 'Cancel' to continue editing.").then((int value) async {
                 if(value == 1){
                   setState((){
                     masterTable = List.of(_tempMasterTable);
-                    // Reset changed flag
-                    _hasChanged = false;
                     Navigator.pop(context);
                   });
                 }
                 else if(value == 0){
                   _tempMasterTable = List.of(masterTable);
-                  // Reset changed flag
-                  _hasChanged = false;
                   Navigator.pop(context);
                 }
               });
+            }
+            else{
+              Navigator.pop(context);
             }
           },
         )
@@ -1553,32 +1707,46 @@ class _MasterTableView extends State<MasterTableView>{
                       final int tableIndex = int.parse(_filterList[index][0]);
                       return _getRow(tableIndex);
                     },
-                  ) : Expanded(
-                    flex: 1,
-                    child: Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
-                  ),
+                  ) : Text("EMPTY", style: greyText, textAlign: TextAlign.center,)
                 ),
                 const SizedBox(
                   height: 5.0,
                 ),
                 _searchBar(width),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await confirmDialog(context, "Confirm changes to MASTERFILE?").then((value){
-                        if(value){
-                          setState((){
-                            masterTable = List.of(_tempMasterTable);
-                            // Reset changed flag
-                            _hasChanged = false;
-                          });
-                        }
-                      });
-                    },
-                    child: const Text("Update MASTERFILE")
-                  ),
-                ),
+                Row(
+                  children:[
+                    // ElevatedButton(
+                    //   onPressed: () async{
+                    //     setState((){});
+                    //   },
+                    //   child: const Text("Sort Table")
+                    // ),
+                    ElevatedButton(
+                      onPressed: () async{
+                        barcodeIndex = 0;
+                        barcodeList = [''];
+                        ordercodeIndex = 0;
+                        ordercodeList = [''];
+                        await _editDialog(context: context);
+                      },
+                      child: const Text("Add New Item")
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await confirmDialog(context, "Confirm changes to MASTERFILE? \n Edited item count: ${_editedItems.length}").then((value){
+                          if(value){
+                            setState((){
+                              _sortList();
+                              masterTable = List.of(_tempMasterTable);
+                              _editedItems = [];
+                            });
+                          }
+                        });
+                      },
+                      child: const Text("Update MASTERFILE")
+                    ),
+                  ]
+                )
               ],
             )
           ),
@@ -1759,7 +1927,7 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
 
 Widget headerPadding(String title, TextAlign l) {
   return Padding(
-    padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 10.0, bottom: 5.0),
+    padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 10.0, bottom: 5),
     child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue,)),
   );
 }
