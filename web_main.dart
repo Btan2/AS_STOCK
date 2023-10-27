@@ -1,23 +1,19 @@
-//import 'dart:convert';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:excel/excel.dart' as excel;
+import 'dart:async';
 
 String versionStr = "0.23.09+1";
 String loadingMsg = "";
-bool masterWasEdited = false;
-List<List<String>> jobTable = [];
-List<String> jobHeader = [];
-List<String> jobCategory = [];
+
 List<List<String>> masterTable = [];
 List<String> masterHeader = [];
 List<String> masterCategory = [];
 TextStyle get whiteText{ return const TextStyle(color: Colors.white, fontSize: 20.0);}
 TextStyle get blackText{ return const TextStyle(color: Colors.black, fontSize: 20.0);}
 TextStyle get greyText{ return const TextStyle(color: Colors.black12, fontSize: 20.0);}
-TextStyle get cellText{ return const TextStyle(color: Colors.black, fontSize: 12.0);}
 final Color colorOk = Colors.blue.shade400;
 const Color colorError = Colors.redAccent;
 final Color colorWarning = Colors.deepPurple.shade200;
@@ -74,11 +70,17 @@ class _LoginPage extends State<LoginPage>{
   Color splashColor = colorOk;
 
   @override
+  void initState() {
+    super.initState();
+    splashColor = colorOk;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.only(bottom: 10.0,),
-        child: Text("version $versionStr", style: cellText, textAlign: TextAlign.center),
+        child: Text("version $versionStr", style: const TextStyle(color: Colors.black, fontSize: 12.0), textAlign: TextAlign.center),
       ),
       body: SingleChildScrollView(
         child: Center(
@@ -186,7 +188,10 @@ class _MainPage extends State<MainPage>{
     super.initState();
     _isLoading = true;
     if(masterTable.isEmpty){
-      _filePicker();
+      _pickMasterFile();
+    }
+    else{
+      _isLoading = false;
     }
   }
 
@@ -195,42 +200,34 @@ class _MainPage extends State<MainPage>{
     super.dispose();
   }
 
-  Future<void> _filePicker() async {
-    // Load xlsx from file browser
-    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
-    uploadInput.click();
+  void _pickMasterFile() async{
+    var file = await pickFile('xlsx');
+    if(file == null){
+      setState((){
+        _isLoading = false;
+      });
 
-    uploadInput.onAbort.listen((e){
       return;
-    });
+    }
 
-    uploadInput.onChange.listen((e) {
-      // read file content as dataURL
-      List<html.File> files = List.empty();
-      files = uploadInput.files as List<html.File>;
-      html.FileReader reader = html.FileReader();
-      final file = files[0];
-      reader.readAsArrayBuffer(file);
-
-      reader.onAbort.listen((e) {
-        return;
-      });
-
-      reader.onError.listen((fileEvent) {
-        return;
-      });
-
-      reader.onLoadEnd.listen((e) async {
-        await _loadMasterFile(reader.result as List<int>);
-        //debugPrint(masterTable.length.toString());
+    html.FileReader reader = html.FileReader();
+    reader.readAsArrayBuffer(file);// as html.File);
+    reader.onLoadEnd.listen((e) async {
+      if(reader.result == null){
         setState((){
           _isLoading = false;
-          showAlert(context: context, text: const Text("MASTERFILE loaded successfully"));
         });
+        return;
+      }
+      await _loadMasterFile(reader.result as List<int>);
+
+      setState((){
+        _isLoading = false;
+        showAlert(context: context, text: const Text("MASTERFILE loaded successfully"));
       });
     });
   }
-
+  
   Future<void> _loadMasterFile(List<int> bytes) async {
     if(bytes.isEmpty){
       loadingMsg = "...";
@@ -380,6 +377,7 @@ class _MainPage extends State<MainPage>{
         centerTitle: true,
         title: SvgPicture.asset("AS_logo_light.svg", height: 50),
         leading: null,
+        // need to pop context correctly
       ),
       body: SingleChildScrollView(
           child: Center(
@@ -393,7 +391,7 @@ class _MainPage extends State<MainPage>{
                   )
                 ] : [
                   SizedBox(
-                    height: MediaQuery.of(context).size.height/3,
+                    height: MediaQuery.of(context).size.height/4,
                   ),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
@@ -403,7 +401,7 @@ class _MainPage extends State<MainPage>{
                             setState((){
                               _isLoading = true;
                             });
-                            _filePicker();
+                            pickFile(".xlsx");
                           }
                           else{
                             //tempMasterTable = List.of(masterTable);
@@ -438,7 +436,7 @@ class _MainPage extends State<MainPage>{
                         //uploadMasterfile();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.yellow, // Background color
+                        backgroundColor: Colors.orange, // Background color
                       ),
                       child: const Text("Push MASTERFILE"),
                     ),
@@ -457,6 +455,9 @@ class _MainPage extends State<MainPage>{
                       ),
                       child: const Text("Download MASTERFILE"),
                     ),
+                  ),
+                  const SizedBox(
+                    height: 25.0,
                   ),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
@@ -485,7 +486,7 @@ class JobTableView extends StatefulWidget{
   @override
   State<JobTableView> createState() => _JobTableView();
 }
-class _JobTableView extends State<JobTableView> {
+class _JobTableView extends State<JobTableView>{
   final TextEditingController _searchCtrl = TextEditingController();
   String _loadingMsg = "Loading...";
   bool _selectAll = false;
@@ -493,21 +494,15 @@ class _JobTableView extends State<JobTableView> {
   int _searchColumn = Index.jobDescript;
   int nofCount = 0;
   int editCount = 0;
+  List<List<String>> _jobTable = [];
+  List<String> _jobHeader = [];
   List<List<String>> _filterList = [];
-  List<List<String>> _addList = [];
-  List<bool> _isChecked = [];
+  List<int> checkList = [];
 
   @override
   void initState() {
     super.initState();
-    _filePicker();
-
-    // if(jobTable.isEmpty){
-    //
-    // }
-    // else{
-    //   _filterList = List.of(jobTable);
-    // }
+    _pickJobFile();
   }
 
   @override
@@ -533,12 +528,12 @@ class _JobTableView extends State<JobTableView> {
         leading: PopupMenuButton(
           icon: const Icon(Icons.manage_search, color: Colors.white),
           itemBuilder: (context) {
-            return List.generate(jobHeader.length, (index) =>
+            return List.generate(_jobHeader.length, (index) =>
                 PopupMenuItem<int> (
 
                   value: index,
                   child: ListTile(
-                    title: Text("Search ${jobHeader[index]}"),
+                    title: Text("Search ${_jobHeader[index]}"),
                     trailing: index == _searchColumn ? const Icon(Icons.check) : null,
                   ),
                 )
@@ -556,37 +551,36 @@ class _JobTableView extends State<JobTableView> {
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
-            hintText: "Search ${jobHeader[_searchColumn].toLowerCase()}...",
+            hintText: "Search ${_jobHeader[_searchColumn].toLowerCase()}...",
             border: InputBorder.none,
           ),
 
           onChanged: (String value) {
             setState((){
-              //activeRow = -1;
+              _filterList = List.of(_jobTable);
               if(value.isEmpty){
-                _filterList = List.of(jobTable);
+                return;
               }
-              else{
-                String searchText = value.toUpperCase();
-                bool found = false;
-                List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-                List<List<String>> refined = [[]];
 
-                for (int i = 0; i < searchWords.length; i++) {
-                  if (!found){
-                    _filterList = jobTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
-                    found = _filterList.isNotEmpty;
-                  }
-                  else{
-                    refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
-                    if(refined.isNotEmpty){
-                      _filterList = List.of(refined);
-                    }
+              String searchText = value.toUpperCase();
+              bool found = false;
+              List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
+              List<List<String>> refined = [[]];
+
+              for (int i = 0; i < searchWords.length; i++) {
+                if (!found){
+                  _filterList = _jobTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                  found = _filterList.isNotEmpty;
+                }
+                else{
+                  refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                  if(refined.isNotEmpty){
+                    _filterList = List.of(refined);
                   }
                 }
-                if(!found){
-                  _filterList = List.empty();
-                }
+              }
+              if(!found){
+                _filterList = List.empty();
               }
             });
           },
@@ -597,7 +591,7 @@ class _JobTableView extends State<JobTableView> {
           onPressed: () {
             setState((){
               _searchCtrl.clear();
-              _filterList = List.of(jobTable);
+              _filterList = List.of(_jobTable);
               //setTableState();
             });
           },
@@ -606,42 +600,35 @@ class _JobTableView extends State<JobTableView> {
     );
   }
 
-  Future<void> _filePicker() async {
-    setState(() {
-      _isLoading = true;
-    });
+  void _pickJobFile() async{
+    final file = await pickFile('');
+    if(file == null){
+      setState((){
+        _isLoading = false;
+      });
 
-    // Load xlsx from file browser
-    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
-    uploadInput.click();
+      return;
+    }
 
-    uploadInput.onAbort.listen((e){
+    html.FileReader reader = html.FileReader();
+    reader.readAsArrayBuffer(file);
+    reader.onError.listen((fileEvent) {
+      setState((){_isLoading = false;});
       return;
     });
 
-    uploadInput.onChange.listen((e) {
-      // read file content as dataURL
-      List<html.File> files = List.empty();
-      files = uploadInput.files as List<html.File>;
-      html.FileReader reader = html.FileReader();
-      final file = files[0];
-      reader.readAsArrayBuffer(file);
-
-      reader.onAbort.listen((e) {
-        return;
-      });
-
-      reader.onError.listen((fileEvent) {
-        return;
-      });
-
-      reader.onLoadEnd.listen((e) async {
-        await _loadJobSheet(reader.result as List<int>);
-        //debugPrint(jobTable.length.toString());
+    reader.onLoadEnd.listen((e) async {
+      if(reader.result == null){
         setState((){
           _isLoading = false;
         });
-      });
+      }
+      else{
+        await _loadJobSheet(reader.result as List<int>);
+        setState((){
+          _isLoading = false;
+        });
+      }
     });
   }
 
@@ -654,7 +641,7 @@ class _JobTableView extends State<JobTableView> {
     }
 
     setState((){
-      jobTable = List.empty();
+      _jobTable = List.empty();
       _loadingMsg = "Decoding spreadsheet...";
     });
     await Future.delayed(const Duration(seconds: 1));
@@ -681,14 +668,14 @@ class _JobTableView extends State<JobTableView> {
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      jobCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][0].toString().toUpperCase()).toSet().toList();
+      //_jobCategory = List<String>.generate(table.rows.length, (index) => table.rows[index][0].toString().toUpperCase()).toSet().toList();
 
       setState((){
         _loadingMsg = "Creating table...";
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      jobTable = List.generate(table.rows.length, (index) =>
+      _jobTable = List.generate(table.rows.length, (index) =>
         // Need to add extra index column as the MASTER INDEX will not be linear
         [(index-1).toString()] + List<String>.generate(table.rows[0].length, (index2) =>
             index2 - 1 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString().toUpperCase())
@@ -696,20 +683,15 @@ class _JobTableView extends State<JobTableView> {
         )
       );
 
-      jobHeader = ["INDEX"] + List.generate(
+      _jobHeader = ["INDEX"] + List.generate(
           table.rows[0].length, (index) => table.rows[0][index].toString().toUpperCase()
       );
 
-      // for (var j in jobTable){
-      //   j[Index.jobDate] = getDateString(string: j[Index.jobDate].toString());
-      //   //index2+1 == Index.jobDate ? getDateString(string: table.rows[index][index2].toString()) :
-      // }
-
-      jobTable.removeAt(0); // Remove header from main
+      _jobTable.removeAt(0); // Remove header from main
 
       setState((){
-        _filterList = List.of(jobTable);
-        _isChecked = List<bool>.filled(jobTable.length, false);
+        _filterList = List.of(_jobTable);
+        //_isChecked = List<bool>.filled(_jobTable.length, false);
       });
     }
     catch (e){
@@ -719,7 +701,6 @@ class _JobTableView extends State<JobTableView> {
   }
 
   Widget _getHeader(){
-
     double cellHeight = 50.0;
     double cellWidth = 75.0;
 
@@ -739,7 +720,7 @@ class _JobTableView extends State<JobTableView> {
               ),
               child: Center(
                 child: Text(
-                  jobHeader[index],
+                  _jobHeader[index],
                   textAlign: TextAlign.center,
                   maxLines: 4,
                   softWrap: true,
@@ -764,7 +745,7 @@ class _JobTableView extends State<JobTableView> {
           ),
           child: Center(
             child: Text(
-              jobHeader[index],
+              _jobHeader[index],
               textAlign: TextAlign.center,
               maxLines: 4,
               softWrap: true,
@@ -784,15 +765,16 @@ class _JobTableView extends State<JobTableView> {
               onChanged: (value){
                 setState((){
                   _selectAll = _selectAll ? false : true;
-                  _isChecked = List<bool>.generate(_isChecked.length, (index) => _selectAll);
-                  _addList.clear();
+                  checkList.clear();
                   if(_selectAll){
-                    _addList = List.of(jobTable);
+                    for(int f = 0; f < _filterList.length; f++){
+                      checkList.add(int.parse(_filterList[f][Index.masterIndex]));
+                    }
                   }
                 });
               }
           )
-        )] + List.generate(jobHeader.length, (index) =>
+        )] + List.generate(_jobHeader.length, (index) =>
           index != Index.jobMasterIndex && index != Index.jobTableIndex && index != Index.jobPrice && index != Index.jobQTY ? cellFit(index) : cell(index)
         )
     );
@@ -818,7 +800,7 @@ class _JobTableView extends State<JobTableView> {
               ),
               child: Center(
                 child: Text(
-                  jobTable[tableIndex][index],
+                  _jobTable[tableIndex][index],
                   textAlign: TextAlign.center,
                   maxLines: 4,
                   softWrap: true,
@@ -843,7 +825,7 @@ class _JobTableView extends State<JobTableView> {
           ),
           child: Center(
             child: Text(
-              jobTable[tableIndex][index],
+              _jobTable[tableIndex][index],
               textAlign: TextAlign.center,
               maxLines: 4,
               softWrap: true,
@@ -858,21 +840,22 @@ class _JobTableView extends State<JobTableView> {
           height: cellHeight,
           width: cellWidth,
           child: Checkbox(
-              value: _isChecked[tableIndex],
+              value: checkList.contains(tableIndex),
               onChanged: (value){
                 setState((){
-                  _isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
-                  if(_isChecked[tableIndex]){
-                    _addList.add(jobTable[tableIndex]);
+                  //_isChecked[tableIndex] = _isChecked[tableIndex] ? false : true;
+                  if(checkList.contains(tableIndex)){
+                    checkList.remove(tableIndex);
                   }
                   else{
-                    _addList.remove(jobTable[tableIndex]);
+                    checkList.add(tableIndex);
+                    //_addList.remove(_jobTable[tableIndex]);
                   }
                 });
               }
           )
         )
-      ] + List.generate(jobTable[tableIndex].length, (index) =>
+      ] + List.generate(_jobTable[tableIndex].length, (index) =>
       index != Index.jobMasterIndex && index != Index.jobPrice && index != Index.jobTableIndex && index != Index.jobQTY ? cellFit(index) : cell(index),
       )
     );
@@ -880,14 +863,14 @@ class _JobTableView extends State<JobTableView> {
 
   int _getEditCount(){
     int count = 0;
-    for(int i = 0; i < jobTable.length; i++){
-      int tableIndex = int.parse(jobTable[i][Index.jobMasterIndex]);
+    for(int i = 0; i < _jobTable.length; i++){
+      int tableIndex = int.parse(_jobTable[i][Index.jobMasterIndex]);
       if(tableIndex < masterTable.length){
-        if(jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
-          jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
-          jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
-          jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
-          jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
+        if(_jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
+          _jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
+          _jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
+          _jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
+          _jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
             count += 1;
         }
       }
@@ -899,15 +882,15 @@ class _JobTableView extends State<JobTableView> {
     _filterList = List.empty(growable: true);
 
     // Go through both tables and check for any differences
-    for(int i = 0; i < jobTable.length; i++){
-      int tableIndex = int.parse(jobTable[i][Index.jobMasterIndex]);
+    for(int i = 0; i < _jobTable.length; i++){
+      int tableIndex = int.parse(_jobTable[i][Index.jobMasterIndex]);
       if(tableIndex < masterTable.length){
-        if(jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
-            jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
-            jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
-            jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
-            jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
-          _filterList.add(jobTable[i]);
+        if(_jobTable[i][Index.jobBarcode] != masterTable[tableIndex][Index.masterBarcode] ||
+            _jobTable[i][Index.jobCategory] != masterTable[tableIndex][Index.masterCategory] ||
+            _jobTable[i][Index.jobDescript] != masterTable[tableIndex][Index.masterDescript] ||
+            _jobTable[i][Index.jobPrice] != masterTable[tableIndex][Index.masterPrice] ||
+            _jobTable[i][Index.jobOrdercode] != masterTable[tableIndex][Index.masterOrdercode]) {
+          _filterList.add(_jobTable[i]);
         }
       }
     }
@@ -943,7 +926,8 @@ class _JobTableView extends State<JobTableView> {
                   )
                 ]
               )
-            ) : Center(child: Column(
+            ) : Center(
+                child: Column(
               children: [
                 Container(
                   width: width,
@@ -965,7 +949,7 @@ class _JobTableView extends State<JobTableView> {
                 ),
                 Container(
                   width: width,
-                  height: MediaQuery.of(context).size.height / 2,
+                  height: MediaQuery.of(context).size.height * 0.56,
                   decoration: BoxDecoration(
                     border: Border.all(
                       color: Colors.black.withOpacity(0.5),
@@ -989,7 +973,7 @@ class _JobTableView extends State<JobTableView> {
                 const SizedBox(
                   height: 5.0,
                 ),
-                Padding(
+                _searchCtrl.text.isEmpty ? Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: ElevatedButton(
                     onPressed: () {
@@ -997,50 +981,49 @@ class _JobTableView extends State<JobTableView> {
                     },
                     child: const Text("Show Edited Items"),
                   ),
-                ),
-                Padding(
+                ) : Container(),
+                _searchCtrl.text.isEmpty ? Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: ElevatedButton(
                     onPressed: (){
                       setState((){
-                        _filterList = _filterList.length != jobTable.length ? List.of(jobTable) :
-                        jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").toList();
+                        _filterList = _filterList.length != _jobTable.length ? List.of(_jobTable) :
+                        _jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").toList();
                       });
                     },
-                    child: _filterList.length == jobTable.length ? const Text("Show NOF List") : const Text("Show Full List"),
+                    child: _filterList.length == _jobTable.length ? const Text("Show NOF List") : const Text("Show Full List"),
                   ),
-                ),
-                _addList.isNotEmpty ? Padding(
+                ) : Container(),
+                checkList.isNotEmpty ? Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: ElevatedButton(
                     onPressed: () async {
                       //int nofCount = jobTable.where((row) => row[Index.jobNof].toString().toUpperCase() == "TRUE").length;
                       int editCount = _getEditCount();
-                      await confirmDialog(context, "Add selected items to MASTERFILE?\nAdd Items: ${_addList.length} \nEdited Items: $editCount").then((value){
+                      await confirmDialog(context, "Add selected items to MASTERFILE?\nAdd Items: ${checkList.length} \nEdited Items: $editCount").then((value){
                         setState((){
-                          masterTable = List.of(masterTable);
-                          for(int j = 0; j < _addList.length; j++){
-                            int tableIndex = int.parse(_addList[j][Index.jobMasterIndex]);
-                            bool isNof = _addList[j][Index.jobNof].toString().toUpperCase() == "TRUE";
+                          for(int j = 0; j < checkList.length; j++){
+                            int index = checkList[j];
+                            bool isNof = _jobTable[index][Index.jobNof].toString().toUpperCase() == "TRUE";
                             if(isNof){
                               masterTable.add([
                                 masterTable.length.toString(),
-                                _addList[j][Index.jobBarcode],
-                                _addList[j][Index.jobCategory],
-                                _addList[j][Index.jobDescript],
+                                _jobTable[index][Index.jobBarcode],
+                                _jobTable[index][Index.jobCategory],
+                                _jobTable[index][Index.jobDescript],
                                 "EACH",
-                                _addList[j][Index.jobPrice],
-                                _addList[j][Index.jobDate],
-                                _addList[j][Index.jobOrdercode]
+                                _jobTable[index][Index.jobPrice],
+                                _jobTable[index][Index.jobDate],
+                                _jobTable[index][Index.jobOrdercode]
                               ]);
                             }
                             else {
-                              masterTable[tableIndex][Index.masterBarcode] = _addList[j][Index.jobBarcode];
-                              masterTable[tableIndex][Index.masterOrdercode] = _addList[j][Index.jobCategory];
-                              masterTable[tableIndex][Index.masterDescript] = _addList[j][Index.jobDescript];
-                              masterTable[tableIndex][Index.masterPrice] = _addList[j][Index.jobPrice];
-                              masterTable[tableIndex][Index.masterOrdercode] = _addList[j][Index.jobOrdercode];
-                              masterTable[tableIndex][Index.masterDate] = _addList[j][Index.jobBarcode];
+                              masterTable[index][Index.masterBarcode] = _jobTable[index][Index.jobBarcode];
+                              masterTable[index][Index.masterOrdercode] = _jobTable[index][Index.jobCategory];
+                              masterTable[index][Index.masterDescript] = _jobTable[index][Index.jobDescript];
+                              masterTable[index][Index.masterPrice] = _jobTable[index][Index.jobPrice];
+                              masterTable[index][Index.masterOrdercode] = _jobTable[index][Index.jobOrdercode];
+                              masterTable[index][Index.masterDate] = _jobTable[index][Index.jobBarcode];
                             }
                           }
                         });
@@ -1070,8 +1053,8 @@ class _MasterTableView extends State<MasterTableView>{
   List<List<String>> _tempMasterTable = [];
   List<List<String>> _filterList = [];
   int barcodeIndex = 0;
-  List<String> barcodeList = [];
   int ordercodeIndex = 0;
+  List<String> barcodeList = [];
   List<String> ordercodeList = [];
 
   @override
@@ -1086,11 +1069,9 @@ class _MasterTableView extends State<MasterTableView>{
     for(int c = 0; c < _editCtrl.length; c++){
       _editCtrl[c].dispose();
     }
-
     _searchCtrl.dispose();
     super.dispose();
   }
-
 
   _sortList(){
     // sort by desciption text 0-9->a-z
@@ -1103,7 +1084,14 @@ class _MasterTableView extends State<MasterTableView>{
     }
   }
 
-  // Edit item OR add new item
+  Widget _headerPadding(String title, TextAlign l) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 10.0, bottom: 5),
+      child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue,)),
+    );
+  }
+
+  // Edit item or add new item
   _editDialog({required BuildContext context, List<String>? item, Color? color}) {
     bool newItem = false;
     List<String> editedItem = [];
@@ -1132,7 +1120,7 @@ class _MasterTableView extends State<MasterTableView>{
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: headerPadding(masterHeader[itemIndex], TextAlign.left),
+              child: _headerPadding(masterHeader[itemIndex], TextAlign.left),
             ),
             Align(
                 alignment: Alignment.centerLeft,
@@ -1160,7 +1148,7 @@ class _MasterTableView extends State<MasterTableView>{
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: headerPadding(masterHeader[Index.masterCategory], TextAlign.left),
+                child: _headerPadding(masterHeader[Index.masterCategory], TextAlign.left),
               ),
               ListTile(
                   trailing: PopupMenuButton(
@@ -1202,7 +1190,7 @@ class _MasterTableView extends State<MasterTableView>{
         children:[
           Align(
             alignment: Alignment.centerLeft,
-            child: headerPadding(masterHeader[itemIndex], TextAlign.left),
+            child: _headerPadding(masterHeader[itemIndex], TextAlign.left),
           ),
           Row(
             children: [
@@ -1449,40 +1437,34 @@ class _MasterTableView extends State<MasterTableView>{
               hintText: "Search ${masterHeader[_searchColumn].toLowerCase()}...",
               border: InputBorder.none,
             ),
-
             onChanged: (String value) {
               setState((){
                 _filterList = List.of(_tempMasterTable);
+
                 if(value.isEmpty){
-                    return;
+                  return;
                 }
-                else{
-                  String searchText = value.toUpperCase();
-                  bool found = false;
-                  List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
-                  for (int i = 0; i < searchWords.length; i++) {
-                    if (!found) {
-                      List<List<String>> first = _filterList.where((row) =>
-                          row[_searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                      if(first.isNotEmpty){
-                        _filterList = List.of(first);
-                        found = true;
-                      }
-                    }
-                    else {
-                      List<List<String>> refined =
-                      _filterList.where((row) =>
-                          row[_searchColumn].toString().split(' ').where((String s) => s.isNotEmpty).toList().contains(searchWords[i])).toList();
-                      if(refined.isNotEmpty){
-                        _filterList = List.of(refined);
-                      }
+
+                String searchText = value.toUpperCase();
+                bool found = false;
+                List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
+                List<List<String>> refined = [[]];
+
+                for (int i = 0; i < searchWords.length; i++) {
+                  if (!found){
+                    _filterList = _tempMasterTable.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                    found = _filterList.isNotEmpty;
+                  }
+                  else{
+                    refined = _filterList.where((row) => row[_searchColumn].contains(searchWords[i])).toList();
+                    if(refined.isNotEmpty){
+                      _filterList = List.of(refined);
                     }
                   }
-                  if(!found){
-                    _filterList = List.empty();
-                  }
                 }
-                //setTableState();
+                if(!found){
+                  _filterList = List.empty();
+                }
               });
             },
           ),
@@ -1569,6 +1551,7 @@ class _MasterTableView extends State<MasterTableView>{
     bool oldDate = (DateTime.now().year % 100) - (year % 100) > 0;
     double height = 50.0;
     double cellWidth = 75.0;
+    Color cellColor = _editedItems.contains(tableIndex) ? Colors.blue.shade100 : Colors.white24;
 
     cellFit(int index){
       return Expanded(
@@ -1576,7 +1559,7 @@ class _MasterTableView extends State<MasterTableView>{
         child: Container(
           height: height,
           decoration: BoxDecoration(
-            color: index == Index.masterDate && oldDate ? Colors.red[800] : Colors.white24,
+            color: index == Index.masterDate && oldDate ? Colors.red[800] : cellColor,
             borderRadius: BorderRadius.zero,
             border: Border.all(
               color: Colors.black,
@@ -1601,7 +1584,7 @@ class _MasterTableView extends State<MasterTableView>{
         height: height,
         width: cellWidth,
         decoration: BoxDecoration(
-          color: index == Index.masterDate && oldDate ? Colors.red[800] : Colors.white24,
+          color: index == Index.masterDate && oldDate ? Colors.red[800] : cellColor,
           borderRadius: BorderRadius.zero,
           border: Border.all(
             color: Colors.black,
@@ -1713,40 +1696,49 @@ class _MasterTableView extends State<MasterTableView>{
                   height: 5.0,
                 ),
                 _searchBar(width),
-                Row(
-                  children:[
-                    // ElevatedButton(
-                    //   onPressed: () async{
-                    //     setState((){});
-                    //   },
-                    //   child: const Text("Sort Table")
-                    // ),
-                    ElevatedButton(
-                      onPressed: () async{
-                        barcodeIndex = 0;
-                        barcodeList = [''];
-                        ordercodeIndex = 0;
-                        ordercodeList = [''];
-                        await _editDialog(context: context);
-                      },
-                      child: const Text("Add New Item")
-                    ),
-                    ElevatedButton(
-                      onPressed: () async {
-                        await confirmDialog(context, "Confirm changes to MASTERFILE? \n Edited item count: ${_editedItems.length}").then((value){
-                          if(value){
-                            setState((){
-                              _sortList();
-                              masterTable = List.of(_tempMasterTable);
-                              _editedItems = [];
-                            });
-                          }
-                        });
-                      },
-                      child: const Text("Update MASTERFILE")
-                    ),
-                  ]
-                )
+                Center(
+                  child: Row(
+                      children:[
+                        // ElevatedButton(
+                        //   onPressed: () async{
+                        //     setState((){});
+                        //   },
+                        //   child: const Text("Sort Table")
+                        // ),
+                        Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: ElevatedButton(
+                              onPressed: () async{
+                                barcodeIndex = 0;
+                                barcodeList = [''];
+                                ordercodeIndex = 0;
+                                ordercodeList = [''];
+                                await _editDialog(context: context);
+                              },
+                              child: const Text("Add New Item")
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: ElevatedButton(
+                              onPressed: () async {
+                                await confirmDialog(context, "Confirm changes to MASTERFILE? \n Edited item count: ${_editedItems.length}").then((value){
+                                  if(value){
+                                    setState((){
+                                      _sortList();
+                                      masterTable = List.of(_tempMasterTable);
+                                      _filterList = List.of(masterTable);
+                                      _editedItems = [];
+                                    });
+                                  }
+                                });
+                              },
+                              child: const Text("Update MASTERFILE")
+                          ),
+                        ),
+                      ]
+                  )
+                ),
               ],
             )
           ),
@@ -1767,7 +1759,7 @@ rBox({required double width, required Widget child}){
   );
 }
 
-showAlert({required BuildContext context, required Text text, Color? color}) {
+showAlert({required BuildContext context, required Text text, Color? color}){
   return showDialog(
       barrierDismissible: false,
       context: context,
@@ -1925,9 +1917,52 @@ Future<bool> confirmDialog(BuildContext context, String str) async {
   return confirmation;
 }
 
-Widget headerPadding(String title, TextAlign l) {
-  return Padding(
-    padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 10.0, bottom: 5),
-    child: Text(title, textAlign: l, style: const TextStyle(color: Colors.blue,)),
-  );
+Future<html.File?> pickFile(String type) async {
+  final completer = Completer<List<html.File>?>();
+  final input = html.FileUploadInputElement() as html.InputElement;
+  input.accept = '$type/*';
+
+  var changeEventTriggered = false;
+  void changeEventListener(html.Event e) {
+    if (changeEventTriggered) return;
+    changeEventTriggered = true;
+
+    final files = input.files!;
+    final resultFuture = files.map<Future<html.File>>((file) async {
+      final reader = html.FileReader();
+      reader.readAsDataUrl(file);
+      reader.onError.listen(completer.completeError);
+      return file;
+    });
+    Future.wait(resultFuture).then((results) => completer.complete(results));
+  }
+
+  void cancelledEventListener(html.Event e) {
+    html.window.removeEventListener('focus', cancelledEventListener);
+
+    // This listener is called before the input changed event,
+    // and the `uploadInput.files` value is still null
+    // Wait for results from js to dart
+    Future.delayed(const Duration(milliseconds: 500)).then((value) {
+      if (!changeEventTriggered) {
+        changeEventTriggered = true;
+        completer.complete(null);
+      }
+    });
+  }
+
+  input.onChange.listen(changeEventListener);
+  input.addEventListener('change', changeEventListener);
+
+  // Listen focus event for cancelled
+  html.window.addEventListener('focus', cancelledEventListener);
+
+  input.click();
+
+  final results = await completer.future;
+  if(results == null || results.isEmpty){
+    return null;
+  }
+
+  return results.first;
 }
