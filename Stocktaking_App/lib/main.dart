@@ -1,6 +1,5 @@
 /*
 LEGAL:
-   This was programmed by Callum Jack Buchanan.
    Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
 
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
