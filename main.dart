@@ -1,7 +1,7 @@
 /*
 LEGAL:
    Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
-   
+
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
@@ -11,7 +11,7 @@ BUILD NAMING CONVENTIONS:
    version.year.month+build
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.10 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.11 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -27,8 +27,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:decimal/decimal.dart';
 
-const String versionStr = "0.23.10+1";
-Permission storageType = Permission.manageExternalStorage; // Permission.storage;
+const String versionStr = "0.23.11+1";
+Permission storageType = Permission.manageExternalStorage; //Permission.storage;
 List<String> jobPageList = [];
 Map<String, dynamic> sFile = {};
 Directory? rootDir;
@@ -52,9 +52,9 @@ final Color colorOk = Colors.blue.shade400;
 final Color colorWarning = Colors.deepPurple.shade200;
 const Color colorEdit = Colors.blueGrey;
 const Color colorBack = Colors.redAccent;
-TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["fontScale"]);}
-TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["fontScale"]);}
-TextStyle get blackText{ return TextStyle(color: Colors.black, fontSize: sFile["fontScale"]);}
+TextStyle get whiteText{ return TextStyle(color: Colors.white, fontSize: sFile["font_scale"]);}
+TextStyle get greyText{ return TextStyle(color: Colors.grey, fontSize: sFile["font_scale"]);}
+TextStyle get blackText{ return TextStyle(color: Colors.black, fontSize: sFile["font_scale"]);}
 
 class Index{
   static const int index = 0;
@@ -235,18 +235,18 @@ class _AppSettings extends State<AppSettings> {
                             padding: const EdgeInsets.only(left: 15.0, right: 15.0, top: 0, bottom: 5),
                             child: Card(
                                 child: ListTile(
-                                  title: Text(sFile["fontScale"].toString(), textAlign: TextAlign.center),
+                                  title: Text(sFile["font_scale"].toString(), textAlign: TextAlign.center),
                                   leading: IconButton(
                                     icon: const Icon(Icons.remove_circle_outline),
                                     onPressed: () {
-                                      sFile["fontScale"] -= sFile["fontScale"] - 1 > 8 ? 1 : 0;
+                                      sFile["font_scale"] -= sFile["font_scale"] - 1 > 8 ? 1 : 0;
                                       setState(() {});
                                     },
                                   ),
                                   trailing: IconButton(
                                     icon: const Icon(Icons.add_circle_outline),
                                     onPressed: () {
-                                      sFile["fontScale"] += sFile["fontScale"] + 1 < 30 ? 1 : 0;
+                                      sFile["font_scale"] += sFile["font_scale"] + 1 < 30 ? 1 : 0;
                                       setState(() {});
                                     },
                                   ),
@@ -270,6 +270,7 @@ class _AppSettings extends State<AppSettings> {
                                 onChanged: ((value){
                                   setState((){
                                     searchType = value as SearchType;
+                                    sFile["search_type"] = searchType.index;
                                   });
                                 })
                               )
@@ -294,10 +295,10 @@ class _AppSettings extends State<AppSettings> {
                                     // change storage then check if valid, if not valid tell user
                                     storageType = pValue as Permission;
                                     if(storageType == Permission.manageExternalStorage){
-                                      sFile["permission"] = "${Permission.manageExternalStorage}";
+                                      sFile["permission"] = 0;
                                     }
                                     else if(storageType == Permission.storage){
-                                      sFile["permission"] = "${Permission.storage}";
+                                      sFile["permission"] = 1;
                                     }
 
                                     // Inform the user storage can be accessed
@@ -1502,9 +1503,10 @@ class _TableView extends State<TableView> {
       }
       else if(searchType == SearchType.full){
         List<List<dynamic>> full = widget.action == Action.edit ?
-          searchList.where((row) => job.table[int.parse(row[Index.index])][column].toString().contains(searchText)).toList() :
-          searchList.where((row) => row[column].toString().contains(searchText)).toList();
+          searchList.where((row) => job.table[int.parse(row[Index.index])][column].contains(searchText)).toList() :
+          searchList.where((row) => row[column].contains(searchText)).toList();
         if(full.isNotEmpty){
+          found = true;
           searchList = List.of(full);
         }
       }
@@ -1937,6 +1939,9 @@ class _TableView extends State<TableView> {
                 ]);
 
                 job.calcTotal();
+                String shortDescript = descriptCtrl.text;//searchList.first[Index.description];
+                shortDescript.substring(0, min(shortDescript.length, 14));
+                showNotification(context, colorWarning, whiteText, "Added $shortDescript --> $addCount");
               }
             }
             else{
@@ -3193,7 +3198,7 @@ setLocation(BuildContext context1) {
                               ),
                               Card(
                                 child: ListTile(
-                                  title: Text("+ Add New Location..", style: TextStyle(color: Colors.green, fontSize: sFile["fontScale"]), textAlign: TextAlign.justify),
+                                  title: Text("+ Add New Location..", style: TextStyle(color: Colors.green, fontSize: sFile["font_scale"]), textAlign: TextAlign.justify),
                                   onTap: () async {
                                     await textEditDialog(context, "New Location", "").then((value) async {
                                       if(value.isNotEmpty && !job.allLocations.contains(value)){
@@ -3334,8 +3339,9 @@ loadSessionFile() async {
     // Create new session file
     sFile = {
       "uid" : "",
-      "fontScale" : 16.0,
-      "permission" : "${Permission.manageExternalStorage}",
+      "font_scale" : 16.0,
+      "permission" : storageType == Permission.manageExternalStorage ? 0 : 1,
+      "search_type" : searchType.index,
     };
 
     storageType = Permission.manageExternalStorage;
@@ -3348,19 +3354,25 @@ loadSessionFile() async {
       var jsn = json.decode(fileContent);
       sFile = {
         "uid" : "", //(jsn['uid'] == null || jsn["uid"].isEmpty || jsn) ? "USER1" : jsn['uid'].toString(),
-        "fontScale" : jsn["fontScale"] == null ? 16.0 : jsn['fontScale'] as double,
-        "permission" : jsn["permission"] == null ? "Permission.manageExternalStorage" : jsn['permission'].toString(),
+        "font_scale" : jsn["font_scale"] == null ? 16.0 : jsn['font_scale'] as double,
+        "permission" : jsn["permission"] == null ? 0 : int.tryParse(jsn['permission']) ?? 0,
+        "search_type" : jsn["search_type"] == null ? 0 : int.tryParse(jsn['search_type']) ?? 0,
       };
 
-      // Set storage permissions
-      if(sFile["permission"] == "Permission.manageExternalStorage"){
-        storageType = Permission.manageExternalStorage;
-      }
-      else if(sFile["permission"] == "Permission.storage"){
-        storageType = Permission.storage;
+      // Set search_type
+      if(sFile["search_type"] == 0){
+        searchType = SearchType.first;
       }
       else{
+        searchType = SearchType.full;
+      }
+
+      // Set permissions
+      if(sFile["permission"] == 0){
         storageType = Permission.manageExternalStorage;
+      }
+      else { //if(sFile["permission"] == 1){
+        storageType = Permission.storage;
       }
     }
     catch(e){
@@ -3374,8 +3386,9 @@ writeSession() async {
   errorString = "";
   Map<String, dynamic> jMap = {
     "uid" : sFile["uid"],
-    'fontScale' : sFile["fontScale"],
+    'font_scale' : sFile["font_scale"],
     'permission' : sFile["permission"],
+    'search_type' : sFile["search_type"]
   };
 
   try{
