@@ -1,5 +1,7 @@
 /*
 LEGAL:
+   Any derivatives of this work must include or mention my name in the final build as part of the copyright agreement below.
+   
    This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
    To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
@@ -9,7 +11,7 @@ BUILD NAMING CONVENTIONS:
    version.year.month+build
 
 BUILD CMD:
-    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.09 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
+    flutter build apk --no-pub --target-platform android-arm64,android-arm --split-per-abi --build-name=0.23.10 --build-number=1 --obfuscate --split-debug-info build/app/outputs/symbols
 */
 
 import 'dart:async';
@@ -18,14 +20,14 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' as Excel;
 import 'package:path_provider/path_provider.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:decimal/decimal.dart';
 
-const String versionStr = "0.23.09+1";
+const String versionStr = "0.23.10+1";
 Permission storageType = Permission.manageExternalStorage; // Permission.storage;
 List<String> jobPageList = [];
 Map<String, dynamic> sFile = {};
@@ -1035,6 +1037,8 @@ class _TableView extends State<TableView> {
   int ordercodeIndex = 0;
   int addBarcodeIndex = 0;
   int addOrdercodeIndex = 0;
+  static const double DELETE = -2;
+  static const double CANCEL = -1;
 
   @override
   void initState() {
@@ -1176,6 +1180,8 @@ class _TableView extends State<TableView> {
               ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: colorBack),
                   onPressed: () {
+                    //confirmed = false;
+
                     //Unfocus then dispose
                     FocusScopeNode currentFocus = FocusScope.of(context);
                     if (!currentFocus.hasPrimaryFocus) {
@@ -1216,7 +1222,7 @@ class _TableView extends State<TableView> {
       }
     );
 
-    return confirmed ? addCount : (delete ? -2 : -1);
+    return confirmed ? addCount : (delete ? DELETE : CANCEL);
   }
 
   Future<double> _assignConfirm(BuildContext context, String descript, int index) async {
@@ -1307,7 +1313,7 @@ class _TableView extends State<TableView> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: colorBack),
                 onPressed: () {
-                  addCount = -1;
+                  addCount = CANCEL;
                   //Unfocus then dispose
                   FocusScopeNode currentFocus = FocusScope.of(context);
                   if (!currentFocus.hasPrimaryFocus) {
@@ -1321,9 +1327,11 @@ class _TableView extends State<TableView> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: colorOk),
                 onPressed: () async {
+                  // Make sure negatives cannot be added
                   if(addCount < 0){
                     addCount = 0;
                   }
+
                   //Unfocus then dispose
                   FocusScopeNode currentFocus = FocusScope.of(context);
                   if (!currentFocus.hasPrimaryFocus) {
@@ -1407,7 +1415,7 @@ class _TableView extends State<TableView> {
 
   void _setNOFText({String? barcode, String? ordercode, String? description}){
     categoryValue = lastCategory;
-    countCtrl.text = "0.0";
+    countCtrl.text = "1.0";
     descriptCtrl.text = description ?? "";
     priceCtrl.text = "0.0";
     barcodeIndex = 0;
@@ -1500,7 +1508,7 @@ class _TableView extends State<TableView> {
           searchList = List.of(full);
         }
       }
-      
+
       if(!found){
         searchList = List.empty();
       }
@@ -1528,7 +1536,7 @@ class _TableView extends State<TableView> {
             if(searchList.length == 1){
               double price = double.parse(searchList[0][Index.price]);
               await _counterConfirm(context, searchList[0][Index.description], price, 1, false).then((double count) async{
-                if(count != -1){
+                if(count != CANCEL && count != DELETE){
                   Decimal addCount = Decimal.parse(count.toStringAsFixed(3));
                   job.stocktake.add(<String>[
                     searchList.first[Index.index],
@@ -1654,7 +1662,7 @@ class _TableView extends State<TableView> {
     return GestureDetector(
       onTap: () async {
         await _assignConfirm(context, "Assign $copyCode to ${searchList[index][Index.description]}?", index).then((value) async {
-          if(value > -1) {
+          if(value > CANCEL) {
             int tableIndex = int.parse(searchList[index][Index.index]);
             // Make sure we add barcode/ordercode to the correct column
             String s = job.table[tableIndex][assignColumn];
@@ -1765,7 +1773,7 @@ class _TableView extends State<TableView> {
             double c = double.parse(searchList[index][Index.stockCount]);
             double price = double.parse(job.table[tableIndex][Index.price]);
             await _counterConfirm(context, job.table[tableIndex][Index.description], price, c, true).then((double newCount) async {
-              if (newCount == -2){
+              if (newCount == DELETE){
                 job.stocktake.removeAt(index);
                 if(copyIndex == index){
                   copyIndex = -1;
@@ -1775,7 +1783,7 @@ class _TableView extends State<TableView> {
                 searchList.removeAt(index);
                 setState(() {});
               }
-              else if (newCount > -1 && newCount != c){
+              else if (newCount > CANCEL && newCount != c){
                 String decimalCount = Decimal.parse(newCount.toStringAsFixed(3)).toString();
                 job.stocktake[index][Index.stockCount] = decimalCount;
                 job.calcTotal();
@@ -2521,6 +2529,79 @@ class ExportPage extends StatelessWidget{
     return todayDate;
   }
 
+  _exportMasterfile() async {
+    // setState((){
+    //   _loadingMsg = "Creating XLSX document...";
+    // });
+    //await Future.delayed(const Duration(milliseconds:500));
+
+    var exportExcel = Excel.Excel.createExcel();
+    var sheetObject = exportExcel['Sheet1'];
+    sheetObject.isRTL = false;
+
+    // setState((){
+    //   _loadingMsg = "Creating table header...";
+    // });
+    //await Future.delayed(const Duration(milliseconds:500));
+
+    // Add header row
+    sheetObject.insertRowIterables(["Poduct ID", "Barcode (multi) #", "Category", "Description", 'UOM', "Price", "Datetime", "Ordercode"], 0,);
+
+    // setState((){
+    //   _loadingMsg = "Creating table rows...";
+    // });
+    // await Future.delayed(const Duration(milliseconds:500));
+
+    for(int i = 0; i < job.table.length; i++){
+      sheetObject.insertRowIterables(
+          <String> [
+            job.table[i][0],
+            job.table[i][1],
+            job.table[i][2],
+            job.table[i][3],
+            job.table[i][4],
+            job.table[i][5],
+            job.table[i][6],
+            job.table[i][7]
+          ],
+          i+1
+      );
+      String dateFormat = _getDateString(job.table[i][6]);
+      int yearThen = int.parse(dateFormat.split("/").last);
+
+      // Get last two year digits using modulus
+      int diff = (DateTime.now().year % 100) - (yearThen % 100);
+
+      // Color code cell if date is older than 1 year
+      if(diff > 0){
+        Excel.CellIndex cellIndex = Excel.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: i+1);
+        sheetObject.cell(cellIndex).cellStyle = Excel.CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: Excel.getFontFamily(Excel.FontFamily.Arial));
+      }
+    }
+
+    // setState((){
+    //   _loadingMsg = "Setting column widths...";
+    // });
+    // await Future.delayed(const Duration(milliseconds:500));
+
+    // Set column widths
+    sheetObject.setColWidth(0, 15.0); // INDEX
+    sheetObject.setColWidth(1, 25.0); // Barcode
+    sheetObject.setColWidth(2, 25.0); // Category
+    sheetObject.setColWidth(3, 75.0); // Description
+    sheetObject.setColWidth(4, 15.0); // UOM
+    sheetObject.setColWidth(5, 25.0); // Price
+    sheetObject.setColWidth(6, 25.0); // Datetime
+    sheetObject.setColWidth(7, 15.0); // Ordercode
+
+    String filename = "MASTERFILE_${DateTime.now().month}_${DateTime.now().year}.xlsx";
+
+    String filePath = "/storage/emulated/0/Documents/${job.id}/$filename";
+
+    var fileBytes = exportExcel.save();
+    File(filePath)..createSync(recursive: true)..writeAsBytesSync(fileBytes!);
+  }
+
   _exportXLSX() async {
     List<List<dynamic>> finalSheet = [];
 
@@ -2575,7 +2656,7 @@ class ExportPage extends StatelessWidget{
       }
     }
 
-    var excel = Excel.createExcel();
+    var excel = Excel.Excel.createExcel();
     var sheetObject = excel['Sheet1'];
     sheetObject.isRTL = false;
 
@@ -2588,8 +2669,8 @@ class ExportPage extends StatelessWidget{
       int diff = (DateTime.now().year % 100) - (yearThen % 100);
       // Color code cell if date is older than 1 year
       if(diff > 0){
-        var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
-        cell.cellStyle = CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: getFontFamily(FontFamily.Arial));
+        var cell = sheetObject.cell(Excel.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i+1));
+        cell.cellStyle = Excel.CellStyle(backgroundColorHex: '#FF8980', fontSize: 10, fontFamily: Excel.getFontFamily(Excel.FontFamily.Arial));
       }
     }
 
@@ -2857,6 +2938,18 @@ class ExportPage extends StatelessWidget{
                                   String shortYear = DateTime.now().year.toString().substring(2);
                                   String dateOutput = "${DateTime.now().day}$shortMonth$shortYear";
                                   showAlert(context, "Job Data Exported!", "../Documents/${job.id}/ORDERCODEQTY_${job.id}_$dateOutput.txt\n", Colors.orange);
+                                },
+                              )
+                          ),
+                          const SizedBox(height: 10.0),
+                          rBox(
+                              context,
+                              colorOk,
+                              TextButton(
+                                child: Text('Export Job Table', style: whiteText),
+                                onPressed: () {
+                                  _exportMasterfile();
+                                  showAlert(context, "Job Table Exported!", "../Documents/${job.id}/MASTERFILE_${DateTime.now().month}_${DateTime.now().year}.xlsx\n", Colors.orange);
                                 },
                               )
                           ),
