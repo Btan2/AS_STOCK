@@ -132,8 +132,8 @@ class _LoginPage extends State<LoginPage>{
                   });
 
                   var body = json.encode({
-                    "email": "big2@chungusmail.com",
-                    "password": "pass2"
+                    "email": "*******",
+                    "password": "********"
                   });
 
                   Map<String, String> headers = {
@@ -147,7 +147,7 @@ class _LoginPage extends State<LoginPage>{
                       if(r["status"] == 200){
 
                         setState((){
-                          user = "big2@chungusmail.com";
+                          user = "********";
                           //user = username;
                         });
 
