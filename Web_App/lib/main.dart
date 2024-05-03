@@ -10,14 +10,16 @@ import 'item.dart';
 import 'table.dart';
 
 /*
-      REQUIRES THIS RUN COMMAND FOR NOW, LOOK UP AND CHANGE WHEN ONLINE SERVER IS ESTABLISHED
+      RUN COMMAND:
+        flutter run -d chrome --web-renderer html
         flutter run -d chrome --web-browser-flag "--disable-web-security"
+
+      LOOK UP AND CHANGE WHEN ONLINE SERVER IS ESTABLISHED
  */
 
-const String versionStr = "0.24.04+1";
-// If you are using an Android emulator then localhost is -> https://10.0.2.2:8000,
-// otherwise localhost is -> https://127.0.0.1:8000
+// If you are using an Android emulator then localhost is -> https://10.0.2.2:8000 otherwise localhost is -> https://127.0.0.1:8000
 const String localhost = "https://127.0.0.1:8000";
+const String versionStr = "0.24.04+1";
 
 TextStyle get whiteText{ return const TextStyle(color: Colors.white, fontSize: 20.0);}
 TextStyle get blackText{ return const TextStyle(color: Colors.black, fontSize: 20.0);}
@@ -30,8 +32,8 @@ enum Action {main, import}
 
 List<Item> MASTERFILE = [];
 String user = "";
-bool masterfileChanged = false;
 bool firstLoad = false;
+bool masterfileChanged = false;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -146,8 +148,8 @@ class _LoginPage extends State<LoginPage>{
                   });
 
                   var body = json.encode({
-                    "email": "",
-                    "password": ""
+                    "email": username.isNotEmpty ? username : "****",
+                    "password": pass.isNotEmpty ? pass : "*****",
                   });
 
                   Map<String, String> headers = {
@@ -161,8 +163,7 @@ class _LoginPage extends State<LoginPage>{
                       if(r["status"] == 200){
 
                         setState((){
-                          user = "big2@chungusmail.com";
-                          //user = username;
+                          user = "*****";
                         });
 
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const MainPage()));
@@ -180,7 +181,6 @@ class _LoginPage extends State<LoginPage>{
                     _isLoading = false;
                   });
                 },
-
                 child: _isLoading ? const Padding(
                     padding: EdgeInsets.all(5.0),
                     child: CircularProgressIndicator(),
@@ -220,6 +220,11 @@ class _MainPage extends State<MainPage>{
     }
   }
 
+  @override
+  void dispose(){
+    super.dispose();
+  }
+
   Future<void> _getMasterfile() async{
     setState((){
       _isLoading = true;
@@ -236,11 +241,6 @@ class _MainPage extends State<MainPage>{
         _loadingMsg = "...";
       });
     });
-  }
-
-  @override
-  void dispose(){
-    super.dispose();
   }
 
   _postUpdateAll() async{
@@ -394,7 +394,7 @@ class _MainPage extends State<MainPage>{
                     child: const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children:[
-                        Icon(Icons.download),
+                        Icon(Icons.table_rows_outlined),
                         Text("Database", textAlign: TextAlign.center)
                       ]
                     )
@@ -432,7 +432,7 @@ class _MainPage extends State<MainPage>{
                   padding: const EdgeInsets.all(menuPadding),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent[200], // Background color
+                      backgroundColor: Colors.red[300], // Background color
                     ),
                     onPressed:() async{
                       _logout();
@@ -462,7 +462,7 @@ class TablePage extends StatefulWidget{
 }
 class _TablePage extends State<TablePage>{
   Action action = Action.main;
-  int _searchColumn = 3;
+  int _searchColumn = 2;
   bool _selectAll = false;
   bool _isLoading = false;
   String _loadingMsg = "...";
@@ -482,7 +482,8 @@ class _TablePage extends State<TablePage>{
     super.initState();
     _mainTable = ItemTable.fromList(MASTERFILE);
     _filterList = List.of(MASTERFILE);
-    _importTable = ItemTable.fromList([]);
+
+    _importTable = ItemTable.fromList(List.empty());
   }
 
   @override
@@ -556,14 +557,16 @@ class _TablePage extends State<TablePage>{
       });
       await Future.delayed(const Duration(milliseconds:500));
 
-      List<Item> import = List.empty(growable:true);
-
       // give header row id -1 then remove, kinda hacky
-      import = List.generate(table.rows.length, (index) => Item.fromImport(table.rows[index], index-1));
+      List<Item> import = List.generate(table.rows.length, (index) => Item.fromImport(table.rows[index], index-1));
       import.removeAt(0);
 
       setState((){
         _importTable = ItemTable.fromList(import);
+        _importTable.sortItems();
+
+        print(_importTable.items.length);
+
         _filterList = List.of(_importTable.items);
       });
     }
@@ -572,23 +575,26 @@ class _TablePage extends State<TablePage>{
     }
   }
 
-  bool _isDuplicate(int i){
+  bool _isDuplicate(int index){
     // Get list of items that share same description as index i
     // only check first word/letter to make search faster
     // FIX ME?
-    String check = _mainTable.items[i].description.split(" ").first;
-    var searchList = _mainTable.items.where((row) => row.description.split(" ").first == check && row.id != i).toList();
+    String check = _mainTable.items[index].description.split(" ").first;
+    var searchList = _mainTable.items.where((row) => row.description.split(" ").first == check && row.id != index).toList();
     for(Item item in searchList){
-      if(item.description == _mainTable.items[i].description){
+      if(item.description == _mainTable.items[index].description){
         return true;
       }
     }
+
     return false;
   }
 
-  _importToMain(){
+  _importToMaintable(){
+    bool added = _checkList.isNotEmpty;
     _checkList.sort((x, y) => (x).compareTo(y));
     while(_checkList.isNotEmpty){
+      // Remove
       int index = _checkList.last;
       setState((){
         _mainTable.addItem(
@@ -603,11 +609,13 @@ class _TablePage extends State<TablePage>{
             ordercode: _importTable.items[index].ordercode
           )
         );
-
-        _mainTable.sortTable();
         _checkList.removeLast();
         _importTable.removeItem(index);
       });
+    }
+
+    if(added){
+      _mainTable.sortItems();
     }
   }
 
@@ -646,100 +654,115 @@ class _TablePage extends State<TablePage>{
     );
   }
 
-  List<Widget> _footer(){
-    return action == Action.main ?
-    <Widget>[
-      //
-      // Main Table Actions
-      //
-      Padding(
-        padding: const EdgeInsets.all(10.0),
-        child: ElevatedButton(
-            onPressed: () async{
-              await _editDialog(context: context);
-            },
-            child: const Text("Add New Item")
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.all(10.0),
-        child: ElevatedButton(
-            onPressed: () async {
-              await confirmDialog(context, "Save changes to MASTERFILE? \n Edited items: ${_editedItems.length}").then((value){
-                if(value){
-                  setState((){
-                    _mainTable.sortTable();
-                    _filterList = List.of(_mainTable.items);
-                    _editedItems = [];
-                    masterfileChanged = true;
+  Widget _footer(){
+    return Row(
+        children: action == Action.main ?
+        <Widget>[
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: ElevatedButton(
+                onPressed: () async{
+                  await _editDialog(context: context);
+                },
+                child: const Text("Add New Item")
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: ElevatedButton(
+                onPressed: () async {
+                  await confirmDialog(context, "Save changes to MASTERFILE? \n Edited items: ${_editedItems.length}").then((value){
+                    if(value){
+                      setState((){
+                        _mainTable.sortItems();
+                        _filterList = List.of(_mainTable.items);
+                        _editedItems = [];
+                        masterfileChanged = true;
+                      });
+                    }
                   });
-                }
-              });
-            },
-            child: const Text("Save Changes")
-        ),
-      ),
-    ] : <Widget>[
-      //
-      // Import Table Actions
-      //
-      Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ElevatedButton(
-          onPressed: (){
-            setState((){
-              _filterList = _filterList.length != _importTable.items.length ?
-              List.of(_importTable.items) : _importTable.items.where((row) => row.nof.toString().toUpperCase() == "TRUE").toList();
-            });
-          },
-          child: _filterList.length == _importTable.items.length ? const Text("Show NOF List") : const Text("Show Full List"),
-        ),
-      ),
-      _checkList.isNotEmpty ? Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ElevatedButton(
-            onPressed: () async {
-              await confirmDialog(context, "Add selected items to Main table?\nAdd count: ${_checkList.length}\n").then((value){
-                if(value){
-                  _importToMain();
-                }
-              });
-            },
-            child: const Text("Import ticked items")
-        ),
-      ) : Container(),
-      _importTable.items.isNotEmpty ? Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ElevatedButton(
-            onPressed: () async {
-              await confirmDialog(context, "Clear Import table?").then((value){
+                },
+                child: const Text("Save Changes")
+            ),
+          ),
+        ] : <Widget>[
+          //
+          // Import Table Actions
+          //
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton(
+              onPressed: (){
                 setState((){
-                  _importTable.items = [];
-                  _filterList = [];
+                  _filterList = _filterList.length != _importTable.items.length ?
+                  List.of(_importTable.items) : _importTable.items.where((row) => row.nof.toString().toUpperCase() == "TRUE").toList();
                 });
-              });
-            },
-            child: const Text("Clear Table")
-        ),
-      ) : Container(),
-    ];
+              },
+              child: _filterList.length == _importTable.items.length ? const Text("Show NOF List") : const Text("Show Full List"),
+            ),
+          ),
+          _checkList.isNotEmpty ? Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton(
+                onPressed: () async {
+                  await confirmDialog(context, "Add selected items to Main table?\nAdd count: ${_checkList.length}\n").then((value){
+                    if(value){
+                      _importToMaintable();
+                    }
+                  });
+                },
+                child: const Text("Import ticked items")
+            ),
+          ) : Container(),
+          _importTable.items.isNotEmpty ? Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton(
+                onPressed: () async {
+                  await confirmDialog(context, "Clear Import table?").then((value){
+                    setState((){
+                      _importTable.items = [];
+                      _filterList = [];
+                    });
+                  });
+                },
+                child: const Text("Clear Table")
+            ),
+          ) : Container(),
+        ]
+    );
   }
 
-  _header(){
-    List<Widget> row = _mainTable.header();
-    return action == Action.main ? Container(
-        height: 35,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.black.withOpacity(0.5),
-            style: BorderStyle.solid,
-            width: 1.0,
-          ),
-        ),
-        child: Row(
-            children: row.getRange(0, row.length-1).toList()
-        )
-    ) : Container(
+  Color _cellColor(int index){
+    return _editedItems.contains(index) ? Colors.blue.shade100 :
+    _isDuplicate(index) ? Colors.amber.shade100 :
+    Colors.white24;
+    //outOfDate(_filterList[index].date) ? Colors.redAccent :
+  }
+
+  _rowImport(int index){
+    Color cellColor = _cellColor(index);
+    const int rowLength = 9;
+    int id = _filterList[index].id;
+    return Row(
+        children: <Widget>[
+          SizedBox(
+              height: 35.0,
+              width: 75.0,
+              child: Checkbox(
+                  value: _checkList.contains(id),
+                  onChanged: (value){
+                    setState((){
+                      _checkList.contains(id) ? _checkList.remove(id) : _checkList.add(id);
+                    });
+                  }
+              )
+          )
+        ] + row(_filterList[index], cellColor: cellColor).getRange(1, rowLength).toList()
+    );
+  }
+
+  _headerImport(){
+    return Container(
         height: 35,//MediaQuery.of(context).size.height/12.0,
         decoration: BoxDecoration(
           border: Border.all(
@@ -767,49 +790,56 @@ class _TablePage extends State<TablePage>{
                         });
                       }
                   )
-              )
-            ] + row.getRange(1, row.length).toList()
+              ),
+              cell("BARCODE", 150),
+              cell("CATEGORY", 150),
+              cell("DESCRIPTION", 400),
+              cell("UOM", 75),
+              cell("PRICE", 75),
+              cellFit("DATE"),
+              cellFit("ORDERCODE"),
+              cell("NOF", 75),
+            ]
         )
     );
   }
 
-  _row(int index, {bool? import}){
-    Color cellColor = _editedItems.contains(index) ? Colors.blue.shade100 : _isDuplicate(index) ? Colors.green.shade100 : Colors.white24;
-    List<Widget> row = !(import ?? false) ? _mainTable.row(index, cellColor: cellColor) : _importTable.row(index, cellColor: cellColor);
+  _tableImport(double height, double width){
+    // Loading screen
+    if(_isLoading){
+      return Container(
+          height: height,
+          padding: EdgeInsets.zero,
+          child: Column(
+              children:[
+                SizedBox(height: height/3),
+                Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
+                const Center(child: CircularProgressIndicator())
+              ]
+          )
+      );
+    }
 
-    return (import ?? false) ?
-      Row(
-        children: <Widget>[
-          SizedBox(
-              height: 35.0,
-              width: 75.0,
-              child: Checkbox(
-                  value: _checkList.contains(index),
-                  onChanged: (value){
-                    setState((){
-                      _checkList.contains(index) ? _checkList.remove(index) : _checkList.add(index);
-                    });
-                  }
+    // Empty table
+    if(_importTable.items.isEmpty){
+      return Container(
+          height: height,
+          padding: EdgeInsets.zero,
+          child:Center(
+              child: ElevatedButton(
+                  onPressed: () async{
+                    _pickImportFile();
+                  },
+                  //style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[300]),
+                  child: const Text("Import Job export (.xlsx)")
               )
           )
-        ] + row.getRange(1, row.length).toList()
-      ) :
-      TapRegion(
-        onTapInside: (value) async{
-          await _editDialog(context: context, item: !(import ?? false) ? _mainTable.items[index] : _importTable.items[index]);
-        },
-        child: Row(children: row.getRange(0, row.length-1).toList())
       );
-  }
+    }
 
-  _table({required double height, required double width}){
-    final double insetX = MediaQuery.of(context).size.width / 3;
-    final double insetY = MediaQuery.of(context).size.height / 3.8;
-
-    if(action == Action.main){
-      return Container(
+    // Normal table
+    return Container(
         padding: EdgeInsets.zero,
-        // width: width,
         height: height,
         decoration: BoxDecoration(
           border: Border.all(
@@ -818,46 +848,75 @@ class _TablePage extends State<TablePage>{
             width: 1.0,
           ),
         ),
-        child: _mainTable.items.isNotEmpty ? ListView.builder(
+        child: _filterList.isNotEmpty ? ListView.builder(
           padding: EdgeInsets.zero,
           shrinkWrap: true,
-          itemCount: _mainTable.items.length,
-          prototypeItem: _row(_mainTable.items.first.id),
+          itemCount: _filterList.length,
+          prototypeItem: _rowImport(0),
           itemBuilder: (context, index) {
-            return _row(index);
+            return _rowImport(index); //_filterList[index].id)
           },
         ) : const Center(child: Text("EMPTY", textAlign: TextAlign.center))
-      );
-    }
+    );
+  }
 
-    return _isLoading ? Padding(
-      padding: const EdgeInsets.all(5.0),
-      child: Column(
-        children: [
-          SizedBox(height: MediaQuery.of(context).size.height/3),
-          Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
-          const Padding(
-            padding: EdgeInsets.all(20.0),
-            child: CircularProgressIndicator(),
-          )
-        ]
-      )
-    ) : _importTable.items.isEmpty ? Padding(
-      padding: EdgeInsets.only(top: insetY, bottom: insetY, left: insetX, right: insetX),
-      child: ElevatedButton(
-        onPressed: () async{
-          _pickImportFile();
+  _rowMain(int index){
+    Color cellColor = _cellColor(index);
+    const int rowLength = 9;
+    return TapRegion(
+        onTapInside: (value) async{
+          await _editDialog(context: context, item: _filterList[index]);
         },
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[300]),
-        child: Text("Import Job File..", style: blackText, textAlign: TextAlign.center)
-      )
-    ) : ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: _filterList.length,
-      prototypeItem: _row(_filterList.first.id, import: true),
-      itemBuilder: (context, index) {
-        return _row(index, import: true);
-      },
+        child: Row(children: row(_filterList[index], cellColor: cellColor).getRange(0, rowLength-1).toList())
+    );
+  }
+
+  _headerMain(){
+    return Container(
+        height: 35,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.black.withOpacity(0.5),
+            style: BorderStyle.solid,
+            width: 1.0,
+          ),
+        ),
+        child: Row(
+            children: [
+              cell("ID", 75),
+              cell("BARCODE", 150),
+              cell("CATEGORY", 150),
+              cell("DESCRIPTION", 400),
+              cell("UOM", 75),
+              cell("PRICE", 75),
+              cellFit("DATE"),
+              cellFit("ORDERCODE"),
+            ]
+        )
+    );
+  }
+
+  _tableMain(double height, double width){
+    // Normal table
+    return Container(
+        padding: EdgeInsets.zero,
+        height: height,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.black.withOpacity(0.5),
+            style: BorderStyle.solid,
+            width: 1.0,
+          ),
+        ),
+        child: _filterList.isNotEmpty ? ListView.builder(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          itemCount: _filterList.length,
+          prototypeItem: _rowMain(0),
+          itemBuilder: (context, index) {
+            return _rowMain(index); //_filterList[index].id)
+          },
+        ) : const Center(child: Text("EMPTY", textAlign: TextAlign.center))
     );
   }
 
@@ -894,12 +953,14 @@ class _TablePage extends State<TablePage>{
               },
               onSelected: (value) async {
                 setState((){
+                  List<int> indices = [1, 2, 3, 4, 5, 6, 7, 8];
                   if(action == Action.import){
-                    List<int> indices = [2, 3, 4, 6, 7, 9, 10];
+                    //List<int> indices = [2, 3, 4, 6, 7, 9, 10];
+                    //List<int> indices = [1, 2, 3, 4, 5, 6, 7, 8];
                     _searchColumn = indices[value];
                   }
                   else{
-                    _searchColumn = value;
+                    _searchColumn = value;//indices[value];
                   }
                 });
               }
@@ -914,7 +975,7 @@ class _TablePage extends State<TablePage>{
             ),
             onChanged: (String value) {
               setState((){
-                _filterList = List.of(_mainTable.items);
+                _filterList = action == Action.import ? List.of(_importTable.items) : List.of(_mainTable.items);
 
                 if(value.isEmpty){
                   return;
@@ -924,14 +985,15 @@ class _TablePage extends State<TablePage>{
                 bool found = false;
                 List<String> searchWords = searchText.split(" ").where((String s) => s.isNotEmpty).toList();
                 List<Item> refined = [];
+                //List<Item> searchList = _filterList;
 
                 for (int i = 0; i < searchWords.length; i++) {
                   if (!found){
-                    _filterList = _mainTable.items.where((row) => row.get(_searchColumn).contains(searchWords[i])).toList();
+                    _filterList = _filterList.where((row) => row.get(_searchColumn + 1).contains(searchWords[i])).toList();
                     found = _filterList.isNotEmpty;
                   }
                   else{
-                    refined = _filterList.where((row) => row.get(_searchColumn).contains(searchWords[i])).toList();
+                    refined = _filterList.where((row) => row.get(_searchColumn + 1).contains(searchWords[i])).toList();
                     if(refined.isNotEmpty){
                       _filterList = List.of(refined);
                     }
@@ -1149,8 +1211,9 @@ class _TablePage extends State<TablePage>{
                     if(value){
                       setState((){
                         _mainTable.removeItem(editedItem.id);
-                        _mainTable.sortTable();
+                        _mainTable.sortItems();
                         _filterList = List.of(_mainTable.items);
+                        _editedItems.add(-1); // Add false index for deleted items
                       });
 
                       Navigator.pop(context);
@@ -1164,7 +1227,7 @@ class _TablePage extends State<TablePage>{
                 onPressed: () {
                   if(newItem){
                     _mainTable.addItem(editedItem);
-                    _mainTable.sortTable();
+                    _mainTable.sortItems();
                   }
                   else{
                     // Replace existing item
@@ -1216,6 +1279,7 @@ class _TablePage extends State<TablePage>{
                     MASTERFILE = List.of(_mainTable.items);
                   });
                 }
+                //print(value);
                 Navigator.pop(context);
               });
             }
@@ -1229,10 +1293,11 @@ class _TablePage extends State<TablePage>{
             child: Column(
               children: <Widget>[
                 _tableSwitch(),
-                _header(),
-                _table(height: tableHeight, width: tableWidth),
+                action == Action.import ? _headerImport() : _headerMain(),
+                action == Action.import ? _tableImport(tableHeight, tableWidth) : _tableMain(tableHeight, tableWidth),
                 _searchBar(width: tableWidth),
-              ] + _footer()
+                _footer()
+              ]
             )
           ),
         )
@@ -1300,11 +1365,6 @@ class _DatabasePage extends State<DatabasePage>{
       // Remove header row
       MASTERFILE = List<Item>.generate(table.rows.length, (index) => Item.fromXLSX(table.rows[index], index-1));
       MASTERFILE.removeAt(0);
-
-      // masterTable = List.empty(growable:true);
-      // for(var row in table.rows) {
-      //   masterTable.add(Item.fromXLSX(row));
-      // }
 
       setState((){
         _loadingMsg = "...";
@@ -1420,7 +1480,7 @@ class _DatabasePage extends State<DatabasePage>{
     });
   }
 
-  _loadFromServer() async{
+  _getMasterfile() async{
     setState((){
       _isLoading = true;
       _loadingMsg = "Performing GET request...";
@@ -1484,118 +1544,118 @@ class _DatabasePage extends State<DatabasePage>{
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          centerTitle: true,
-          title: SvgPicture.asset("AS_logo_light.svg", height: 50),
-        ),
-        body: _isLoading ? SingleChildScrollView(
-          child: Center(
-            child: Column(
-              children: [
-                SizedBox(height: MediaQuery.of(context).size.height/3),
-                Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
-                const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: CircularProgressIndicator(),//SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
-                )
+      appBar: AppBar(
+        centerTitle: true,
+        title: SvgPicture.asset("AS_logo_light.svg", height: 50),
+      ),
+      body: _isLoading ? SingleChildScrollView(
+        child: Center(
+          child: Column(
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height/3),
+              Text(_loadingMsg, textAlign: TextAlign.center, style: blackText),
+              const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: CircularProgressIndicator(),//SvgPicture.asset("AS_logo_symbol.svg", height: 48.0),
+              )
+            ]
+          )
+        )
+      ) : CustomScrollView(
+        primary: false,
+        slivers: <Widget>[
+          SliverPadding(
+            padding: const EdgeInsets.all(20),
+            sliver: SliverGrid.count(
+              crossAxisSpacing: 5,
+              mainAxisSpacing: 5,
+              crossAxisCount: 4,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.all(menuPadding),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent[400]),
+                    onPressed:() async{
+                      int value = await confirmWithCancel(context, "Load MASTERFILE", button0: "Load from SERVER", button1: "Load from STORAGE");
+                      if(value == 0){
+                        setState((){
+                          _isLoading = true;
+                          _loadingMsg = "...";
+                        });
+                        await _getMasterfile();
+                      }
+                      else if(value == 1){
+                        setState((){
+                          _isLoading = true;
+                          _loadingMsg = "...";
+                        });
+                        await _loadFromStorage();
+                      }
+                    },
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children:[
+                        Icon(Icons.swap_horiz),
+                        Text("Change MASTERFILE", textAlign: TextAlign.center,)
+                      ]
+                    ),
+                  )
+                ),
+                Container(
+                  padding: const EdgeInsets.all(menuPadding),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[400]),
+                    onPressed:() async {
+                      _exportXLSX();
+                    },
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children:[
+                        Icon(Icons.file_download_outlined),
+                        Text("Download MASTERFILE.xlsx", textAlign: TextAlign.center,)
+                      ]
+                    ),
+                  )
+                ),
+                Container(
+                  padding: const EdgeInsets.all(menuPadding),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[400]),
+                    onPressed:() async {
+                      _postUpdateAll();
+                    },
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children:[
+                        Icon(Icons.upload_file),
+                        Text("Update Database", textAlign: TextAlign.center,)
+                      ]
+                    ),
+                  )
+                ),
+                Container(
+                  padding: const EdgeInsets.all(menuPadding),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[300], // Background color
+                    ),
+                    onPressed:(){
+                      Navigator.pop(context);
+                    },
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children:[
+                        Icon(Icons.exit_to_app),
+                        Text("Back", textAlign: TextAlign.center,)
+                      ]
+                    ),
+                  )
+                ),
               ]
             )
           )
-        ) : CustomScrollView(
-            primary: false,
-            slivers: <Widget>[
-              SliverPadding(
-                  padding: const EdgeInsets.all(20),
-                  sliver: SliverGrid.count(
-                      crossAxisSpacing: 5,
-                      mainAxisSpacing: 5,
-                      crossAxisCount: 4,
-                      children: <Widget>[
-                        Container(
-                          padding: const EdgeInsets.all(menuPadding),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent[400]),
-                            onPressed:() async{
-                              int value = await confirmWithCancel(context, "Load MASTERFILE", button0: "Load from SERVER", button1: "Load from STORAGE");
-                              if(value == 0){
-                                setState((){
-                                  _isLoading = true;
-                                  _loadingMsg = "...";
-                                });
-                                await _loadFromServer();
-                              }
-                              else if(value == 1){
-                                setState((){
-                                  _isLoading = true;
-                                  _loadingMsg = "...";
-                                });
-                                await _loadFromStorage();
-                              }
-                            },
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children:[
-                                Icon(Icons.email_outlined),
-                                Text("Change MASTERFILE", textAlign: TextAlign.center,)
-                              ]
-                            ),
-                          )
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(menuPadding),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[400]),
-                            onPressed:() async {
-                              _exportXLSX();
-                            },
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children:[
-                                Icon(Icons.lock),
-                                Text("Download .xlsx", textAlign: TextAlign.center,)
-                              ]
-                            ),
-                          )
-                        ),
-                        Container(
-                            padding: const EdgeInsets.all(menuPadding),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[400]),
-                              onPressed:() async {
-                                _postUpdateAll();
-                              },
-                              child: const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children:[
-                                    Icon(Icons.lock),
-                                    Text("Update Database", textAlign: TextAlign.center,)
-                                  ]
-                              ),
-                            )
-                        ),
-                        Container(
-                            padding: const EdgeInsets.all(menuPadding),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red[400], // Background color
-                              ),
-                              onPressed:(){
-                                Navigator.pop(context);
-                              },
-                              child: const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children:[
-                                    Icon(Icons.exit_to_app),
-                                    Text("Back", textAlign: TextAlign.center,)
-                                  ]
-                              ),
-                            )
-                        ),
-                      ]
-                  )
-              )
-            ]
-        )
+        ]
+      )
     );
   }
 }
@@ -1628,7 +1688,7 @@ class _SettingsPage extends State<SettingsPage>{
 
   Future<void> _postChangeEmail(String pwd, String newEmail) async{
     var body = json.encode( {
-      "email":user, //"big2@chungusmail.com"
+      "email":user,
       "password":pwd,
       "newemail":newEmail,
     });
@@ -1647,8 +1707,6 @@ class _SettingsPage extends State<SettingsPage>{
       await http.post(Uri.http("127.0.0.1:8000", "/api/change_email"), body: body, headers: headers).then((var response){
         var r = jsonDecode(response.body);
         showNotification(context, Colors.red, whiteText, r["message"].toString(), 2000);
-        //String e = response.statusCode.toString();
-        //showNotification(context, Colors.red, whiteText, "Response Code: $e", 2000);
       });
     }
     catch(e){
@@ -1952,6 +2010,7 @@ Future<int> loadFromServer() async {
 
     var jsn = jsonDecode(response.body.toString());
     MASTERFILE = List.generate(jsn.length, (index) => Item.fromJson(jsn[index]));
+    sortList(MASTERFILE);
     return 1;
   }
   catch(e){
@@ -1959,6 +2018,88 @@ Future<int> loadFromServer() async {
   }
 
   return 0;
+}
+
+Container cell(String text, double cellWidth, [Color? cellColor]) {
+  cellColor ??= Colors.white24;
+  return Container(
+      width: cellWidth,
+      height: 35.0,
+      decoration: BoxDecoration(
+        color: cellColor,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(
+          color: Colors.black,
+          style: BorderStyle.solid,
+          width: 1.0,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          softWrap: true,
+        ),
+      )
+  );
+}
+
+Expanded cellFit(String text, [Color? cellColor]) {
+  cellColor ??= Colors.white24;
+  return Expanded(
+      flex: 1,
+      child: Container(
+          height: 35.0,
+          decoration: BoxDecoration(
+            color: cellColor,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: Colors.black,
+              style: BorderStyle.solid,
+              width: 1.0,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              softWrap: true,
+            ),
+          )
+      )
+  );
+}
+
+List<Widget> row(Item item, {Color? cellColor}) {
+  cellColor = cellColor ?? Colors.white24;
+  return <Widget>[
+    cell(item.id.toString(), 75, cellColor),
+    cell(splitCodeString(item.barcode), 150, cellColor),
+    cell(item.category, 150, cellColor),
+    cell(item.description, 400, cellColor),
+    cell(item.uom, 75, cellColor),
+    cell(item.price, 75, cellColor),
+    cellFit(item.date, cellColor),
+    cellFit(splitCodeString(item.ordercode), cellColor),
+    cell(item.nof.toString().toUpperCase(), 75),
+  ];
+}
+
+sortList(List<dynamic> list){
+  list.sort((x, y) => (x.description).compareTo((y.description)));
+
+  //Calc new indices from list
+  for(int i = 0; i < list.length; i++){
+    list[i].id = i;
+  }
+}
+
+bool outOfDate(String date) {
+  // true if date is older than 1 year
+  int year = int.parse(date.split("/").first);
+  return DateTime.now().year > year;
 }
 
 String getDateString({String? string}){
@@ -1985,7 +2126,12 @@ String getDateString({String? string}){
   return newDate;
 }
 
-void showNotification(BuildContext context, Color bkgColor, TextStyle textStyle, String message, int msec) {
+String splitCodeString(String codeString) {
+  int count = codeString.split(",").length - 1;
+  return codeString.split(",").first + (count > 0 ? " (+$count)" : "");
+}
+
+showNotification(BuildContext context, Color bkgColor, TextStyle textStyle, String message, int msec) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(message, style: textStyle, maxLines: 2, softWrap: true, overflow: TextOverflow.fade),
@@ -2002,7 +2148,7 @@ void showNotification(BuildContext context, Color bkgColor, TextStyle textStyle,
   );
 }
 
-Future<void> showAlert({required BuildContext context, required Text text, Color? color}){
+showAlert({required BuildContext context, required Text text, Color? color}){
   return showDialog(
     barrierDismissible: false,
     context: context,
